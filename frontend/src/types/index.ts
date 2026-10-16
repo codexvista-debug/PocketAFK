@@ -28,7 +28,8 @@ export type Account = MinecraftAccount;
 export interface ServerProfile {
   id: string;                     // Unique instance ID (passed as botId to daemon)
   name: string;                   // Custom display name (e.g. "Hypixel AFK", "DonutSMP Base")
-  accountId: string;              // Linked MinecraftAccount id
+  pocketUser?: string | null;     // PocketAFK website username (e.g. "Chief")
+  accountId: string;              // Linked MinecraftAccount id or IGN
   serverHost: string;             // Hostname / IP (e.g. "donutsmp.net", "mc.hypixel.net")
   serverPort: number;             // Port (default: 25565)
   serverVersion: string;          // Minecraft version (default: "auto", or "1.20.4", etc.)

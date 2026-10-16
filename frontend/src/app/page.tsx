@@ -185,16 +185,37 @@ export default function Dashboard() {
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser));
 
+  // Helper to reliably resolve a server's Minecraft account
+  const resolveServerAccount = useCallback(
+    (srv: ServerProfile | null | undefined): MinecraftAccount | null => {
+      if (!srv || accounts.length === 0) return null;
+      if (srv.accountId) {
+        const byId = accounts.find((a) => a.id === srv.accountId);
+        if (byId) return byId;
+        const byName = accounts.find(
+          (a) => (a.ign || a.username).toLowerCase() === srv.accountId.toLowerCase()
+        );
+        if (byName) return byName;
+      }
+      // If server is named after the account (e.g. "V3locitz's Server"), match by prefix
+      const byPrefix = accounts.find((a) =>
+        srv.name.toLowerCase().startsWith((a.ign || a.username).toLowerCase())
+      );
+      if (byPrefix) return byPrefix;
+      return accounts[0] || null;
+    },
+    [accounts]
+  );
+
   // Active Server Profile
   const activeServer = useMemo(() => {
     return servers.find((s) => s.id === activeServerId) || servers[0] || null;
   }, [servers, activeServerId]);
 
-  // Assigned Account for active server
+  // Assigned Account for active server (self-healing & robust matching)
   const activeAccount = useMemo(() => {
-    if (!activeServer) return null;
-    return accounts.find((a) => a.id === activeServer.accountId) || null;
-  }, [accounts, activeServer]);
+    return resolveServerAccount(activeServer);
+  }, [resolveServerAccount, activeServer]);
 
   // Count running bots
   const activeRunningCount = useMemo(() => {
@@ -297,6 +318,17 @@ export default function Dashboard() {
           // ignore
         }
       }
+
+      // Self-heal account IDs and link pocketUser
+      loadedServers = loadedServers.map((srv) => {
+        const matched = resolveServerAccount(srv);
+        return {
+          ...srv,
+          pocketUser: srv.pocketUser || currentUser,
+          accountId: matched ? matched.id : srv.accountId,
+        };
+      });
+
       setServers(loadedServers);
       if (loadedServers.length > 0) {
         setActiveServerId(loadedServers[0].id);
@@ -340,10 +372,12 @@ export default function Dashboard() {
                 dbServers.push({
                   id: `srv_${row.id}`,
                   name: row.bot_name ? `${row.bot_name}'s Server` : 'Minecraft Server',
+                  pocketUser: currentUser,
                   accountId: accId,
                   serverHost: row.server_host || 'donutsmp.net',
                   serverPort: row.server_port || 25565,
                   serverVersion: row.server_version || 'auto',
+                  authType: row.auth_type || 'offline',
                   autoReconnect: row.auto_reconnect ?? true,
                   settings: row.settings || DEFAULT_BOT_SETTINGS,
                 });
@@ -367,7 +401,7 @@ export default function Dashboard() {
     }
 
     loadData();
-  }, [currentUser]);
+  }, [currentUser, resolveServerAccount]);
 
   // One-Click Microsoft OAuth Device Code Sign-In (VistaAFK style, zero typing!)
   const handleStartMicrosoftLogin = async () => {
@@ -503,6 +537,14 @@ export default function Dashboard() {
   const handleSaveServer = async (profile: ServerProfile) => {
     if (!currentUser) return;
     const srvKey = `pocketafk_servers_${currentUser}`;
+    profile.pocketUser = currentUser;
+
+    // Robustly align accountId with a real linked account
+    const matched = resolveServerAccount(profile);
+    if (matched) {
+      profile.accountId = matched.id;
+    }
+
     const existingIndex = servers.findIndex((s) => s.id === profile.id);
 
     if (existingIndex < 0 && servers.length >= 3) {
@@ -524,8 +566,7 @@ export default function Dashboard() {
 
     if (supabase && currentUser) {
       try {
-        const assignedAcc = accounts.find((a) => a.id === profile.accountId);
-        const playerIgn = assignedAcc?.ign || assignedAcc?.username || profile.name;
+        const playerIgn = matched?.ign || matched?.username || profile.name;
         if (profile.id.startsWith('srv_')) {
           const dbId = profile.id.replace('srv_', '');
           await supabase.from('accounts').update({
@@ -595,7 +636,7 @@ export default function Dashboard() {
 
   // Start / Stop active server
   const handleStartServer = (profile: ServerProfile) => {
-    const acc = accounts.find((a) => a.id === profile.accountId);
+    const acc = resolveServerAccount(profile);
     if (!acc) {
       showToast('Please assign a Minecraft Java account to this server first!', 'error');
       return;
@@ -870,8 +911,8 @@ export default function Dashboard() {
                         const srvState: BotLifecycleState = botStates[srv.id] || 'DISCONNECTED';
                         const isRunning =
                           srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
-                        const assignedAcc = accounts.find((a) => a.id === srv.accountId);
-                        const avatarName = assignedAcc?.ign || 'MHF_Steve';
+                        const assignedAcc = resolveServerAccount(srv);
+                        const avatarName = assignedAcc?.ign || assignedAcc?.username || 'MHF_Steve';
                         const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/28`;
 
                         return (
@@ -886,9 +927,12 @@ export default function Dashboard() {
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-extrabold text-xs text-slate-900 truncate">
                                     {srv.name}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-800 font-bold font-mono bg-emerald-100/70 border border-emerald-300/80 px-1.5 py-0.5 rounded-md">
+                                    @{srv.pocketUser || currentUser}
                                   </span>
                                   {getStatusBadge(srvState)}
                                 </div>
@@ -905,7 +949,7 @@ export default function Dashboard() {
                                   <button
                                     onClick={() => handleStartServer(srv)}
                                     disabled={socketStatus !== 'AUTHENTICATED' || !assignedAcc}
-                                    title="Start this bot"
+                                    title={!assignedAcc ? 'No Minecraft account linked' : 'Start this bot'}
                                     className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white transition shadow-2xs cursor-pointer"
                                   >
                                     <Play className="w-3.5 h-3.5 fill-current" />
@@ -948,12 +992,14 @@ export default function Dashboard() {
                                   {assignedAcc ? (assignedAcc.ign || assignedAcc.username) : 'No Account'}
                                 </span>
                               </div>
-                              {assignedAcc?.verified && (
-                                <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  Verified
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {assignedAcc?.verified && (
+                                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    Verified
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -980,11 +1026,14 @@ export default function Dashboard() {
                           <Server className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h2 className="font-black text-slate-900 text-sm">{activeServer.name}</h2>
+                            <span className="text-[10px] text-emerald-800 font-bold font-mono bg-emerald-100/70 border border-emerald-300/80 px-1.5 py-0.5 rounded-md">
+                              @{activeServer.pocketUser || currentUser}
+                            </span>
                             {getStatusBadge(botState)}
                           </div>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5 flex-wrap">
                             <span>{activeServer.serverHost}:{activeServer.serverPort}</span>
                             <span>&bull;</span>
                             <span>Ver: {activeServer.serverVersion}</span>
@@ -1177,6 +1226,7 @@ export default function Dashboard() {
         onClose={() => setIsServerModalOpen(false)}
         accounts={accounts}
         initialProfile={editingServer}
+        currentUser={currentUser}
         onSaveProfile={handleSaveServer}
         onDeleteProfile={handleDeleteServer}
         onOpenAddAccount={() => {

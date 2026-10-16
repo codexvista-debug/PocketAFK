@@ -10,6 +10,7 @@ interface ServerProfileModalProps {
   onClose: () => void;
   accounts: MinecraftAccount[];
   initialProfile?: ServerProfile | null;
+  currentUser?: string | null;
   onSaveProfile: (profile: ServerProfile) => Promise<void>;
   onDeleteProfile?: (profileId: string) => Promise<void>;
   onOpenAddAccount: () => void;
@@ -48,6 +49,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   onClose,
   accounts,
   initialProfile,
+  currentUser,
   onSaveProfile,
   onDeleteProfile,
   onOpenAddAccount,
@@ -66,7 +68,12 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   useEffect(() => {
     if (initialProfile) {
       setName(initialProfile.name);
-      setAccountId(initialProfile.accountId);
+      // Robust matching: by id, or by ign/username, or fallback to first account if available
+      const matchingAcc = accounts.find((a) => a.id === initialProfile.accountId)
+        || accounts.find((a) => (a.ign || a.username).toLowerCase() === (initialProfile.accountId || '').toLowerCase())
+        || accounts.find((a) => initialProfile.name.toLowerCase().startsWith((a.ign || a.username).toLowerCase()))
+        || accounts[0];
+      setAccountId(matchingAcc ? matchingAcc.id : (accounts[0]?.id || ''));
       setServerHost(initialProfile.serverHost);
       setServerPort(initialProfile.serverPort || 25565);
       setServerVersion(initialProfile.serverVersion || 'auto');
@@ -89,14 +96,20 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !serverHost.trim() || !accountId) return;
+    const effectiveAccountId = accountId
+      || accounts.find((a) => a.id === initialProfile?.accountId)?.id
+      || accounts[0]?.id
+      || '';
+
+    if (!name.trim() || !serverHost.trim() || !effectiveAccountId) return;
 
     setLoading(true);
     try {
       const profile: ServerProfile = {
         id: initialProfile?.id || `srv_${Math.random().toString(36).substring(2, 9)}`,
         name: name.trim(),
-        accountId,
+        pocketUser: currentUser || initialProfile?.pocketUser,
+        accountId: effectiveAccountId,
         serverHost: serverHost.trim(),
         serverPort: Number(serverPort) || 25565,
         serverVersion: serverVersion.trim() || 'auto',
@@ -142,6 +155,16 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
 
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
+          {/* Linked PocketAFK User */}
+          {currentUser && (
+            <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-semibold">Linked PocketAFK User:</span>
+              <span className="font-extrabold text-emerald-800 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg font-mono shadow-2xs">
+                @{currentUser}
+              </span>
+            </div>
+          )}
+
           {/* Server Profile Name */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -185,7 +208,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
               </div>
             ) : (
               <select
-                value={accountId}
+                value={accountId || accounts[0]?.id || ''}
                 onChange={(e) => setAccountId(e.target.value)}
                 required
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs cursor-pointer"
