@@ -1,0 +1,26 @@
+{
+  "name": "pocketafk-daemon",
+  "version": "1.0.0",
+  "description": "PocketAFK Headless Mineflayer Bot Daemon for Termux and Node.js",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "serve": "node dist/index.js"
+  },
+  "keywords": ["minecraft", "mineflayer", "afk", "termux", "pocketafk"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "mineflayer": "^4.20.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.2"
+  }
+}
