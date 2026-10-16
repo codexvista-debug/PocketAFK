@@ -54,6 +54,41 @@ export default function Dashboard() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [autoSynced, setAutoSynced] = useState(false);
+
+  // Auto-sync tunnel URL from Termux API or URL search params
+  useEffect(() => {
+    async function syncTunnel() {
+      if (typeof window === 'undefined') return;
+
+      // 1. Check if opened with ?tunnel=wss://...
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryTunnel = urlParams.get('tunnel');
+      if (queryTunnel && queryTunnel.startsWith('wss://')) {
+        saveSettings(queryTunnel, authToken);
+        setAutoSynced(true);
+        // Clean query param from URL bar
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+
+      // 2. Automatically poll /api/tunnel for active Termux session
+      try {
+        const res = await fetch('/api/tunnel', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url && data.url.startsWith('wss://') && data.url !== daemonUrl) {
+            saveSettings(data.url, data.token || authToken);
+            setAutoSynced(true);
+          }
+        }
+      } catch (e) {
+        // ignore network error
+      }
+    }
+
+    syncTunnel();
+  }, [daemonUrl, authToken, saveSettings]);
 
   // Load accounts from Supabase or localStorage fallback
   useEffect(() => {
@@ -204,6 +239,16 @@ export default function Dashboard() {
 
       {/* Main Dashboard Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4">
+        {/* Auto-Sync Confirmation Banner */}
+        {autoSynced && socketStatus === 'AUTHENTICATED' && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs text-emerald-800 shadow-2xs">
+            <span className="flex items-center gap-2 font-bold">
+              ✨ Auto-Synced with Termux! Tunnel paired automatically.
+            </span>
+            <span className="text-[11px] font-mono text-emerald-600 truncate max-w-xs">{daemonUrl}</span>
+          </div>
+        )}
+
         {/* Connection Banner if no tunnel URL configured */}
         {!daemonUrl && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
