@@ -1,15 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
-import crypto from 'crypto';
+import { hashPassword, generateSecretCode, USERNAME_REGEX } from '@/lib/authUtils';
 
 // In-memory fallback if Supabase is temporarily unreachable
 const localUsers = new Map<string, string>();
 
-const USERNAME_REGEX = /^[a-zA-Z0-9]{1,6}$/;
-const SALT = '_pocketafk_salt_secure_2026_x89';
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const username = searchParams.get('username')?.trim().toLowerCase();
 
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + SALT).digest('hex');
+    if (!username) {
+      return NextResponse.json({ error: 'Username required' }, { status: 400 });
+    }
+
+    if (supabase) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('password_hash')
+        .ilike('username', username)
+        .maybeSingle();
+
+      if (user?.password_hash) {
+        return NextResponse.json({ secretCode: generateSecretCode(user.password_hash) });
+      }
+    }
+
+    const storedHash = localUsers.get(username);
+    if (storedHash) {
+      return NextResponse.json({ secretCode: generateSecretCode(storedHash) });
+    }
+
+    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -31,6 +56,7 @@ export async function POST(req: NextRequest) {
 
     const lowerUser = cleanUsername.toLowerCase();
     const hashedPassword = hashPassword(password);
+    const secretCode = generateSecretCode(hashedPassword);
 
     if (action === 'register') {
       if (supabase) {
@@ -60,7 +86,10 @@ export async function POST(req: NextRequest) {
         localUsers.set(lowerUser, hashedPassword);
       }
 
-      return NextResponse.json({ success: true, user: { username: cleanUsername } });
+      return NextResponse.json({
+        success: true,
+        user: { username: cleanUsername, secretCode }
+      });
     }
 
     if (action === 'login') {
@@ -90,14 +119,20 @@ export async function POST(req: NextRequest) {
             .eq('id', user.id);
         }
 
-        return NextResponse.json({ success: true, user: { username: user.username } });
+        return NextResponse.json({
+          success: true,
+          user: { username: user.username, secretCode }
+        });
       } else {
         const storedHash = localUsers.get(lowerUser);
         if (!storedHash || (storedHash !== hashedPassword && storedHash !== password)) {
           return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
         }
 
-        return NextResponse.json({ success: true, user: { username: cleanUsername } });
+        return NextResponse.json({
+          success: true,
+          user: { username: cleanUsername, secretCode }
+        });
       }
     }
 

@@ -6,7 +6,7 @@ import { X, User, Lock, UserPlus, LogIn, ShieldAlert, Check } from 'lucide-react
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (username: string) => void;
+  onSuccess: (username: string, secretCode?: string) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         return;
       }
 
-      onSuccess(data.user.username);
+      onSuccess(data.user.username, data.user.secretCode);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Network error');

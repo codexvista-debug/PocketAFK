@@ -62,7 +62,7 @@ fi
 
 # 4. Launch daemon & tunnel
 chmod +x start.sh 2>/dev/null || true
-bash start.sh "$1"
+bash start.sh "$1" "$2"
 `;
 
   return new NextResponse(script, {

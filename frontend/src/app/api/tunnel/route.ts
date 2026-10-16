@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { generateSecretCode } from '@/lib/authUtils';
 
 // In-memory cache: username -> { url, token, updatedAt }
 const userTunnels = new Map<string, { url: string; token: string; updatedAt: number }>();
@@ -53,6 +54,30 @@ export async function POST(req: NextRequest) {
     const cleanUsername = (typeof username === 'string' && username.trim()) 
       ? username.trim().toLowerCase() 
       : 'default';
+
+    // Verify secret code for non-guest usernames to prevent unauthorized takeover
+    if (cleanUsername !== 'default' && supabase) {
+      try {
+        const { data: user } = await supabase
+          .from('users')
+          .select('password_hash')
+          .ilike('username', cleanUsername)
+          .maybeSingle();
+
+        if (user && user.password_hash) {
+          const expectedSecret = generateSecretCode(user.password_hash);
+          const providedSecret = typeof token === 'string' ? token.trim() : '';
+
+          if (providedSecret !== expectedSecret) {
+            return NextResponse.json({
+              error: `Unauthorized: Invalid daemon secret code for user @${cleanUsername}. Hijacking attempt blocked.`
+            }, { status: 401 });
+          }
+        }
+      } catch (err) {
+        console.warn('Error verifying secret code against Supabase:', err);
+      }
+    }
 
     // Ensure format is wss://
     let cleanUrl = url.trim();

@@ -25,14 +25,22 @@ cat << "EOF"
   ██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ██║  ██║██║     ██║  ██╗
   ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝
 EOF
-# Identify user
+# Identify user and secret key
 APP_USER="$1"
+APP_SECRET="$2"
 USER_FILE="$HOME/.pocketafk_user"
+SECRET_FILE="$HOME/.pocketafk_secret"
 
 if [ -n "$APP_USER" ]; then
   echo "$APP_USER" > "$USER_FILE"
 elif [ -f "$USER_FILE" ]; then
   APP_USER=$(cat "$USER_FILE")
+fi
+
+if [ -n "$APP_SECRET" ]; then
+  echo "$APP_SECRET" > "$SECRET_FILE"
+elif [ -f "$SECRET_FILE" ]; then
+  APP_SECRET=$(cat "$SECRET_FILE")
 fi
 
 if [ -z "$APP_USER" ]; then
@@ -43,6 +51,9 @@ if [ -z "$APP_USER" ]; then
 fi
 
 echo -e "  ${WHITE}👤 User Account     :${NC} ${GREEN}@${APP_USER}${NC}"
+if [ -n "$APP_SECRET" ]; then
+  echo -e "  ${WHITE}🔑 Secret Launcher  :${NC} ${YELLOW}Protected (Validated)${NC}"
+fi
 echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}\n"
 
 # 1. Acquire Android Wake Lock
@@ -98,9 +109,15 @@ AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}"
 echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
 SYNC_RESP=$(curl -s -X POST "$DASHBOARD_SYNC_URL" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"\"}" 2>/dev/null)
+  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\"}" 2>/dev/null)
 
-if echo "$SYNC_RESP" | grep -q "success"; then
+if echo "$SYNC_RESP" | grep -q "Unauthorized"; then
+  echo -e "      ${RED}✗ AUTHENTICATION FAILED: Secret key does not match user @${APP_USER}.${NC}"
+  echo -e "      ${YELLOW}Please run the exact 1-click command shown in your PocketAFK dashboard.${NC}"
+  kill $DAEMON_PID 2>/dev/null
+  kill $TUNNEL_PID 2>/dev/null
+  exit 1
+elif echo "$SYNC_RESP" | grep -q "success"; then
   echo -e "      ${GREEN}✓ AUTO-SYNC SUCCESSFUL! No copy-pasting required.${NC}"
 else
   echo -e "      ${YELLOW}✓ Live sync broadcasted.${NC}"

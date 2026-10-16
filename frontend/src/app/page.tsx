@@ -58,6 +58,28 @@ export default function Dashboard() {
     }
     return null;
   });
+  const [secretCode, setSecretCode] = useState<string>('');
+
+  // Sync secretCode for the current user
+  useEffect(() => {
+    if (!currentUser) {
+      setSecretCode('');
+      return;
+    }
+    const cachedSecret = localStorage.getItem(`pocketafk_secret_${currentUser}`);
+    if (cachedSecret) {
+      setSecretCode(cachedSecret);
+    }
+    fetch(`/api/auth?username=${encodeURIComponent(currentUser)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.secretCode) {
+          setSecretCode(data.secretCode);
+          localStorage.setItem(`pocketafk_secret_${currentUser}`, data.secretCode);
+        }
+      })
+      .catch(() => {});
+  }, [currentUser]);
 
   const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
   const [servers, setServers] = useState<ServerProfile[]>([]);
@@ -176,7 +198,9 @@ export default function Dashboard() {
   }, [botStates]);
 
   const effectiveUser = currentUser || 'default';
-  const termuxCommand = `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser}`;
+  const termuxCommand = secretCode
+    ? `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser} ${secretCode}`
+    : `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser}`;
 
   // Auto-sync tunnel from API or URL (only if user is logged in)
   useEffect(() => {
@@ -311,7 +335,7 @@ export default function Dashboard() {
     if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
     try {
-      const res = await fetch('/api/minecraft-auth');
+      const res = await fetch(`/api/minecraft-auth?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (!res.ok || data.error) {
         alert(data.error || 'Failed to request Microsoft device code');
@@ -322,19 +346,19 @@ export default function Dashboard() {
         botId: 'pending',
         userCode: data.userCode,
         url: data.verificationUri || 'https://www.microsoft.com/link',
-        deviceCode: data.deviceCode,
+        deviceCode: data.sessionId,
       });
       setIsPollingMs(true);
 
-      const deviceCode = data.deviceCode;
-      const intervalSec = data.interval || 4;
+      const sessionId = data.sessionId;
+      const intervalSec = 3;
 
       pollingTimerRef.current = setInterval(async () => {
         try {
           const pollRes = await fetch('/api/minecraft-auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceCode }),
+            body: JSON.stringify({ sessionId }),
           });
           const pollData = await pollRes.json();
 
@@ -493,12 +517,17 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setSecretCode('');
     localStorage.removeItem('pocketafk_user');
   };
 
-  const handleLoginSuccess = (user: string) => {
+  const handleLoginSuccess = (user: string, secret?: string) => {
     setCurrentUser(user);
     localStorage.setItem('pocketafk_user', user);
+    if (secret) {
+      setSecretCode(secret);
+      localStorage.setItem(`pocketafk_secret_${user}`, secret);
+    }
   };
 
   // Status helper for server cards
