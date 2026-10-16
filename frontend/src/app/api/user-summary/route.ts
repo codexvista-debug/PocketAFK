@@ -16,15 +16,20 @@ export async function GET(req: NextRequest) {
     const servers: string[] = [];
 
     if (supabase) {
+      const cleanUser = username.replace(/^@/, '');
       const { data, error } = await supabase
         .from('accounts')
         .select('*')
-        .ilike('username', username);
+        .or(`username.ilike.${cleanUser},username.ilike.@${cleanUser}`);
 
       if (data && !error) {
         data.forEach((row) => {
-          if (row.bot_name && row.bot_name.trim() && !accounts.includes(row.bot_name.trim())) {
-            accounts.push(row.bot_name.trim());
+          if (row.bot_name && row.bot_name.trim()) {
+            const ign = row.bot_name.trim();
+            // Ignore raw emails, keep real IGNs
+            if (!accounts.map((a) => a.toLowerCase()).includes(ign.toLowerCase())) {
+              accounts.push(ign);
+            }
           }
           if (row.server_host) {
             const srvStr = `${row.server_host}:${row.server_port || 25565}`;

@@ -236,20 +236,44 @@ export class PocketBotInstance {
 
     // Window / Container Open (Server Chest Menus)
     this.bot.on('windowOpen', (window: any) => {
-      this.currentWindow = window;
-      this.sendContainerWindow(window);
+      try {
+        if (!window) return;
+        this.currentWindow = window;
+        this.sendContainerWindow(window);
+      } catch (e) {
+        // Safe fallback
+      }
     });
 
-    // Window / Container Close
+    // Window / Container Close (Prevent null crash when transferring between servers)
     this.bot.on('windowClose', (window: any) => {
-      this.currentWindow = null;
-      this.broadcast({
-        type: 'WINDOW_CLOSE',
-        payload: {
-          botId: this.config.id,
-          windowId: window.id
+      try {
+        this.currentWindow = null;
+        if (window && window.id !== undefined) {
+          this.broadcast({
+            type: 'WINDOW_CLOSE',
+            payload: {
+              botId: this.config.id,
+              windowId: window.id
+            }
+          });
         }
+      } catch (e) {
+        // Safe fallback
+      }
+    });
+
+    // Respawn / Sub-server Transfer (BungeeCord / Velocity)
+    this.bot.on('respawn', () => {
+      this.logConsole({
+        type: 'session_divider',
+        raw: `[PocketAFK] Transferred / Respawned in world! Dimension: ${this.bot?.game?.dimension || 'overworld'}`,
+        formattedText: `<span style="color:#55FFFF">[PocketAFK] Sub-server transfer / Respawned! Dimension: <b>${this.bot?.game?.dimension || 'overworld'}</b></span>`
       });
+      this.setState('SPAWNED');
+      this.startAntiAfk();
+      this.startMobFarm();
+      this.startTelemetry();
     });
 
     // Kicked handler
@@ -279,7 +303,10 @@ export class PocketBotInstance {
 
     // Error handler
     this.bot.on('error', (err: Error) => {
-      this.setState('ERROR', err.message);
+      const isSocketDead = !(this.bot as any)?._client?.socket?.writable;
+      if (isSocketDead) {
+        this.setState('ERROR', err.message);
+      }
       this.logConsole({
         type: 'error',
         raw: `[PocketAFK Error] ${err.message}`,
@@ -311,7 +338,7 @@ export class PocketBotInstance {
   }
 
   public async attackNearestTarget() {
-    if (!this.bot || this.state !== 'SPAWNED') return;
+    if (!this.bot || !this.bot.entity || !this.bot.entity.position || this.state !== 'SPAWNED') return;
 
     const now = Date.now();
     const cooldown = this.config.settings.mobFarmIntervalMs || 650;
@@ -391,7 +418,7 @@ export class PocketBotInstance {
 
     const intervalSec = this.config.settings.antiAfkInterval || 10;
     this.antiAfkInterval = setInterval(async () => {
-      if (!this.bot || this.state !== 'SPAWNED') return;
+      if (!this.bot || !this.bot.entity || !this.bot.entity.position || this.state !== 'SPAWNED') return;
 
       try {
         // Random subtle pitch/yaw shift
@@ -424,7 +451,7 @@ export class PocketBotInstance {
   }
 
   public emitTelemetry() {
-    if (!this.bot || this.state !== 'SPAWNED') return;
+    if (!this.bot || !this.bot.entity || !this.bot.entity.position || this.state !== 'SPAWNED') return;
 
     const pos = this.bot.entity.position;
     const payload: TelemetryPayload = {
