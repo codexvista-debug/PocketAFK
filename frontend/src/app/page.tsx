@@ -69,11 +69,26 @@ export default function Dashboard() {
   const [editingServer, setEditingServer] = useState<ServerProfile | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
-  const [verifyingAccountId, setVerifyingAccountId] = useState<string | null>(null);
+  const [apiMsAuthData, setApiMsAuthData] = useState<{
+    botId: string;
+    userCode: string;
+    url: string;
+    deviceCode?: string;
+  } | null>(null);
+  const [isPollingMs, setIsPollingMs] = useState(false);
+  const [msAuthError, setMsAuthError] = useState<string | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string>('');
+  const pollingTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Clean up polling timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    };
+  }, []);
 
   // Handle Account Verification callback from daemon
   const handleAccountVerified = useCallback((data: AccountVerifiedData) => {
-    setVerifyingAccountId(null);
     setAccounts((prevAccounts) => {
       const nextAccounts = prevAccounts.map((acc) => {
         if (
@@ -209,13 +224,13 @@ export default function Dashboard() {
       const accKey = `pocketafk_accounts_${currentUser}`;
       const srvKey = `pocketafk_servers_${currentUser}`;
 
-      // 1. Load accounts from storage
+      // 1. Load accounts from storage (ONLY verified accounts!)
       const storedAcc = localStorage.getItem(accKey);
       let loadedAccounts: MinecraftAccount[] = [];
       if (storedAcc) {
         try {
           const parsed = JSON.parse(storedAcc);
-          loadedAccounts = parsed.filter((a: any) => !a.id.startsWith('starter-'));
+          loadedAccounts = parsed.filter((a: any) => !a.id.startsWith('starter-') && a.verified === true);
         } catch (e) {
           // ignore
         }
@@ -247,14 +262,17 @@ export default function Dashboard() {
 
             data.forEach((row) => {
               const accId = `acc_${row.id}`;
-              dbAccounts.push({
-                id: accId,
-                username: row.bot_name || 'player@outlook.com',
-                auth_type: 'microsoft',
-                ign: row.bot_name && !row.bot_name.includes('@') ? row.bot_name : undefined,
-                verified: !!(row.bot_name && !row.bot_name.includes('@')),
-                addedAt: Date.now(),
-              });
+              const isVerified = Boolean(row.bot_name && !row.bot_name.includes('@'));
+              if (isVerified) {
+                dbAccounts.push({
+                  id: accId,
+                  username: row.bot_name,
+                  auth_type: 'microsoft',
+                  ign: row.bot_name,
+                  verified: true,
+                  addedAt: Date.now(),
+                });
+              }
 
               dbServers.push({
                 id: `srv_${row.id}`,
@@ -285,35 +303,94 @@ export default function Dashboard() {
     loadData();
   }, [currentUser]);
 
-  // Account Management
-  const handleVerifyAccount = (accountId: string, email: string) => {
-    if (socketStatus !== 'AUTHENTICATED') {
-      alert('Your Termux daemon is not connected. Run the 1-click command on your phone first so it can generate the Microsoft device code.');
-      return;
-    }
-    setVerifyingAccountId(accountId);
-    verifyAccount(accountId, email);
-  };
+  // Account Management - Direct verification via Next.js API route!
+  const handleStartVerification = async (email: string) => {
+    setMsAuthError(null);
+    setPendingEmail(email);
+    setIsPollingMs(false);
+    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
-  const handleAddAccount = async (email: string) => {
-    if (!currentUser) return;
-    const accKey = `pocketafk_accounts_${currentUser}`;
-    const newAccount: MinecraftAccount = {
-      id: `acc_${Math.random().toString(36).substring(2, 9)}`,
-      username: email.trim(),
-      auth_type: 'microsoft',
-      verified: false,
-      addedAt: Date.now(),
-    };
+    try {
+      const res = await fetch('/api/minecraft-auth');
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert(data.error || 'Failed to request Microsoft device code');
+        return;
+      }
 
-    const updated = [...accounts, newAccount];
-    setAccounts(updated);
-    localStorage.setItem(accKey, JSON.stringify(updated));
+      setApiMsAuthData({
+        botId: 'pending',
+        userCode: data.userCode,
+        url: data.verificationUri || 'https://www.microsoft.com/link',
+        deviceCode: data.deviceCode,
+      });
+      setIsPollingMs(true);
 
-    // Immediately trigger Microsoft device code verification if daemon is online!
-    if (socketStatus === 'AUTHENTICATED') {
-      setVerifyingAccountId(newAccount.id);
-      verifyAccount(newAccount.id, newAccount.username);
+      const deviceCode = data.deviceCode;
+      const intervalSec = data.interval || 4;
+
+      pollingTimerRef.current = setInterval(async () => {
+        try {
+          const pollRes = await fetch('/api/minecraft-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceCode }),
+          });
+          const pollData = await pollRes.json();
+
+          if (pollData.status === 'success') {
+            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+            setIsPollingMs(false);
+            setApiMsAuthData(null);
+            setMsAuthError(null);
+
+            // Successfully verified! Add to linked accounts list
+            const newAccount: MinecraftAccount = {
+              id: `acc_${Math.random().toString(36).substring(2, 9)}`,
+              username: email,
+              ign: pollData.ign,
+              uuid: pollData.uuid,
+              auth_type: 'microsoft',
+              verified: true,
+              addedAt: Date.now(),
+            };
+
+            setAccounts((prev) => {
+              const updated = [...prev.filter((a) => a.username.toLowerCase() !== email.toLowerCase()), newAccount];
+              const accKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+              localStorage.setItem(accKey, JSON.stringify(updated));
+              return updated;
+            });
+
+            // Sync to Supabase
+            if (supabase && currentUser) {
+              supabase
+                .from('accounts')
+                .upsert([
+                  {
+                    username: currentUser,
+                    bot_name: pollData.ign,
+                    auth_type: 'microsoft',
+                    server_host: 'donutsmp.net',
+                    server_port: 25565,
+                    server_version: 'auto',
+                  },
+                ])
+                .then(null, () => {});
+            }
+
+            alert(`🎉 Account successfully verified as Java player: ${pollData.ign}!`);
+          } else if (pollData.status === 'error') {
+            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+            setIsPollingMs(false);
+            setMsAuthError(pollData.error || 'Verification failed');
+          }
+        } catch (e: any) {
+          // continue polling
+        }
+      }, intervalSec * 1000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to initiate verification');
     }
   };
 
@@ -962,11 +1039,8 @@ export default function Dashboard() {
           }
           setIsAccountsOpen(false);
         }}
-        onAddAccount={handleAddAccount}
-        onVerifyAccount={handleVerifyAccount}
+        onStartVerification={handleStartVerification}
         onDeleteAccount={handleDeleteAccount}
-        isDaemonConnected={socketStatus === 'AUTHENTICATED'}
-        isVerifyingId={verifyingAccountId}
       />
 
       {/* Settings Modal (Daemon & Termux Command) */}
@@ -990,13 +1064,21 @@ export default function Dashboard() {
 
       {/* Microsoft 1-Time Device Authentication Modal */}
       <MicrosoftAuthModal
-        authData={msAuthData}
+        authData={apiMsAuthData || msAuthData}
         accountEmail={
+          pendingEmail ||
           accounts.find((a) => a.id === msAuthData?.botId)?.username ||
-          accounts.find((a) => a.id === verifyingAccountId)?.username ||
           activeAccount?.username
         }
-        onClose={clearMsAuth}
+        isPolling={isPollingMs}
+        errorMessage={msAuthError}
+        onClose={() => {
+          if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+          setIsPollingMs(false);
+          setApiMsAuthData(null);
+          setMsAuthError(null);
+          clearMsAuth();
+        }}
       />
     </div>
   );

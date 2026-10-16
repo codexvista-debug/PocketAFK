@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { MinecraftAccount } from '../types';
-import { X, UserPlus, Trash2, CheckCircle2, ShieldCheck, Mail, KeyRound, AlertCircle } from 'lucide-react';
+import { X, UserPlus, Trash2, CheckCircle2, ShieldCheck, Mail, KeyRound } from 'lucide-react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -10,11 +10,8 @@ interface AccountModalProps {
   accounts: MinecraftAccount[];
   activeAccountId: string | null;
   onSelectAccount: (account: MinecraftAccount) => void;
-  onAddAccount: (email: string) => Promise<void>;
-  onVerifyAccount: (accountId: string, email: string) => void;
+  onStartVerification: (email: string) => Promise<void>;
   onDeleteAccount: (id: string) => Promise<void>;
-  isDaemonConnected: boolean;
-  isVerifyingId?: string | null;
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({
@@ -23,11 +20,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   accounts,
   activeAccountId,
   onSelectAccount,
-  onAddAccount,
-  onVerifyAccount,
+  onStartVerification,
   onDeleteAccount,
-  isDaemonConnected,
-  isVerifyingId
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [minecraftEmail, setMinecraftEmail] = useState('');
@@ -35,13 +29,16 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!isOpen) return null;
 
+  // STRICT REQUIREMENT: Only verified accounts are shown in the linked list!
+  const verifiedAccounts = accounts.filter((a) => a.verified);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!minecraftEmail.trim()) return;
 
     setLoading(true);
     try {
-      await onAddAccount(minecraftEmail.trim());
+      await onStartVerification(minecraftEmail.trim());
       setShowAddForm(false);
       setMinecraftEmail('');
     } finally {
@@ -77,7 +74,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             <>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-600 font-semibold">
-                  {accounts.length} linked account{accounts.length === 1 ? '' : 's'}
+                  {verifiedAccounts.length} verified account{verifiedAccounts.length === 1 ? '' : 's'}
                 </span>
                 <button
                   onClick={() => setShowAddForm(true)}
@@ -88,43 +85,33 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 </button>
               </div>
 
-              {!isDaemonConnected && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>
-                    <b>Termux Daemon Standby:</b> Ensure your phone is connected so it can generate the Microsoft device verification code.
-                  </span>
-                </div>
-              )}
-
-              {accounts.length === 0 ? (
+              {verifiedAccounts.length === 0 ? (
                 <div className="text-center py-10 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-6 space-y-2">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
                     <UserPlus className="w-5 h-5" />
                   </div>
-                  <div className="text-xs font-bold text-slate-800">No Minecraft accounts added</div>
+                  <div className="text-xs font-bold text-slate-800">No verified accounts yet</div>
                   <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                    Add your official Minecraft Microsoft email to begin connecting to servers.
+                    Click "Add Account" to verify and link your official Minecraft Java account via Microsoft.
                   </p>
                   <button
                     onClick={() => setShowAddForm(true)}
-                    className="mt-2 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer"
+                    className="mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer"
                   >
-                    Add Your First Account
+                    + Add & Verify Account
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {accounts.map((acc) => {
+                  {verifiedAccounts.map((acc) => {
                     const isSelected = acc.id === activeAccountId;
                     const avatarName = acc.ign || 'MHF_Steve';
                     const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/36`;
-                    const isVerifying = isVerifyingId === acc.id;
 
                     return (
                       <div
                         key={acc.id}
-                        className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition ${
                           isSelected
                             ? 'bg-emerald-50/80 border-emerald-400 shadow-2xs ring-1 ring-emerald-400/20'
                             : 'bg-white border-slate-200 hover:border-slate-300'
@@ -149,19 +136,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-xs text-slate-900 truncate">
-                                {acc.ign || acc.username}
+                                {acc.ign}
                               </span>
-                              {acc.verified ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
-                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                                  Verified Java
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">
-                                  <KeyRound className="w-2.5 h-2.5 text-amber-600" />
-                                  Needs Verification
-                                </span>
-                              )}
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                Verified Java
+                              </span>
                             </div>
 
                             <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5">
@@ -170,26 +150,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Action buttons on card */}
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                          {/* Dedicated Verify Button if not verified! */}
-                          {!acc.verified && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onVerifyAccount(acc.id, acc.username);
-                              }}
-                              disabled={isVerifying || !isDaemonConnected}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                              title={!isDaemonConnected ? 'Daemon must be connected to generate code' : 'Generate Microsoft Device Code'}
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                              <span>{isVerifying ? 'Generating Code...' : 'Verify Now'}</span>
-                            </button>
-                          )}
-
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
                           {isSelected ? (
-                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2 py-1 rounded-md">
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2.5 py-1 rounded-md">
                               Active
                             </span>
                           ) : (
@@ -216,12 +180,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               )}
             </>
           ) : (
-            /* Clean Simplified Add Form (Email Only) */
+            /* Clean Add & Verify Form */
             <form onSubmit={handleSubmit} className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-2xs">
               <div>
-                <div className="text-xs font-bold text-slate-900">Link Minecraft Java Account</div>
+                <div className="text-xs font-bold text-slate-900">Verify Minecraft Java Account</div>
                 <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                  Enter your official Microsoft account email. You will receive a 1-time Microsoft device code to verify ownership.
+                  Enter the email associated with your Minecraft account. A 1-time Microsoft device code will appear to confirm ownership before adding.
                 </div>
               </div>
 
@@ -245,10 +209,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
                 <div className="font-bold flex items-center gap-1.5 text-emerald-800">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  Instant Microsoft Device Verification
+                  Guaranteed Verification
                 </div>
                 <p className="text-emerald-700 leading-normal">
-                  After clicking "Add & Verify", a Microsoft verification popup will appear with an 8-character code to link your Java account.
+                  Only verified accounts with an active Minecraft Java license will be linked. Once approved, your real in-game username and 3D player skin will show up automatically.
                 </p>
               </div>
 
@@ -266,7 +230,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
-                  {loading ? 'Adding...' : 'Add & Verify'}
+                  {loading ? 'Requesting Code...' : 'Get Microsoft Code'}
                 </button>
               </div>
             </form>

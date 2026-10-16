@@ -1,22 +1,26 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ExternalLink, Copy, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react';
+import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface MicrosoftAuthModalProps {
   authData: {
     botId: string;
     userCode: string;
     url: string;
-    message: string;
+    message?: string;
   } | null;
   accountEmail?: string;
+  isPolling?: boolean;
+  errorMessage?: string | null;
   onClose: () => void;
 }
 
 export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
   authData,
   accountEmail,
+  isPolling,
+  errorMessage,
   onClose
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
@@ -44,7 +48,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-slate-50">
           <div className="flex items-center gap-2.5">
@@ -58,14 +62,24 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-5 text-center">
+        <div className="p-6 space-y-4 text-center overflow-y-auto">
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold text-left flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="block font-bold">Verification Error</span>
+                <span className="font-normal text-[11px] leading-relaxed">{errorMessage}</span>
+              </div>
+            </div>
+          )}
+
           <p className="text-xs text-slate-600 leading-relaxed">
             Microsoft requires you to verify ownership of your Minecraft account. Enter this code at the Microsoft link below:
           </p>
@@ -75,7 +89,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Your Verification Code:
             </span>
-            <div className="font-mono text-2xl sm:text-3xl font-black text-amber-400 tracking-widest select-all">
+            <div className="font-mono text-3xl sm:text-4xl font-black text-amber-400 tracking-widest select-all">
               {authData.userCode}
             </div>
             <button
@@ -86,6 +100,14 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
               {copiedCode ? 'Code Copied!' : 'Copy Code'}
             </button>
           </div>
+
+          {/* Polling / Waiting Indicator */}
+          {isPolling && !errorMessage && (
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold flex items-center justify-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+              <span>Waiting for approval on Microsoft... (Auto-detecting)</span>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="space-y-2 pt-1">
@@ -110,7 +132,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
           {/* Private Tab Tip */}
           <div className="p-3 rounded-lg bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900 text-left leading-relaxed">
-            <b>💡 Tip for Multiple Accounts:</b> If your browser is already logged into another personal Microsoft account, paste this link into an <b>Incognito / Private Tab</b> to ensure you log into the exact email you specified!
+            <b>💡 Important:</b> Make sure you log into the exact Microsoft account that <b>owns Minecraft Java Edition</b>! If your browser is logged into another personal Microsoft account, use an <b>Incognito / Private tab</b>.
           </div>
         </div>
 
@@ -120,7 +142,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition cursor-pointer"
           >
-            I've Approved It
+            Cancel
           </button>
         </div>
       </div>
