@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ServerProfile, MinecraftAccount, BotSettings } from '../types';
-import { X, Server, Globe, Cpu, Shield, Sparkles, Swords, Trash2, UserPlus, Check } from 'lucide-react';
+import { X, Info, ChevronDown, Check } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
 interface ServerProfileModalProps {
@@ -13,7 +13,7 @@ interface ServerProfileModalProps {
   currentUser?: string | null;
   onSaveProfile: (profile: ServerProfile) => Promise<void>;
   onDeleteProfile?: (profileId: string) => Promise<void>;
-  onOpenAddAccount: () => void;
+  onOpenAddAccount?: () => void;
 }
 
 const DEFAULT_SETTINGS: BotSettings = {
@@ -31,26 +31,22 @@ const DEFAULT_SETTINGS: BotSettings = {
 };
 
 const COMMON_VERSIONS = [
-  { label: 'Auto-detect (Recommended)', value: 'auto' },
-  { label: '26.3 (Latest 2026 Release)', value: '26.3' },
-  { label: '26.2 (Active Release)', value: '26.2' },
-  { label: '26.1.2', value: '26.1.2' },
-  { label: '26.1', value: '26.1' },
-  { label: '1.21.11', value: '1.21.11' },
+  { label: '26.3', value: '26.3' },
+  { label: '26.2', value: '26.2' },
   { label: '1.21.4', value: '1.21.4' },
-  { label: '1.21.3', value: '1.21.3' },
-  { label: '1.21.2', value: '1.21.2' },
-  { label: '1.21.1 / 1.21', value: '1.21.1' },
-  { label: '1.20.6 / 1.20.5', value: '1.20.6' },
+  { label: '1.21.1', value: '1.21.1' },
   { label: '1.20.4', value: '1.20.4' },
   { label: '1.20.2', value: '1.20.2' },
-  { label: '1.20.1', value: '1.20.1' },
   { label: '1.19.4', value: '1.19.4' },
-  { label: '1.18.2', value: '1.18.2' },
-  { label: '1.16.5', value: '1.16.5' },
-  { label: '1.12.2', value: '1.12.2' },
-  { label: '1.8.9', value: '1.8.9' },
-  { label: 'Custom / Other Version...', value: 'custom' },
+  { label: 'Auto Detect', value: 'auto' },
+];
+
+const POPULAR_SETUPS = [
+  { name: 'FreshSMP', host: 'play.freshsmp.fun', port: 25565, version: '1.20.4' },
+  { name: 'DonutSMP', host: 'donutsmp.net', port: 25565, version: '1.20.4' },
+  { name: 'Hypixel', host: 'mc.hypixel.net', port: 25565, version: 'auto' },
+  { name: 'CubeCraft', host: 'play.cubecraft.net', port: 25565, version: 'auto' },
+  { name: 'Lifesteal Network', host: 'play.lifesteal.net', port: 25565, version: '1.20.4' },
 ];
 
 export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
@@ -61,17 +57,14 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   currentUser,
   onSaveProfile,
   onDeleteProfile,
-  onOpenAddAccount,
 }) => {
   const [name, setName] = useState('');
-  const [accountId, setAccountId] = useState('');
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState<string | number>(25565);
-  const [serverVersion, setServerVersion] = useState('auto');
-  const [customVersion, setCustomVersion] = useState('');
-  const [autoReconnect, setAutoReconnect] = useState(true);
-  const [settings, setSettings] = useState<BotSettings>(DEFAULT_SETTINGS);
+  const [bedrockPort, setBedrockPort] = useState<string | number>(19132);
+  const [serverVersion, setServerVersion] = useState('26.3');
   const [loading, setLoading] = useState(false);
+  const [showBrowseSetups, setShowBrowseSetups] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const wasOpenRef = useRef(false);
@@ -82,70 +75,50 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
     const profileChanged = initialProfile?.id !== activeProfileIdRef.current;
 
     if (isOpen && (justOpened || profileChanged)) {
+      setShowBrowseSetups(false);
       if (initialProfile) {
         setName(initialProfile.name || '');
-        const matchingAcc = accounts.find((a) => a.id === initialProfile.accountId)
-          || accounts.find((a) => (a.ign || a.username).toLowerCase() === (initialProfile.accountId || '').toLowerCase())
-          || accounts.find((a) => initialProfile.name.toLowerCase().startsWith((a.ign || a.username).toLowerCase()))
-          || accounts[0];
-        setAccountId(matchingAcc ? matchingAcc.id : (accounts[0]?.id || ''));
         setServerHost(initialProfile.serverHost || '');
         setServerPort(initialProfile.serverPort || 25565);
-        const ver = initialProfile.serverVersion || 'auto';
-        const isStandard = COMMON_VERSIONS.some((v) => v.value === ver);
-        if (!isStandard && ver !== 'auto') {
-          setServerVersion('custom');
-          setCustomVersion(ver);
-        } else {
-          setServerVersion(ver);
-          setCustomVersion('');
-        }
-        setAutoReconnect(initialProfile.autoReconnect ?? true);
-        setSettings(initialProfile.settings || DEFAULT_SETTINGS);
+        setBedrockPort(19132);
+        setServerVersion(initialProfile.serverVersion || '26.3');
       } else {
         setName('');
-        setAccountId(accounts[0]?.id || '');
         setServerHost('');
         setServerPort(25565);
-        setServerVersion('auto');
-        setCustomVersion('');
-        setAutoReconnect(true);
-        setSettings(DEFAULT_SETTINGS);
+        setBedrockPort(19132);
+        setServerVersion('26.3');
       }
     }
 
     wasOpenRef.current = isOpen;
     activeProfileIdRef.current = initialProfile?.id;
-  }, [isOpen, initialProfile?.id, accounts]);
+  }, [isOpen, initialProfile?.id]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveAccountId = accountId
-      || accounts.find((a) => a.id === initialProfile?.accountId)?.id
-      || accounts[0]?.id
-      || '';
+    if (!serverHost.trim()) return;
 
-    if (!name.trim() || !serverHost.trim() || !effectiveAccountId) return;
+    const effectiveName = name.trim() || serverHost.trim();
+    // Default account to first account or server profile's account
+    const effectiveAccountId = initialProfile?.accountId || accounts[0]?.id || 'default';
 
     setLoading(true);
     try {
-      const finalVersion = serverVersion === 'custom'
-        ? (customVersion.trim() || 'auto')
-        : (serverVersion.trim() || 'auto');
-
       const profile: ServerProfile = {
         id: initialProfile?.id || `srv_${Math.random().toString(36).substring(2, 9)}`,
-        name: name.trim(),
+        name: effectiveName,
         pocketUser: currentUser || initialProfile?.pocketUser,
         accountId: effectiveAccountId,
+        assignedAccountIds: initialProfile?.assignedAccountIds || (effectiveAccountId ? [effectiveAccountId] : []),
         serverHost: serverHost.trim(),
         serverPort: Number(serverPort) || 25565,
-        serverVersion: finalVersion,
+        serverVersion: serverVersion || 'auto',
         authType: 'microsoft',
-        autoReconnect,
-        settings,
+        autoReconnect: initialProfile?.autoReconnect ?? true,
+        settings: initialProfile?.settings || DEFAULT_SETTINGS,
       };
 
       await onSaveProfile(profile);
@@ -155,316 +128,167 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
     }
   };
 
+  const handleSelectSetup = (setup: typeof POPULAR_SETUPS[0]) => {
+    setServerHost(setup.host);
+    setServerPort(setup.port);
+    if (!name.trim() || name === 'My Server Profile') {
+      setName(setup.name);
+    }
+    setServerVersion(setup.version);
+    setShowBrowseSetups(false);
+  };
+
   const isEditing = !!initialProfile;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-              <Server className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="font-bold text-sm text-slate-900">
-                {isEditing ? 'Edit Server Instance' : 'Add Server Instance'}
-              </h2>
-              <span className="text-[11px] text-emerald-700 font-medium">
-                Connect your Java account to a Minecraft server
-              </span>
-            </div>
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between">
+          <div>
+            <h2 className="font-extrabold text-base text-slate-900">
+              {isEditing ? 'Edit Server Profile' : 'Add a server'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Create a profile for the Minecraft server you want to keep accounts online on.
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Form */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-          {/* Server Profile Name */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Instance / Profile Name
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Server IP + Browse setups */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-700">
+              Server IP
             </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. DonutSMP Base, Hypixel Lobby, Survival SMP"
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
-            />
-          </div>
-
-          {/* Minecraft Account Selector with Real Skin Head */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block font-semibold text-slate-700">
-                Assigned Java Account
-              </label>
-              <button
-                type="button"
-                onClick={onOpenAddAccount}
-                className="text-[11px] text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-1 cursor-pointer"
-              >
-                <UserPlus className="w-3 h-3" /> Add Account
-              </button>
-            </div>
-
-            {accounts.length === 0 ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 flex items-center justify-between">
-                <span>No Minecraft accounts added yet!</span>
-                <button
-                  type="button"
-                  onClick={onOpenAddAccount}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[11px] cursor-pointer"
-                >
-                  + Add Account First
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {accounts.map((acc) => {
-                  const isSelected = (accountId || accounts[0]?.id) === acc.id;
-                  const displayName = acc.ign || acc.username;
-                  const rawName = displayName.includes('@') ? displayName.split('@')[0] : displayName;
-                  const idOrName = acc.uuid || rawName;
-                  const avatarUrl = `https://crafthead.net/helm/${encodeURIComponent(idOrName)}/48`;
-
-                  return (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => setAccountId(acc.id)}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 shadow-2xs'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 shrink-0 shadow-2xs">
-                        <img
-                          src={avatarUrl}
-                          alt={rawName}
-                          className="w-full h-full object-cover [image-rendering:pixelated]"
-                          onError={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            if (!img.src.includes('mc-heads')) {
-                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent(idOrName)}/48`;
-                            } else if (!img.src.includes('minotar')) {
-                              img.src = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
-                            } else {
-                              img.src = 'https://minotar.net/helm/MHF_Steve/48.png';
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 justify-between">
-                          <span className="font-extrabold text-xs text-slate-900 truncate">
-                            {displayName}
-                          </span>
-                          {isSelected && (
-                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          )}
-                        </div>
-                        <span className="text-[10px] text-emerald-700 font-semibold block">
-                          ✓ Verified Java
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-[11px] text-slate-500 mt-1">
-              Select which verified Java account to deploy onto this server.
-            </p>
-          </div>
-
-          {/* Server Connection: IP & Port */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                <Globe className="w-3.5 h-3.5 text-slate-500" />
-                Server IP / Host
-              </label>
+            <div className="flex gap-2 relative">
               <input
                 type="text"
                 required
                 value={serverHost}
                 onChange={(e) => setServerHost(e.target.value)}
-                placeholder="e.g. play.freshsmp.fun or mc.hypixel.net"
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
+                placeholder="Enter a server IP"
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 font-medium focus:outline-none focus:border-emerald-600 focus:bg-white transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowBrowseSetups(!showBrowseSetups)}
+                className="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs transition cursor-pointer shrink-0 flex items-center gap-1"
+              >
+                <span>Browse setups</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              {/* Browse Setups Dropdown Popover */}
+              {showBrowseSetups && (
+                <div className="absolute right-0 top-12 z-20 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-2 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
+                    Popular Server Setups
+                  </div>
+                  {POPULAR_SETUPS.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onClick={() => handleSelectSetup(s)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 hover:text-emerald-800 transition flex items-center justify-between text-xs"
+                    >
+                      <span className="font-semibold text-slate-800">{s.name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{s.host}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Profile Name */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-700">
+              Profile name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Server Profile"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder-slate-400 font-medium focus:outline-none focus:border-emerald-600 focus:bg-white transition"
+            />
+          </div>
+
+          {/* 2-Column: Java Version & Bedrock Port */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {/* Java version */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1 text-xs font-semibold text-slate-700">
+                <span>Java version</span>
+                <Info className="w-3.5 h-3.5 text-slate-400" />
+              </label>
+              <select
+                value={serverVersion}
+                onChange={(e) => setServerVersion(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-emerald-600 focus:bg-white transition cursor-pointer"
+              >
+                {COMMON_VERSIONS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Port
+            {/* Bedrock / Server Port */}
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1 text-xs font-semibold text-slate-700">
+                <span>Bedrock port</span>
+                <Info className="w-3.5 h-3.5 text-slate-400" />
               </label>
               <input
                 type="text"
                 inputMode="numeric"
-                required
-                value={serverPort}
-                onChange={(e) => setServerPort(e.target.value)}
-                placeholder="25565"
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
+                value={bedrockPort}
+                onChange={(e) => setBedrockPort(e.target.value)}
+                placeholder="19132"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-medium focus:outline-none focus:border-emerald-600 focus:bg-white transition"
               />
-            </div>
-          </div>
-
-          {/* Minecraft Version */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-              <Cpu className="w-3.5 h-3.5 text-slate-500" />
-              Minecraft Version
-            </label>
-            <select
-              value={serverVersion}
-              onChange={(e) => setServerVersion(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs cursor-pointer"
-            >
-              {COMMON_VERSIONS.map((v) => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-            {serverVersion === 'custom' && (
-              <input
-                type="text"
-                required
-                value={customVersion}
-                onChange={(e) => setCustomVersion(e.target.value)}
-                placeholder="Type custom version, e.g. 26.2, 1.21.4"
-                className="w-full mt-2 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
-              />
-            )}
-            <p className="text-[11px] text-slate-500 mt-1">
-              PocketAFK automatically negotiates server version handshake by default.
-            </p>
-          </div>
-
-          {/* Toggles & Behavior */}
-          <div className="border-t border-slate-200 pt-3 space-y-2">
-            <span className="font-bold text-slate-700 block">Server Instance Settings:</span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Physics */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.physics}
-                  onChange={(e) => setSettings({ ...settings, physics: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Physics (Gravity & Water)</span>
-              </label>
-
-              {/* Resource Packs */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.acceptResourcePacks}
-                  onChange={(e) => setSettings({ ...settings, acceptResourcePacks: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Auto-Accept Resource Packs</span>
-              </label>
-
-              {/* Anti-AFK */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.antiAfk}
-                  onChange={(e) => setSettings({ ...settings, antiAfk: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Anti-AFK Movements</span>
-              </label>
-
-              {/* Auto Reconnect */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoReconnect}
-                  onChange={(e) => setAutoReconnect(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Auto-Reconnect on Kick</span>
-              </label>
-
-              {/* Mob Farm */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.mobFarm}
-                  onChange={(e) => setSettings({ ...settings, mobFarm: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Mob Farm (Auto-Attack)</span>
-              </label>
-
-              {/* Auto Eat */}
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.autoEat}
-                  onChange={(e) => setSettings({ ...settings, autoEat: e.target.checked })}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-slate-800 font-medium">Auto-Eat Food</span>
-              </label>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-            {isEditing && onDeleteProfile ? (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 border border-red-200 font-bold transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete Instance
-              </button>
-            ) : <div />}
+          <div className="pt-4 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+            >
+              Cancel
+            </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || !name.trim() || !serverHost.trim() || !accountId}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
-              >
-                <Check className="w-4 h-4" />
-                {loading ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Server'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading || !serverHost.trim()}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs transition shadow-xs cursor-pointer flex items-center gap-1.5 ml-auto"
+            >
+              <Check className="w-4 h-4" />
+              {loading ? 'Creating...' : isEditing ? 'Save Changes' : 'Create server'}
+            </button>
           </div>
         </form>
       </div>
 
-      {/* Modern In-App Confirm Delete Modal */}
+      {/* Delete Confirmation if Editing */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
-        title="Delete Server Instance"
-        message={`Are you sure you want to delete server instance "${name}"? This action cannot be undone.`}
-        confirmText="Delete Instance"
-        cancelText="Keep Server"
+        title="Delete Server Profile"
+        message={`Are you sure you want to delete server profile "${name}"? This action cannot be undone.`}
+        confirmText="Delete Profile"
+        cancelText="Cancel"
         isDestructive
         onConfirm={async () => {
           if (onDeleteProfile && initialProfile) {

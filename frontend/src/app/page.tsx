@@ -52,7 +52,8 @@ import {
   Heart,
   Utensils,
   Terminal as TerminalIcon,
-  Check
+  Check,
+  Copy,
 } from 'lucide-react';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
@@ -69,7 +70,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'profile' | 'servers' | 'proxies';
+type MainView = 'profile' | 'servers' | 'accounts' | 'proxies';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 export default function Dashboard() {
@@ -80,6 +81,15 @@ export default function Dashboard() {
     return null;
   });
   const [secretCode, setSecretCode] = useState<string>('');
+  const [accountConnections, setAccountConnections] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('pocketafk_connections');
+      if (stored) setAccountConnections(JSON.parse(stored));
+    } catch (e) {}
+  }, []);
 
   // Sync secretCode for current user
   useEffect(() => {
@@ -924,8 +934,12 @@ export default function Dashboard() {
               </button>
 
               <button
-                onClick={() => setIsAccountsOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer"
+                onClick={() => setActiveMainView('accounts')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeMainView === 'accounts'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <Users className="w-4 h-4 text-emerald-600" />
@@ -1196,6 +1210,199 @@ export default function Dashboard() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* VIEW: DEDICATED ACCOUNTS PAGE */}
+              {activeMainView === 'accounts' && (
+                <div className="space-y-4">
+                  {/* Top Bar: Title, Add Account Button, and Filter */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900">Accounts</h2>
+                      <p className="text-xs text-slate-500">Manage all your verified Microsoft Java Minecraft accounts.</p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleStartMicrosoftLogin}
+                        disabled={accounts.length >= 5}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Account</span>
+                      </button>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Filter..."
+                          value={accountFilter}
+                          onChange={(e) => setAccountFilter(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition shadow-2xs w-48 sm:w-60"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Accounts Table */}
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
+                        <tr>
+                          <th className="p-3.5 w-12 text-center">
+                            <span className="font-mono text-slate-700 font-bold">{accounts.length}</span>
+                          </th>
+                          <th className="p-3.5">Account Name</th>
+                          <th className="p-3.5">Account Access</th>
+                          <th className="p-3.5">Connections</th>
+                          <th className="p-3.5">Date Added</th>
+                          <th className="p-3.5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {accounts.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-12 text-center text-slate-500">
+                              <div className="space-y-3 max-w-sm mx-auto">
+                                <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                                <p className="text-xs font-semibold text-slate-700">No Minecraft accounts linked yet.</p>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  Click &ldquo;Add Account&rdquo; above to authenticate and link your official Java Microsoft account.
+                                </p>
+                                <button
+                                  onClick={handleStartMicrosoftLogin}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" /> Link Microsoft Account
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          accounts
+                            .filter((a) => {
+                              const q = accountFilter.toLowerCase().trim();
+                              if (!q) return true;
+                              return (a.ign || a.username).toLowerCase().includes(q);
+                            })
+                            .map((acc) => {
+                              const isPinned = pinnedAccountIds.includes(acc.id);
+                              const connectionsCount = accountConnections[acc.id] || 1;
+                              const dateAddedStr = acc.addedAt
+                                ? new Date(acc.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+                                  ', ' +
+                                  new Date(acc.addedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+                                : 'Recent';
+
+                              return (
+                                <tr key={acc.id} className="hover:bg-slate-50/80 transition">
+                                  {/* Checkbox */}
+                                  <td className="p-3.5 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedAccountIds.includes(acc.id)}
+                                      onChange={() => handleAccountCheckbox(acc.id)}
+                                      className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
+                                    />
+                                  </td>
+
+                                  {/* Account Name + Skin */}
+                                  <td className="p-3.5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 shrink-0 shadow-2xs">
+                                        <img
+                                          src={`https://crafthead.net/helm/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/32`}
+                                          alt={acc.ign || acc.username}
+                                          className="w-full h-full object-cover [image-rendering:pixelated]"
+                                          onError={(e) => {
+                                            const img = e.target as HTMLImageElement;
+                                            if (!img.src.includes('mc-heads')) {
+                                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/32`;
+                                            } else {
+                                              img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                                            }
+                                          }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                                          <span>{acc.ign || acc.username}</span>
+                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                        </div>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                          {acc.uuid ? acc.uuid.substring(0, 16) + '...' : 'Java Edition'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Account Access */}
+                                  <td className="p-3.5">
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      Working
+                                    </span>
+                                  </td>
+
+                                  {/* Connections */}
+                                  <td className="p-3.5">
+                                    <span className="font-mono text-xs font-semibold text-slate-700">
+                                      {connectionsCount}
+                                    </span>
+                                  </td>
+
+                                  {/* Date Added */}
+                                  <td className="p-3.5">
+                                    <span className="text-xs text-slate-500 font-medium">
+                                      {dateAddedStr}
+                                    </span>
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="p-3.5 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {/* Pin/Unpin */}
+                                      <button
+                                        onClick={() => handleTogglePin(acc.id)}
+                                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                          isPinned ? 'text-amber-600 bg-amber-50' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                                        }`}
+                                        title={isPinned ? 'Unpin from top' : 'Pin to top'}
+                                      >
+                                        <Pin className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Copy Name */}
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(acc.ign || acc.username);
+                                          showToast(`Copied ${acc.ign || acc.username} to clipboard!`, 'success');
+                                        }}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                        title="Copy account name"
+                                      >
+                                        <Copy className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Delete */}
+                                      <button
+                                        onClick={() => handleDeleteAccount(acc.id)}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                        title="Delete account"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}

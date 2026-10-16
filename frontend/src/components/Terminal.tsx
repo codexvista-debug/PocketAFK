@@ -79,15 +79,15 @@ export const Terminal: React.FC<TerminalProps> = ({
         </div>
       </div>
 
-      {/* Messages Output (Dark high-contrast code pane with authentic Minecraft in-game text styling) */}
+      {/* Messages Output (Clean Light Theme with vibrant in-game Minecraft text formatting) */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#0b0f19] selection:bg-emerald-500/30 text-slate-200"
+        className="flex-1 p-4 overflow-y-auto font-mono text-[13px] space-y-1 bg-slate-50/70 selection:bg-emerald-500/20 text-slate-900"
       >
         {messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 italic text-center px-4">
-            Console ready. Start the bot on Termux to stream live Minecraft chat and events.
+          <div className="h-full flex items-center justify-center text-slate-400 italic text-center px-4">
+            Console ready. Start the bot to stream live in-game Minecraft chat and events.
           </div>
         ) : (
           messages.map((msg) => {
@@ -97,7 +97,7 @@ export const Terminal: React.FC<TerminalProps> = ({
             if (msg.type === 'session_divider') {
               return (
                 <div key={msg.id} className="py-2 text-center">
-                  <div className="inline-block px-3 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] text-amber-400 font-bold [text-shadow:1px_1px_0px_rgba(0,0,0,0.85)]">
+                  <div className="inline-block px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 font-bold">
                     <span dangerouslySetInnerHTML={{ __html: cleanHtml }} />
                   </div>
                 </div>
@@ -105,12 +105,12 @@ export const Terminal: React.FC<TerminalProps> = ({
             }
 
             return (
-              <div key={msg.id} className="flex items-start gap-2 leading-relaxed hover:bg-slate-800/40 px-2 py-0.5 rounded transition-colors">
-                <span className="text-slate-500 text-[10px] select-none shrink-0 pt-0.5">
+              <div key={msg.id} className="flex items-start gap-2 leading-relaxed hover:bg-slate-100/80 px-2 py-0.5 rounded-lg transition-colors">
+                <span className="text-slate-400 text-[10px] select-none shrink-0 pt-0.5 font-mono">
                   [{timeStr}]
                 </span>
                 <div 
-                  className="break-all whitespace-pre-wrap text-slate-100 font-mono tracking-wide [text-shadow:1px_1px_0px_rgba(0,0,0,0.85)]"
+                  className="break-all whitespace-pre-wrap text-slate-900 font-mono tracking-wide"
                   dangerouslySetInnerHTML={{ __html: cleanHtml }}
                 />
               </div>

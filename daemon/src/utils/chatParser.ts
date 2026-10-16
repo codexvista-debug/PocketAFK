@@ -44,6 +44,8 @@ const ANSI_COLORS: Record<string, string> = {
 export function stripMinecraftCodes(str: string): string {
   if (!str) return '';
   return str
+    .replace(/(?:§|&)#([0-9a-fA-F]{6})/gi, '')
+    .replace(/\[#([0-9a-fA-F]{6})([^\]]*)\]/gi, '$2')
     .replace(/§[0-9a-fk-or]/gi, '')
     .replace(/(?:\x1b|\u001b|□)?\[[0-9;]*m/g, '')
     .replace(/\[\d+(?:;\d+)*m/g, '')
@@ -58,12 +60,22 @@ export function minecraftToHtml(str: string): string {
 
   let text = str;
 
-  // 1. Convert Minecraft 1.16+ hex colors: §x§r§r§g§g§b§b
+  // 1. Convert modern hex color codes: §#RRGGBB or &#RRGGBB
+  text = text.replace(/(?:§|&)#([0-9a-fA-F]{6})/gi, (_, hex) => {
+    return `</span><span style="color:#${hex}">`;
+  });
+
+  // 2. Convert bracketed hex tags like [#3C8AFFLOL]
+  text = text.replace(/\[#([0-9a-fA-F]{6})([^\]]*)\]/gi, (_, hex, content) => {
+    return `<span style="color:#${hex}">[${content}]</span>`;
+  });
+
+  // 3. Convert Minecraft 1.16+ hex colors: §x§r§r§g§g§b§b
   text = text.replace(/§x§([0-9a-fA-F])§([0-9a-fA-F])§([0-9a-fA-F])§([0-9a-fA-F])§([0-9a-fA-F])§([0-9a-fA-F])/gi,
     (_, r1, r2, g1, g2, b1, b2) => `</span><span style="color:#${r1}${r2}${g1}${g2}${b1}${b2}">`
   );
 
-  // 2. Convert standard Minecraft section codes (§0 - §f)
+  // 4. Convert standard Minecraft section codes (§0 - §f)
   text = text.replace(/§([0-9a-fA-F])/g, (_, code) => {
     const c = MINECRAFT_COLORS[code.toLowerCase()] || '#FFFFFF';
     return `</span><span style="color:${c}">`;
