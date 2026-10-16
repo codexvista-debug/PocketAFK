@@ -110,6 +110,9 @@ fi
 
 # 2. Start PocketAFK Node.js Daemon
 echo -e "\n${CYAN}[2/4]${NC} ☕ ${BOLD}Starting Mineflayer Java Core (Node.js LTS)...${NC}"
+pkill -f "tsx src/index.ts" 2>/dev/null || true
+pkill -f "cloudflared tunnel" 2>/dev/null || true
+sleep 1
 npm run start > daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 2

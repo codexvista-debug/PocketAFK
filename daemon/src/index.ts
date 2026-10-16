@@ -7,6 +7,18 @@ import { ClientMessage, DaemonMessage } from './types';
 
 dotenv.config();
 
+// Protect daemon from crashing on server proxy packet anomalies or queue timeouts
+process.on('uncaughtException', (err: any) => {
+  console.error(chalk.yellow(`[PocketAFK Daemon Exception Guard] ${err?.message || err}`));
+  if (err?.stack && !err.message?.includes("reading 'id'")) {
+    console.error(chalk.gray(err.stack));
+  }
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.warn(chalk.yellow(`[PocketAFK Daemon Warning] Unhandled Rejection: ${reason}`));
+});
+
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const AUTH_TOKEN = process.env.DAEMON_AUTH_TOKEN || '';
 

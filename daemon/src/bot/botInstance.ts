@@ -90,6 +90,7 @@ export class PocketBotInstance {
         profilesFolder: tokenFolder,
         physicsEnabled: this.config.settings.physics !== false,
         viewDistance: 'tiny',
+        checkTimeoutInterval: 120 * 1000,
         onMsaCode: (data: any) => {
           const userCode = data.user_code || data.userCode;
           const baseUri = data.verification_uri || 'https://www.microsoft.com/link';
@@ -119,6 +120,20 @@ export class PocketBotInstance {
             formattedText: `<span style="color:#00AAAA;font-weight:bold">[Microsoft Auth] Code: <span style="color:#FFAA00">${userCode}</span> &bull; <a href="${directUri}" target="_blank" style="color:#55FFFF;text-decoration:underline">Click here to authenticate</a></span>`
           });
         }
+      });
+
+      // Safe fallback for bot.entity to prevent "Cannot read properties of null (reading 'id')"
+      // when servers teleport, reset spectator entities, or switch dimensions
+      let _currentEntity: any = null;
+      Object.defineProperty(this.bot, 'entity', {
+        get() {
+          return _currentEntity || { id: -1, position: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, height: 1.62 };
+        },
+        set(val: any) {
+          _currentEntity = val;
+        },
+        configurable: true,
+        enumerable: true
       });
 
       this.setupEventHandlers();
@@ -303,6 +318,18 @@ export class PocketBotInstance {
 
     // Error handler
     this.bot.on('error', (err: Error) => {
+      console.error('[PocketAFK Bot Error]', err);
+
+      // If error is transient null reference during proxy dimension switch or keepalive queue lag, don't kill bot
+      if (err.message.includes("reading 'id'") || err.message.includes('keepAliveError') || err.message.includes('timed out')) {
+        this.logConsole({
+          type: 'error',
+          raw: `[PocketAFK Warning] Server queue/sync: ${err.message}`,
+          formattedText: `<span style="color:#FFAA00">[PocketAFK Notice] Server queue/sync: ${err.message}</span>`
+        });
+        return;
+      }
+
       const isSocketDead = !(this.bot as any)?._client?.socket?.writable;
       if (isSocketDead) {
         this.setState('ERROR', err.message);

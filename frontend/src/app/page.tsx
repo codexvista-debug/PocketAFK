@@ -714,7 +714,7 @@ export default function Dashboard() {
     botState === 'SPAWNED' || botState === 'LOGGED_IN' || botState === 'CONNECTING';
 
   return (
-    <div className="min-h-screen bg-[#0e1117] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/20">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-100/50 via-slate-50 to-sky-100/40 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20">
       {/* Toast Notification Container */}
       <ModernToast toast={toast} onDismiss={() => setToast(null)} />
 
@@ -805,13 +805,13 @@ export default function Dashboard() {
       {/* LOGGED OUT GATEWAY */}
       {!currentUser ? (
         <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-[#131722] border border-[#202736] rounded-3xl p-8 shadow-2xl text-center space-y-6">
+          <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center space-y-6">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center font-black text-white text-3xl shadow-lg shadow-emerald-500/20 mx-auto">
               P
             </div>
             <div className="space-y-2">
-              <h1 className="text-2xl font-black text-white tracking-tight">PocketAFK</h1>
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight">PocketAFK</h1>
+              <p className="text-xs text-slate-600 leading-relaxed">
                 24/7 Pure Java Minecraft AFK bot powered by Termux on Android. Sign in with your username to manage server profiles & bots.
               </p>
             </div>
@@ -827,17 +827,17 @@ export default function Dashboard() {
       ) : (
         /* MINECRAFTAFK MAIN DASHBOARD LAYOUT */
         <div className="flex-1 flex flex-col md:flex-row min-h-screen">
-          {/* LEFT SIDEBAR (Dark, MinecraftAFK Style) */}
-          <aside className="w-full md:w-64 bg-[#131722] border-r border-[#202736] flex flex-col shrink-0">
+          {/* LEFT SIDEBAR */}
+          <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs">
             {/* Logo Bar */}
-            <div className="p-4 border-b border-[#202736] flex items-center justify-between">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-black text-sm">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center font-black text-sm shadow-2xs">
                   P
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-sm text-white tracking-tight">PocketAFK</span>
+                    <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
                     <span className={`w-2 h-2 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
                   </div>
                   <span className="text-[10px] text-slate-500 font-mono">24/7 Java Core</span>
@@ -851,23 +851,23 @@ export default function Dashboard() {
                 onClick={() => setActiveMainView('servers')}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'servers'
-                    ? 'bg-[#1c2333] text-white'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                    ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                <Server className="w-4 h-4 text-emerald-400" />
+                <Server className="w-4 h-4 text-emerald-600" />
                 Servers
               </button>
 
               <button
                 onClick={() => setIsAccountsOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 hover:bg-[#181e2b] transition cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4 text-emerald-400" />
+                  <Users className="w-4 h-4 text-emerald-600" />
                   Accounts
                 </div>
-                <span className="text-[10px] bg-[#222b3d] text-emerald-400 px-2 py-0.5 rounded-full font-mono font-bold">
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-mono font-bold">
                   {accounts.length}/5
                 </span>
               </button>
@@ -876,20 +876,20 @@ export default function Dashboard() {
                 onClick={() => setActiveMainView('proxies')}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'proxies'
-                    ? 'bg-[#1c2333] text-white'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                    ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                <Radio className="w-4 h-4 text-emerald-400" />
+                <Radio className="w-4 h-4 text-emerald-600" />
                 Proxies & Termux
               </button>
             </div>
 
-            <div className="border-t border-[#202736] my-1" />
+            <div className="border-t border-slate-200 my-1" />
 
             {/* Server Profiles Section */}
             <div className="p-3 flex-1 overflow-y-auto space-y-1">
-              <div className="px-2 py-1 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <div className="px-2 py-1 flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 <span>Server profiles</span>
                 <button
                   disabled={servers.length >= 3}
@@ -901,7 +901,7 @@ export default function Dashboard() {
                     setEditingServer(null);
                     setIsServerModalOpen(true);
                   }}
-                  className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#1e2535] disabled:opacity-40 transition cursor-pointer"
+                  className="p-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-40 transition cursor-pointer"
                   title="Add Server Profile (Max 3)"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -924,31 +924,31 @@ export default function Dashboard() {
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                         isSelected && activeMainView === 'profile'
-                          ? 'bg-[#1c2333] text-white shadow-xs'
-                          : 'text-slate-300 hover:text-white hover:bg-[#181e2b]'
+                          ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
+                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 truncate">
-                        <div className="w-5 h-5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-[10px] font-black shrink-0">
+                        <div className="w-5 h-5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
                           {srv.name.charAt(0).toUpperCase()}
                         </div>
                         <span className="truncate">{srv.name}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400 shrink-0">
-                        <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-400' : 'text-slate-500'}`} />
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 shrink-0">
+                        <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600' : 'text-slate-400'}`} />
                         <span>{isRunning ? '1' : '0'}/1</span>
                       </div>
                     </button>
 
-                    {/* Sub-Feature Tabs (expanded under the selected server) */}
+                    {/* Sub-Feature Tabs */}
                     {isSelected && activeMainView === 'profile' && (
-                      <div className="ml-3 pl-3 border-l border-[#263145] space-y-0.5 pt-0.5">
+                      <div className="ml-3 pl-3 border-l border-slate-200 space-y-0.5 pt-0.5">
                         <button
                           onClick={() => setActiveSubTab('connect')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'connect'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <Home className="w-3.5 h-3.5" />
@@ -959,8 +959,8 @@ export default function Dashboard() {
                           onClick={() => setActiveSubTab('chat')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'chat'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
@@ -971,8 +971,8 @@ export default function Dashboard() {
                           onClick={() => setActiveSubTab('movement')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'movement'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <Compass className="w-3.5 h-3.5" />
@@ -983,8 +983,8 @@ export default function Dashboard() {
                           onClick={() => setActiveSubTab('inventory')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'inventory'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <Box className="w-3.5 h-3.5" />
@@ -995,8 +995,8 @@ export default function Dashboard() {
                           onClick={() => setActiveSubTab('pov')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'pov'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -1007,8 +1007,8 @@ export default function Dashboard() {
                           onClick={() => setActiveSubTab('settings')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
                             activeSubTab === 'settings'
-                              ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-[#181e2b]'
+                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                           }`}
                         >
                           <Sliders className="w-3.5 h-3.5" />
@@ -1022,16 +1022,16 @@ export default function Dashboard() {
             </div>
 
             {/* Bottom User Pill */}
-            <div className="p-3 border-t border-[#202736] flex items-center justify-between">
+            <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-xs font-bold text-slate-200 font-mono truncate">
+                <span className="text-xs font-bold text-slate-800 font-mono truncate">
                   @{effectiveUser}
                 </span>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#1c2333] rounded-lg transition cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                 title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
@@ -1040,18 +1040,18 @@ export default function Dashboard() {
           </aside>
 
           {/* MAIN CONTENT AREA */}
-          <main className="flex-1 flex flex-col min-w-0 bg-[#0e1117] overflow-y-auto">
+          <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
             {/* Top Navigation & Status Bar */}
-            <header className="h-14 border-b border-[#202736] bg-[#121620]/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
+            <header className="h-14 border-b border-slate-200 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0 shadow-2xs">
               <div className="flex items-center gap-2 text-xs font-bold">
                 {activeMainView === 'profile' ? (
                   <>
-                    <span className="text-slate-400">{activeServer?.name || 'Server'}</span>
-                    <span className="text-slate-600">/</span>
-                    <span className="text-emerald-400 uppercase tracking-wider">{activeSubTab}</span>
+                    <span className="text-slate-500">{activeServer?.name || 'Server'}</span>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-emerald-700 uppercase tracking-wider">{activeSubTab}</span>
                   </>
                 ) : (
-                  <span className="text-emerald-400 uppercase tracking-wider">{activeMainView}</span>
+                  <span className="text-emerald-700 uppercase tracking-wider">{activeMainView}</span>
                 )}
               </div>
 
@@ -1059,14 +1059,14 @@ export default function Dashboard() {
                 {/* Termux Tunnel Status */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-[#263145] bg-[#161c28] hover:border-slate-600 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
                       socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                     }`}
                   />
-                  <span className="text-slate-300">
+                  <span className="text-slate-700">
                     {socketStatus === 'AUTHENTICATED' ? 'Daemon Online' : 'Daemon Offline'}
                   </span>
                 </button>
@@ -1077,7 +1077,7 @@ export default function Dashboard() {
                     navigator.clipboard.writeText(termuxCommand);
                     showToast(`Copied 1-click launcher command!`, 'success');
                   }}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-[#1b2230] hover:bg-[#232c3f] border border-[#2b364c] text-emerald-400 transition cursor-pointer"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 transition cursor-pointer shadow-2xs"
                 >
                   <Smartphone className="w-3.5 h-3.5" />
                   <span>1-Click Termux</span>
@@ -1086,7 +1086,7 @@ export default function Dashboard() {
                 {/* Settings icon */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1c2333] transition cursor-pointer"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                   title="Bridge Settings"
                 >
                   <Settings2 className="w-4 h-4" />
@@ -1128,26 +1128,26 @@ export default function Dashboard() {
                             setActiveMainView('profile');
                             setActiveSubTab('connect');
                           }}
-                          className="p-4 rounded-2xl bg-[#141824] border border-[#202736] hover:border-emerald-500/50 transition cursor-pointer space-y-3 shadow-xs"
+                          className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-500/50 transition cursor-pointer space-y-3 shadow-xs"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-black text-sm text-white">{srv.name}</span>
+                            <span className="font-black text-sm text-slate-900">{srv.name}</span>
                             {getStatusBadge(srvState)}
                           </div>
-                          <div className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
-                            <Globe className="w-3.5 h-3.5 text-slate-500" />
+                          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5">
+                            <Globe className="w-3.5 h-3.5 text-slate-400" />
                             <span>{srv.serverHost}:{srv.serverPort}</span>
                           </div>
                           {assigned && (
-                            <div className="flex items-center gap-2 pt-2 border-t border-[#202736]">
-                              <div className="w-5 h-5 rounded-xs overflow-hidden border border-slate-700 bg-slate-800 shrink-0">
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                              <div className="w-5 h-5 rounded-xs overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
                                 <img
                                   src={`https://crafthead.net/helm/${encodeURIComponent((assigned.uuid || assigned.ign || assigned.username).split('@')[0])}/32`}
                                   alt={assigned.ign || assigned.username}
                                   className="w-full h-full object-cover [image-rendering:pixelated]"
                                 />
                               </div>
-                              <span className="text-xs text-slate-300 font-bold">{assigned.ign || assigned.username}</span>
+                              <span className="text-xs text-slate-800 font-bold">{assigned.ign || assigned.username}</span>
                             </div>
                           )}
                         </div>
@@ -1161,22 +1161,22 @@ export default function Dashboard() {
               {activeMainView === 'proxies' && (
                 <div className="max-w-2xl space-y-4">
                   <div>
-                    <h2 className="text-lg font-black text-white">Proxies & Termux Bridge</h2>
-                    <p className="text-xs text-slate-400">Connect your Android Termux daemon to run 24/7 bots headless.</p>
+                    <h2 className="text-lg font-black text-slate-900">Proxies & Termux Bridge</h2>
+                    <p className="text-xs text-slate-500">Connect your Android Termux daemon to run 24/7 bots headless.</p>
                   </div>
 
-                  <div className="p-5 rounded-2xl bg-[#141824] border border-[#202736] space-y-4">
+                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Smartphone className="w-5 h-5 text-emerald-400" />
-                        <span className="text-sm font-bold text-white">Termux 1-Click Command</span>
+                        <Smartphone className="w-5 h-5 text-emerald-600" />
+                        <span className="text-sm font-bold text-slate-900">Termux 1-Click Command</span>
                       </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
                         {socketStatus === 'AUTHENTICATED' ? 'Connected' : 'Waiting for connection'}
                       </span>
                     </div>
 
-                    <div className="p-3 bg-[#0d1017] border border-[#1f2637] rounded-xl font-mono text-xs text-emerald-300 break-all select-all">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-emerald-700 break-all select-all">
                       {termuxCommand}
                     </div>
 
@@ -1196,7 +1196,7 @@ export default function Dashboard() {
               {/* VIEW: PROFILE SUB-TABS */}
               {activeMainView === 'profile' && activeServer && (
                 <>
-                  {/* SUB-TAB 1: CONNECT (Exact match of Screenshot 5) */}
+                  {/* SUB-TAB 1: CONNECT */}
                   {activeSubTab === 'connect' && (
                     <div className="space-y-4">
                       {/* Top Action Bar */}
@@ -1222,28 +1222,28 @@ export default function Dashboard() {
 
                         {/* Search / Filter Input */}
                         <div className="relative">
-                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                           <input
                             type="text"
                             placeholder="Filter accounts..."
                             value={accountFilter}
                             onChange={(e) => setAccountFilter(e.target.value)}
-                            className="pl-8 pr-3 py-1.5 rounded-xl bg-[#141824] border border-[#202736] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                            className="pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition shadow-2xs"
                           />
                         </div>
                       </div>
 
                       {/* Accounts Table for this Server Profile */}
-                      <div className="bg-[#141824] border border-[#202736] rounded-2xl overflow-hidden shadow-xs">
+                      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
                         <table className="w-full text-left text-xs">
-                          <thead className="bg-[#181e2c] border-b border-[#202736] text-slate-400 uppercase text-[10px] tracking-wider font-bold">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                             <tr>
                               <th className="p-3 w-8">
                                 <input
                                   type="checkbox"
                                   checked={selectedAccountIds.length > 0 && selectedAccountIds.length === filteredAccounts.length}
                                   onChange={handleSelectAllToggle}
-                                  className="rounded bg-[#1e2535] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                                  className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                                 />
                               </th>
                               <th className="p-3">Account Name</th>
@@ -1252,15 +1252,15 @@ export default function Dashboard() {
                               <th className="p-3 text-right">Actions</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#202736]">
+                          <tbody className="divide-y divide-slate-100">
                             {filteredAccounts.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="p-8 text-center text-slate-400">
+                                <td colSpan={5} className="p-8 text-center text-slate-500">
                                   <div className="space-y-2">
                                     <p className="text-xs">No Minecraft accounts linked yet.</p>
                                     <button
                                       onClick={handleStartMicrosoftLogin}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
                                     >
                                       <Plus className="w-3.5 h-3.5" /> Link Microsoft Java Account
                                     </button>
@@ -1277,8 +1277,8 @@ export default function Dashboard() {
                                 return (
                                   <tr
                                     key={acc.id}
-                                    className={`hover:bg-[#181e2b] transition ${
-                                      isChecked ? 'bg-[#181e2b]/60' : ''
+                                    className={`hover:bg-slate-50/80 transition ${
+                                      isChecked ? 'bg-emerald-50/30' : ''
                                     }`}
                                   >
                                     <td className="p-3">
@@ -1286,12 +1286,12 @@ export default function Dashboard() {
                                         type="checkbox"
                                         checked={isChecked}
                                         onChange={() => handleAccountCheckbox(acc.id)}
-                                        className="rounded bg-[#1e2535] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                                        className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                                       />
                                     </td>
                                     <td className="p-3">
                                       <div className="flex items-center gap-2.5">
-                                        <div className="w-7 h-7 rounded-md overflow-hidden border border-slate-700 bg-slate-800 shrink-0">
+                                        <div className="w-7 h-7 rounded-md overflow-hidden border border-slate-300 bg-slate-100 shrink-0">
                                           <img
                                             src={`https://crafthead.net/helm/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/32`}
                                             alt={acc.ign || acc.username}
@@ -1304,9 +1304,9 @@ export default function Dashboard() {
                                             }}
                                           />
                                         </div>
-                                        <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
                                           <span>{acc.ign || acc.username}</span>
-                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                                         </div>
                                       </div>
                                     </td>
@@ -1319,7 +1319,7 @@ export default function Dashboard() {
                                         placeholder="Add note (e.g. at hashi's farm)..."
                                         value={accountNotes[acc.id] || ''}
                                         onChange={(e) => handleUpdateNote(acc.id, e.target.value)}
-                                        className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-[#0e1117] border border-[#202736] text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                                        className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500"
                                       />
                                     </td>
                                     <td className="p-3 text-right">
@@ -1327,7 +1327,7 @@ export default function Dashboard() {
                                         <button
                                           onClick={() => handleTogglePin(acc.id)}
                                           className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                            isPinned ? 'text-amber-400 bg-amber-400/10' : 'text-slate-500 hover:text-slate-300'
+                                            isPinned ? 'text-amber-600 bg-amber-50' : 'text-slate-400 hover:text-slate-700'
                                           }`}
                                           title={isPinned ? 'Unpin' : 'Pin'}
                                         >
@@ -1337,7 +1337,7 @@ export default function Dashboard() {
                                         {isAssignedActive && isActiveServerRunning ? (
                                           <button
                                             onClick={() => handleStopServer(activeServer.id)}
-                                            className="p-1.5 rounded-lg bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 transition cursor-pointer"
+                                            className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
                                             title="Disconnect bot"
                                           >
                                             <Square className="w-3.5 h-3.5 fill-current" />
@@ -1350,7 +1350,7 @@ export default function Dashboard() {
                                               handleStartServer(updated, acc);
                                             }}
                                             disabled={socketStatus !== 'AUTHENTICATED'}
-                                            className="p-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-40 transition cursor-pointer"
+                                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 transition cursor-pointer"
                                             title="Connect this account"
                                           >
                                             <Play className="w-3.5 h-3.5 fill-current" />
@@ -1359,7 +1359,7 @@ export default function Dashboard() {
 
                                         <button
                                           onClick={() => handleDeleteAccount(acc.id)}
-                                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition cursor-pointer"
+                                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer"
                                           title="Unlink account"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
@@ -1379,7 +1379,7 @@ export default function Dashboard() {
                         <button
                           disabled={accounts.length >= 5}
                           onClick={handleStartMicrosoftLogin}
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#141824] hover:bg-[#1a2030] border border-[#202736] text-emerald-400 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-40"
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-emerald-700 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-40"
                         >
                           <Plus className="w-4 h-4" /> Link Another Microsoft Account ({accounts.length}/5)
                         </button>
@@ -1387,13 +1387,13 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* SUB-TAB 2: CHAT (Exact match of Screenshot 4) */}
+                  {/* SUB-TAB 2: CHAT */}
                   {activeSubTab === 'chat' && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-400">Chat receivers:</span>
-                          <span className="px-2.5 py-1 rounded-lg bg-[#141824] border border-[#202736] text-xs font-bold text-emerald-400">
+                          <span className="text-xs font-bold text-slate-600">Chat receivers:</span>
+                          <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-emerald-700 shadow-2xs">
                             {activeAccount?.ign || activeAccount?.username || 'All accounts'}
                           </span>
                         </div>
@@ -1415,56 +1415,56 @@ export default function Dashboard() {
                   {activeSubTab === 'movement' && (
                     <div className="max-w-2xl space-y-4">
                       <div>
-                        <h2 className="text-lg font-black text-white">Movement & Controls</h2>
-                        <p className="text-xs text-slate-400">Control your bot movements and trigger in-game macros.</p>
+                        <h2 className="text-lg font-black text-slate-900">Movement & Controls</h2>
+                        <p className="text-xs text-slate-500">Control your bot movements and trigger in-game macros.</p>
                       </div>
 
-                      <div className="p-6 rounded-2xl bg-[#141824] border border-[#202736] space-y-6">
+                      <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-6 shadow-xs">
                         {/* Directional Pad */}
                         <div className="flex flex-col items-center gap-2">
                           <button
                             onClick={() => sendChat(activeServer.id, '/jump')}
-                            className="w-14 h-14 rounded-2xl bg-[#1b2232] hover:bg-[#253046] border border-[#2a364d] text-slate-200 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                            className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
                           >
                             ▲ W
                           </button>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => sendChat(activeServer.id, '/left')}
-                              className="w-14 h-14 rounded-2xl bg-[#1b2232] hover:bg-[#253046] border border-[#2a364d] text-slate-200 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                              className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
                             >
                               ◀ A
                             </button>
                             <button
                               onClick={() => sendChat(activeServer.id, '/jump')}
-                              className="w-14 h-14 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                              className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-700 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
                             >
                               JUMP
                             </button>
                             <button
                               onClick={() => sendChat(activeServer.id, '/right')}
-                              className="w-14 h-14 rounded-2xl bg-[#1b2232] hover:bg-[#253046] border border-[#2a364d] text-slate-200 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                              className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
                             >
                               ▶ D
                             </button>
                           </div>
                           <button
                             onClick={() => sendChat(activeServer.id, '/back')}
-                            className="w-14 h-14 rounded-2xl bg-[#1b2232] hover:bg-[#253046] border border-[#2a364d] text-slate-200 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                            className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
                           >
                             ▼ S
                           </button>
                         </div>
 
                         {/* Quick Command Macros */}
-                        <div className="pt-4 border-t border-[#202736]">
-                          <span className="text-xs font-bold text-slate-400 block mb-2">In-Game Command Macros</span>
+                        <div className="pt-4 border-t border-slate-100">
+                          <span className="text-xs font-bold text-slate-600 block mb-2">In-Game Command Macros</span>
                           <div className="flex flex-wrap gap-2">
                             {['/afk', '/lifesteal', '/afkrewards', '/home', '/spawn'].map((cmd) => (
                               <button
                                 key={cmd}
                                 onClick={() => sendChat(activeServer.id, cmd)}
-                                className="px-3 py-1.5 rounded-xl bg-[#1b2232] hover:bg-[#253046] border border-[#2a364d] text-emerald-400 font-mono text-xs font-bold transition cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-mono text-xs font-bold transition cursor-pointer shadow-2xs"
                               >
                                 {cmd}
                               </button>
@@ -1479,26 +1479,26 @@ export default function Dashboard() {
                   {activeSubTab === 'inventory' && (
                     <div className="space-y-4">
                       <div>
-                        <h2 className="text-lg font-black text-white">Inventory & Container Menus</h2>
-                        <p className="text-xs text-slate-400">View opened server chest menus and player inventory slots.</p>
+                        <h2 className="text-lg font-black text-slate-900">Inventory & Container Menus</h2>
+                        <p className="text-xs text-slate-500">View opened server chest menus and player inventory slots.</p>
                       </div>
 
                       {containerWindow ? (
-                        <div className="p-6 rounded-2xl bg-[#141824] border border-[#202736] space-y-4">
+                        <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-sm text-white">{containerWindow.title || 'Chest / Menu'}</h3>
-                            <span className="text-xs font-mono text-emerald-400">Window #{containerWindow.windowId}</span>
+                            <h3 className="font-bold text-sm text-slate-900">{containerWindow.title || 'Chest / Menu'}</h3>
+                            <span className="text-xs font-mono text-emerald-700 font-bold">Window #{containerWindow.windowId}</span>
                           </div>
 
-                          <div className="grid grid-cols-9 gap-1.5 p-3 bg-[#0d1017] border border-[#202736] rounded-xl">
+                          <div className="grid grid-cols-9 gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                             {containerWindow.slots.map((item, idx) => (
                               <div
                                 key={idx}
                                 onClick={() => clickSlot(activeServer.id, containerWindow.windowId, idx, 0)}
-                                className="aspect-square rounded-lg border border-slate-700 bg-[#161c28] hover:border-emerald-500 flex items-center justify-center relative cursor-pointer"
+                                className="aspect-square rounded-lg border border-slate-200 bg-white hover:border-emerald-500 flex items-center justify-center relative cursor-pointer shadow-2xs"
                               >
                                 {item && (
-                                  <span className="text-[10px] font-mono text-slate-200 truncate px-1">
+                                  <span className="text-[10px] font-mono text-slate-800 truncate px-1">
                                     {item.displayName || item.name}
                                   </span>
                                 )}
@@ -1507,9 +1507,9 @@ export default function Dashboard() {
                           </div>
                         </div>
                       ) : (
-                        <div className="p-12 text-center rounded-2xl bg-[#141824] border border-[#202736] text-slate-400 space-y-2">
-                          <Box className="w-8 h-8 text-slate-600 mx-auto" />
-                          <p className="text-xs">No active chest or container menu open on this server.</p>
+                        <div className="p-12 text-center rounded-2xl bg-white border border-slate-200 text-slate-500 space-y-2 shadow-xs">
+                          <Box className="w-8 h-8 text-slate-400 mx-auto" />
+                          <p className="text-xs font-bold text-slate-700">No active chest or container menu open on this server.</p>
                           <p className="text-[11px] text-slate-500">When the bot opens a chest or server GUI, slots appear here automatically.</p>
                         </div>
                       )}
@@ -1520,19 +1520,19 @@ export default function Dashboard() {
                   {activeSubTab === 'pov' && (
                     <div className="max-w-2xl space-y-4">
                       <div>
-                        <h2 className="text-lg font-black text-white">POV & World Telemetry</h2>
-                        <p className="text-xs text-slate-400">Live coordinates, health, hunger, and world dimension data.</p>
+                        <h2 className="text-lg font-black text-slate-900">POV & World Telemetry</h2>
+                        <p className="text-xs text-slate-500">Live coordinates, health, hunger, and world dimension data.</p>
                       </div>
 
-                      <div className="p-6 rounded-2xl bg-[#141824] border border-[#202736] space-y-5">
+                      <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-5 shadow-xs">
                         {/* Health & Hunger */}
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="p-4 rounded-xl bg-[#0e1117] border border-[#202736] space-y-1">
-                            <div className="flex items-center justify-between text-xs font-bold text-rose-400">
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <div className="flex items-center justify-between text-xs font-bold text-rose-600">
                               <span className="flex items-center gap-1.5"><Heart className="w-4 h-4 fill-current" /> Health</span>
                               <span>{telemetry?.health ?? 20} / 20</span>
                             </div>
-                            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
                               <div
                                 className="h-full bg-rose-500 rounded-full"
                                 style={{ width: `${Math.min(100, ((telemetry?.health ?? 20) / 20) * 100)}%` }}
@@ -1540,12 +1540,12 @@ export default function Dashboard() {
                             </div>
                           </div>
 
-                          <div className="p-4 rounded-xl bg-[#0e1117] border border-[#202736] space-y-1">
-                            <div className="flex items-center justify-between text-xs font-bold text-amber-400">
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                            <div className="flex items-center justify-between text-xs font-bold text-amber-600">
                               <span className="flex items-center gap-1.5"><Utensils className="w-4 h-4" /> Hunger</span>
                               <span>{telemetry?.food ?? 20} / 20</span>
                             </div>
-                            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
                               <div
                                 className="h-full bg-amber-500 rounded-full"
                                 style={{ width: `${Math.min(100, ((telemetry?.food ?? 20) / 20) * 100)}%` }}
@@ -1556,68 +1556,68 @@ export default function Dashboard() {
 
                         {/* Coordinates & Dimension */}
                         <div className="grid grid-cols-3 gap-3 text-center">
-                          <div className="p-3 rounded-xl bg-[#0e1117] border border-[#202736]">
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                             <span className="text-[10px] text-slate-500 uppercase font-bold block">X</span>
-                            <span className="text-sm font-mono font-bold text-white">{telemetry?.position?.x ?? 0}</span>
+                            <span className="text-sm font-mono font-bold text-slate-900">{telemetry?.position?.x ?? 0}</span>
                           </div>
-                          <div className="p-3 rounded-xl bg-[#0e1117] border border-[#202736]">
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                             <span className="text-[10px] text-slate-500 uppercase font-bold block">Y</span>
-                            <span className="text-sm font-mono font-bold text-white">{telemetry?.position?.y ?? 0}</span>
+                            <span className="text-sm font-mono font-bold text-slate-900">{telemetry?.position?.y ?? 0}</span>
                           </div>
-                          <div className="p-3 rounded-xl bg-[#0e1117] border border-[#202736]">
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                             <span className="text-[10px] text-slate-500 uppercase font-bold block">Z</span>
-                            <span className="text-sm font-mono font-bold text-white">{telemetry?.position?.z ?? 0}</span>
+                            <span className="text-sm font-mono font-bold text-slate-900">{telemetry?.position?.z ?? 0}</span>
                           </div>
                         </div>
 
                         {/* Dimension & Ping */}
-                        <div className="flex items-center justify-between pt-2 border-t border-[#202736] text-xs font-mono">
-                          <span className="text-slate-400">Dimension: <b className="text-emerald-400">{telemetry?.dimension || 'Overworld'}</b></span>
-                          <span className="text-slate-400">Ping: <b className="text-emerald-400">{telemetry?.ping ?? 0}ms</b></span>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono">
+                          <span className="text-slate-600">Dimension: <b className="text-emerald-700">{telemetry?.dimension || 'Overworld'}</b></span>
+                          <span className="text-slate-600">Ping: <b className="text-emerald-700">{telemetry?.ping ?? 0}ms</b></span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* SUB-TAB 6: SETTINGS (Exact match of Screenshot 3) */}
+                  {/* SUB-TAB 6: SETTINGS */}
                   {activeSubTab === 'settings' && (
                     <div className="max-w-2xl space-y-6">
                       <div>
-                        <h2 className="text-lg font-black text-white">Settings</h2>
-                        <p className="text-xs text-slate-400">Configure connection details, anti-AFK intervals, and survival automations.</p>
+                        <h2 className="text-lg font-black text-slate-900">Settings</h2>
+                        <p className="text-xs text-slate-500">Configure connection details, anti-AFK intervals, and survival automations.</p>
                       </div>
 
                       {/* Server Information */}
-                      <div className="p-5 rounded-2xl bg-[#141824] border border-[#202736] space-y-4">
-                        <h3 className="font-bold text-sm text-white">Server information</h3>
+                      <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
+                        <h3 className="font-bold text-sm text-slate-900">Server information</h3>
                         
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-400">Profile name</label>
+                          <label className="text-[11px] font-bold text-slate-600">Profile name</label>
                           <input
                             type="text"
                             value={activeServer.name}
                             onChange={(e) => handleSaveServer({ ...activeServer, name: e.target.value })}
-                            className="w-full px-3 py-2 rounded-xl bg-[#0e1117] border border-[#202736] text-xs text-white focus:outline-none focus:border-emerald-500"
+                            className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[11px] font-bold text-slate-400">Server IP</label>
+                          <label className="text-[11px] font-bold text-slate-600">Server IP</label>
                           <input
                             type="text"
                             value={activeServer.serverHost}
                             onChange={(e) => handleSaveServer({ ...activeServer, serverHost: e.target.value })}
-                            className="w-full px-3 py-2 rounded-xl bg-[#0e1117] border border-[#202736] text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                            className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 font-mono"
                           />
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-[11px] font-bold text-slate-400">Java version</label>
+                            <label className="text-[11px] font-bold text-slate-600">Java version</label>
                             <select
                               value={activeServer.serverVersion}
                               onChange={(e) => handleSaveServer({ ...activeServer, serverVersion: e.target.value })}
-                              className="w-full px-3 py-2 rounded-xl bg-[#0e1117] border border-[#202736] text-xs text-white focus:outline-none focus:border-emerald-500"
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                             >
                               <option value="auto">Auto Detect</option>
                               <option value="1.20.4">1.20.4</option>
@@ -1628,40 +1628,40 @@ export default function Dashboard() {
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[11px] font-bold text-slate-400">Server Port</label>
+                            <label className="text-[11px] font-bold text-slate-600">Server Port</label>
                             <input
                               type="number"
                               value={activeServer.serverPort}
                               onChange={(e) => handleSaveServer({ ...activeServer, serverPort: parseInt(e.target.value, 10) || 25565 })}
-                              className="w-full px-3 py-2 rounded-xl bg-[#0e1117] border border-[#202736] text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 font-mono"
                             />
                           </div>
                         </div>
                       </div>
 
                       {/* Extra Settings */}
-                      <div className="p-5 rounded-2xl bg-[#141824] border border-[#202736] space-y-4">
-                        <h3 className="font-bold text-sm text-white">Extra settings</h3>
+                      <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
+                        <h3 className="font-bold text-sm text-slate-900">Extra settings</h3>
 
                         {/* Auto Reconnect */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="text-xs font-bold text-slate-200 block">Auto reconnect</span>
-                            <span className="text-[11px] text-slate-400">Reconnect bot if kicked or server restarts</span>
+                            <span className="text-xs font-bold text-slate-800 block">Auto reconnect</span>
+                            <span className="text-[11px] text-slate-500">Reconnect bot if kicked or server restarts</span>
                           </div>
                           <input
                             type="checkbox"
                             checked={activeServer.autoReconnect}
                             onChange={(e) => handleSaveServer({ ...activeServer, autoReconnect: e.target.checked })}
-                            className="rounded bg-[#0e1117] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                           />
                         </div>
 
                         {/* Anti-AFK */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="text-xs font-bold text-slate-200 block">Anti-AFK Actions</span>
-                            <span className="text-[11px] text-slate-400">Random pitch, yaw shifts, arm swings and sneaks</span>
+                            <span className="text-xs font-bold text-slate-800 block">Anti-AFK Actions</span>
+                            <span className="text-[11px] text-slate-500">Random pitch, yaw shifts, arm swings and sneaks</span>
                           </div>
                           <input
                             type="checkbox"
@@ -1672,15 +1672,15 @@ export default function Dashboard() {
                                 settings: { ...activeServer.settings, antiAfk: e.target.checked },
                               })
                             }
-                            className="rounded bg-[#0e1117] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                           />
                         </div>
 
                         {/* Physics */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="text-xs font-bold text-slate-200 block">Physics Engine</span>
-                            <span className="text-[11px] text-slate-400">Keep enabled for servers that require gravity & velocity sync</span>
+                            <span className="text-xs font-bold text-slate-800 block">Physics Engine</span>
+                            <span className="text-[11px] text-slate-500">Keep enabled for servers that require gravity & velocity sync</span>
                           </div>
                           <input
                             type="checkbox"
@@ -1691,15 +1691,15 @@ export default function Dashboard() {
                                 settings: { ...activeServer.settings, physics: e.target.checked },
                               })
                             }
-                            className="rounded bg-[#0e1117] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                           />
                         </div>
 
                         {/* Mob Farm Combat */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="text-xs font-bold text-slate-200 block">Mob Farm Attack</span>
-                            <span className="text-[11px] text-slate-400">Auto attack hostile mobs within 3.5 blocks</span>
+                            <span className="text-xs font-bold text-slate-800 block">Mob Farm Attack</span>
+                            <span className="text-[11px] text-slate-500">Auto attack hostile mobs within 3.5 blocks</span>
                           </div>
                           <input
                             type="checkbox"
@@ -1710,20 +1710,20 @@ export default function Dashboard() {
                                 settings: { ...activeServer.settings, mobFarm: e.target.checked },
                               })
                             }
-                            className="rounded bg-[#0e1117] border-slate-700 text-emerald-600 focus:ring-0 cursor-pointer"
+                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                           />
                         </div>
                       </div>
 
                       {/* Dangerous Settings */}
-                      <div className="p-5 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between">
+                      <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between shadow-2xs">
                         <div>
-                          <span className="text-xs font-bold text-rose-400 block">Delete Server Profile</span>
-                          <span className="text-[11px] text-slate-400">Permanently remove this server configuration</span>
+                          <span className="text-xs font-bold text-rose-800 block">Delete Server Profile</span>
+                          <span className="text-[11px] text-rose-600">Permanently remove this server configuration</span>
                         </div>
                         <button
                           onClick={() => handleDeleteServer(activeServer.id)}
-                          className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition cursor-pointer"
+                          className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
                         >
                           Delete Profile
                         </button>

@@ -60,7 +60,12 @@ else
   echo -e "\\n\\033[1;34m[3/3]\\033[0m ⚙️  Modules verified."
 fi
 
-# 4. Launch daemon & tunnel
+# 4. Clean up any previous background instances
+pkill -f "tsx src/index.ts" 2>/dev/null || true
+pkill -f "cloudflared tunnel" 2>/dev/null || true
+sleep 1
+
+# 5. Launch daemon & tunnel
 chmod +x start.sh 2>/dev/null || true
 bash start.sh "$1" "$2"
 `;
