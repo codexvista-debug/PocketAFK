@@ -4,13 +4,23 @@ import { Authflow, Titles } from 'prismarine-auth';
 const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, ClientMessage, DaemonMessage } from '../types';
 import { PocketBotInstance } from './botInstance';
+import { updateTermuxNotification, clearTermuxNotification } from '../utils/termuxNotification';
 
 export class BotManager {
   private bots: Map<string, PocketBotInstance> = new Map();
   private broadcastFn: (msg: DaemonMessage) => void;
 
   constructor(broadcastFn: (msg: DaemonMessage) => void) {
-    this.broadcastFn = broadcastFn;
+    this.broadcastFn = (msg: DaemonMessage) => {
+      broadcastFn(msg);
+      if (msg.type === 'BOT_STATE') {
+        updateTermuxNotification(this.getAllBots());
+      }
+    };
+    setInterval(() => {
+      updateTermuxNotification(this.getAllBots());
+    }, 25000);
+    updateTermuxNotification([]);
   }
 
   public getBot(id: string): PocketBotInstance | undefined {
@@ -53,6 +63,7 @@ export class BotManager {
         this.bots.delete(bId);
       }
     }
+    updateTermuxNotification(this.getAllBots());
   }
 
   public async verifyAccount(accountId: string, email: string) {

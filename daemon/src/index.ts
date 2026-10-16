@@ -4,8 +4,19 @@ import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { BotManager } from './bot/botManager';
 import { ClientMessage, DaemonMessage } from './types';
+import { clearTermuxNotification } from './utils/termuxNotification';
 
 dotenv.config();
+
+process.on('SIGINT', () => {
+  clearTermuxNotification();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  clearTermuxNotification();
+  process.exit(0);
+});
 
 // Protect daemon from crashing on server proxy packet anomalies or queue timeouts
 process.on('uncaughtException', (err: any) => {

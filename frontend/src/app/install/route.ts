@@ -20,7 +20,7 @@ echo -e "\\033[0m"
 # 1. Dependency checks
 echo -e "\\033[1;34m[1/3]\\033[0m 📦 Checking environment & dependencies..."
 NEEDED_PKGS=()
-for pkg in git nodejs-lts cloudflared; do
+for pkg in git nodejs-lts cloudflared termux-api; do
   if ! command -v $pkg >/dev/null 2>&1; then
     NEEDED_PKGS+=($pkg)
   fi

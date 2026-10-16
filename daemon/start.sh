@@ -104,13 +104,18 @@ if [ -n "$APP_SECRET" ]; then
 fi
 echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}\n"
 
-# 1. Acquire Android Wake Lock
+# 1. Acquire Android Wake Lock & System Notification
 echo -e "${CYAN}[1/4]${NC} 🔋 ${BOLD}Acquiring Android background wake lock...${NC}"
 if command -v termux-wake-lock &> /dev/null; then
   termux-wake-lock
   echo -e "      ${GREEN}✓ Android OS power management locked (24/7 active)${NC}"
 else
   echo -e "      ${YELLOW}⚠ termux-wake-lock not available (continuing standard)${NC}"
+fi
+
+if command -v termux-notification &> /dev/null; then
+  termux-notification --id pocketafk_status --title "PocketAFK Active • 24/7 (@${UPPER_USER})" --content "🚀 Tunnel Live | Standby for server connection" --ongoing --priority high 2>/dev/null || true
+  echo -e "      ${GREEN}✓ Android persistent status notification initialized${NC}"
 fi
 
 # 2. Start PocketAFK Node.js Daemon with auto-restart supervisor
@@ -220,6 +225,9 @@ cleanup() {
   pkill -f "cloudflared tunnel" 2>/dev/null || true
   if command -v termux-wake-unlock &> /dev/null; then
     termux-wake-unlock
+  fi
+  if command -v termux-notification-remove &> /dev/null; then
+    termux-notification-remove pocketafk_status 2>/dev/null || true
   fi
   echo -e "${GREEN}[✓] Termux daemon stopped. Goodbye!${NC}\n"
   exit 0
