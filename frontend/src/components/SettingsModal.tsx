@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Network, Check, Copy, Terminal, ChevronDown } from 'lucide-react';
+import { X, Network, Check, Copy, Terminal, ChevronDown, RotateCw } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,6 +10,8 @@ interface SettingsModalProps {
   authToken: string;
   onSaveDaemonSettings: (url: string, token: string) => void;
   termuxCommand?: string;
+  onRestartDaemon?: () => void;
+  isDaemonOnline?: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -19,12 +21,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   authToken,
   onSaveDaemonSettings,
   termuxCommand = 'curl -sL https://pocketafk.vercel.app/install | bash',
+  onRestartDaemon,
+  isDaemonOnline = false,
 }) => {
   const [urlInput, setUrlInput] = useState(daemonUrl);
   const [tokenInput, setTokenInput] = useState(authToken);
   const [isSaved, setIsSaved] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [isManualExpanded, setIsManualExpanded] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [restartSuccess, setRestartSuccess] = useState(false);
 
   // Sync inputs when props change
   React.useEffect(() => {
@@ -36,6 +42,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [authToken]);
 
   if (!isOpen) return null;
+
+  const handleRestart = async () => {
+    if (!onRestartDaemon || isRestarting) return;
+    setIsRestarting(true);
+    setRestartSuccess(false);
+    try {
+      await onRestartDaemon();
+      setRestartSuccess(true);
+      setTimeout(() => setRestartSuccess(false), 3000);
+    } finally {
+      setTimeout(() => setIsRestarting(false), 1200);
+    }
+  };
 
   const handleCopyCommand = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -85,18 +104,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Quick Copy Command Card - Modern Light Mode */}
             <div className="bg-gradient-to-br from-emerald-50/70 via-white to-slate-50 p-4 rounded-2xl border border-emerald-200/90 space-y-3 shadow-xs">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
                   <span>📱</span> Run this command in Termux:
                 </span>
-                <button
-                  type="button"
-                  onClick={handleCopyCommand}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
-                >
-                  {copiedCommand ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedCommand ? 'Copied to Clipboard!' : 'Copy Command'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {onRestartDaemon && (
+                    <button
+                      type="button"
+                      onClick={handleRestart}
+                      disabled={isRestarting || !isDaemonOnline}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 ${
+                        restartSuccess
+                          ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                          : isDaemonOnline
+                          ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+                          : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                      }`}
+                      title={
+                        isDaemonOnline
+                          ? 'Reboot daemon & reset all Minecraft bot connections'
+                          : 'Daemon is offline. Run the command in Termux first.'
+                      }
+                    >
+                      <RotateCw
+                        className={`w-3.5 h-3.5 ${
+                          isRestarting
+                            ? 'animate-spin text-amber-600'
+                            : restartSuccess
+                            ? 'text-emerald-600'
+                            : isDaemonOnline
+                            ? 'text-amber-700'
+                            : 'text-slate-400'
+                        }`}
+                      />
+                      <span>
+                        {isRestarting
+                          ? 'Restarting...'
+                          : restartSuccess
+                          ? 'Daemon Restarted!'
+                          : 'Restart Daemon'}
+                      </span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCopyCommand}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                  >
+                    {copiedCommand ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedCommand ? 'Copied to Clipboard!' : 'Copy Command'}</span>
+                  </button>
+                </div>
               </div>
 
               <div className="p-3 rounded-xl bg-white border border-slate-200/90 font-mono text-[11px] text-slate-800 break-all select-all shadow-inner leading-relaxed">

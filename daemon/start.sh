@@ -63,31 +63,42 @@ elif [ -f "$ACCOUNTS_CACHE_FILE" ]; then
 fi
 
 ACC_COUNT=0
+ACC_MAX=1
 ACC_LIST="None linked yet"
+USER_RANK="IRON"
+RANK_ICON="🪙"
+MAX_SRVS=1
 
 if [ -n "$USER_SUMMARY" ]; then
   PARSED_DATA=$(node -e "
     try {
       const d = JSON.parse(process.argv[1]);
       const accs = d.accounts || [];
-      console.log(accs.length + ';;' + (accs.join(', ') || 'None linked yet'));
+      const rank = (d.rankName || 'Iron').toUpperCase();
+      const icon = d.gemIcon || '🪙';
+      const maxAcc = d.maxAccounts || 1;
+      const maxSrv = d.maxServers || 1;
+      console.log(accs.length + ';;' + (accs.join(', ') || 'None linked yet') + ';;' + rank + ';;' + icon + ';;' + maxAcc + ';;' + maxSrv);
     } catch(e) {
-      console.log('0;;None linked yet');
+      console.log('0;;None linked yet;;IRON;;🪙;;1;;1');
     }
   " "$USER_SUMMARY" 2>/dev/null)
 
   if [ -n "$PARSED_DATA" ]; then
     ACC_COUNT=$(echo "$PARSED_DATA" | awk -F';;' '{print $1}')
     ACC_LIST=$(echo "$PARSED_DATA" | awk -F';;' '{print $2}')
+    USER_RANK=$(echo "$PARSED_DATA" | awk -F';;' '{print $3}')
+    RANK_ICON=$(echo "$PARSED_DATA" | awk -F';;' '{print $4}')
+    ACC_MAX=$(echo "$PARSED_DATA" | awk -F';;' '{print $5}')
+    MAX_SRVS=$(echo "$PARSED_DATA" | awk -F';;' '{print $6}')
   fi
 fi
 
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║                                                                           ║${NC}"
 echo -e "${CYAN}║                   ${BOLD}${YELLOW}👤  POCKETAFK USER: [ ${WHITE}@${UPPER_USER}${YELLOW} ]${NC}${CYAN}                   ║${NC}"
-echo -e "${CYAN}║                                                                           ║${NC}"
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${NC}"
-echo -e "  ${WHITE}🎮 Linked Java Accounts :${NC} ${GREEN}${ACC_COUNT}/5 active${NC} (${CYAN}${ACC_LIST}${NC})"
+echo -e "  ${WHITE}⭐ Account Rank Tier    :${NC} ${BOLD}${YELLOW}${RANK_ICON} ${USER_RANK} RANK${NC} (Max ${ACC_MAX} Bots / ${MAX_SRVS} Servers)"
+echo -e "  ${WHITE}🎮 Linked Java Accounts :${NC} ${GREEN}${ACC_COUNT}/${ACC_MAX} active${NC} (${CYAN}${ACC_LIST}${NC})"
 if [ -n "$APP_SECRET" ]; then
   echo -e "  ${WHITE}🔑 Secret Launcher Token:${NC} ${GREEN}Protected (Validated)${NC}"
 fi
@@ -102,17 +113,32 @@ else
   echo -e "      ${YELLOW}⚠ termux-wake-lock not available (continuing standard)${NC}"
 fi
 
-# 2. Start PocketAFK Node.js Daemon
+# 2. Start PocketAFK Node.js Daemon with auto-restart supervisor
 echo -e "\n${CYAN}[2/4]${NC} ☕ ${BOLD}Starting Mineflayer Java Core (Node.js LTS)...${NC}"
 pkill -f "tsx src/index.ts" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
-npm run start > daemon.log 2>&1 &
+
+run_daemon_loop() {
+  export TERMUX_SUPERVISOR=1
+  while true; do
+    npm run start >> daemon.log 2>&1
+    EXIT_CODE=$?
+    if [ "$EXIT_CODE" -eq 42 ]; then
+      echo -e "\n[$(date +%T)] 🔄 Dashboard requested daemon restart. Rebooting Java Core in 1s..." >> daemon.log
+      sleep 1
+      continue
+    fi
+    break
+  done
+}
+
+run_daemon_loop &
 DAEMON_PID=$!
 sleep 2
 
 if ps -p $DAEMON_PID > /dev/null; then
-  echo -e "      ${GREEN}✓ Java engine running smoothly on port 8080 (PID: ${DAEMON_PID})${NC}"
+  echo -e "      ${GREEN}✓ Java engine running smoothly on port 8080 (Supervisor PID: ${DAEMON_PID})${NC}"
 else
   echo -e "      ${RED}✗ Failed to start daemon. Showing daemon.log:${NC}"
   cat daemon.log | tail -n 10
@@ -167,8 +193,8 @@ fi
 echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║${NC}   ${BOLD}🎉 POCKETAFK IS OFFICIALLY LIVE & PROTECTED 24/7${NC}                      ${GREEN}║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════╝${NC}"
-echo -e "  ${WHITE}👤 User Account     :${NC} ${BOLD}${YELLOW}@${UPPER_USER}${NC}"
-echo -e "  ${WHITE}🎮 Linked Java      :${NC} ${GREEN}${ACC_COUNT}/5 active${NC} (${CYAN}${ACC_LIST}${NC})"
+echo -e "  ${WHITE}👤 User Account     :${NC} ${BOLD}${YELLOW}@${UPPER_USER}${NC} (${RANK_ICON} ${USER_RANK} Tier)"
+echo -e "  ${WHITE}🎮 Linked Java      :${NC} ${GREEN}${ACC_COUNT}/${ACC_MAX} active${NC} (${CYAN}${ACC_LIST}${NC})"
 echo -e "  ${WHITE}🌐 WebSocket Tunnel :${NC} ${CYAN}${WSS_URL}${NC}"
 echo -e "  ${WHITE}📱 Web Dashboard    :${NC} ${GREEN}https://pocketafk.vercel.app${NC}"
 echo -e "  ${WHITE}⚡ Instant Link     :${NC} ${YELLOW}${AUTO_OPEN_URL}${NC}"
@@ -177,11 +203,21 @@ echo -e "  ${BOLD}💡 Note:${NC} You can simply open ${GREEN}https://pocketafk.
 echo -e "  The website will ${BOLD}automatically detect${NC} this phone's tunnel!"
 echo -e "  ${GRAY}(To stop PocketAFK, press Ctrl+C anytime)${NC}\n"
 
+echo -e "  ${CYAN}📡 Live Daemon & Minecraft Activity Feed (Real-Time):${NC}"
+echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}"
+
+# Tail daemon.log in background so Termux shows live in-game events
+tail -n 15 -f daemon.log &
+TAIL_PID=$!
+
 # Trap exit
 cleanup() {
   echo -e "\n\n${YELLOW}[!] Stopping PocketAFK processes cleanly...${NC}"
+  kill $TAIL_PID 2>/dev/null
   kill $DAEMON_PID 2>/dev/null
+  pkill -f "tsx src/index.ts" 2>/dev/null || true
   kill $TUNNEL_PID 2>/dev/null
+  pkill -f "cloudflared tunnel" 2>/dev/null || true
   if command -v termux-wake-unlock &> /dev/null; then
     termux-wake-unlock
   fi

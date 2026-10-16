@@ -275,6 +275,12 @@ export function useDaemonSocket(
     return sendJson({ type: 'RESTART_BOT', payload: { botId } });
   }, [sendJson]);
 
+  const restartDaemon = useCallback((reason = 'User requested restart from dashboard') => {
+    setBotStates({});
+    setBotStateReasons({});
+    return sendJson({ type: 'RESTART_DAEMON', payload: { reason } });
+  }, [sendJson]);
+
   const sendChat = useCallback((botId: string, message: string, targetAccount?: string) => {
     return sendJson({ type: 'SEND_CHAT', payload: { botId, message, targetAccount } });
   }, [sendJson]);
@@ -330,6 +336,7 @@ export function useDaemonSocket(
     startBot,
     stopBot,
     restartBot,
+    restartDaemon,
     sendChat,
     clickSlot,
     closeWindow,

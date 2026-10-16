@@ -323,6 +323,7 @@ export default function Dashboard() {
     startBot,
     stopBot,
     restartBot,
+    restartDaemon,
     sendChat,
     clickSlot,
     closeWindow,
@@ -1508,6 +1509,15 @@ export default function Dashboard() {
           showToast('Termux daemon bridge settings saved.', 'success');
         }}
         termuxCommand={termuxCommand}
+        onRestartDaemon={async () => {
+          restartDaemon('Dashboard reset requested by user');
+          setSessionStartTimes({});
+          if (currentUser) {
+            localStorage.removeItem(`pocketafk_sessions_${currentUser}`);
+          }
+          showToast('Restarting daemon: all Minecraft sessions & sockets reset.', 'info');
+        }}
+        isDaemonOnline={socketStatus === 'AUTHENTICATED'}
       />
 
       {/* Dangerous Settings Modal */}

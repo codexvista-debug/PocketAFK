@@ -120,6 +120,26 @@ export class BotManager {
         break;
       }
 
+      case 'RESTART_DAEMON': {
+        console.log(chalk.yellow('[Daemon] Full restart request received from dashboard. Terminating all bot instances...'));
+        for (const [id, bot] of this.bots.entries()) {
+          try {
+            bot.stop();
+          } catch (e) {}
+        }
+        this.bots.clear();
+        this.broadcastFn({
+          type: 'AUTH_RESULT',
+          payload: { success: true, message: 'Daemon reset successfully: all bot instances cleared.' }
+        });
+        if (process.env.TERMUX_SUPERVISOR === '1') {
+          setTimeout(() => {
+            process.exit(42);
+          }, 600);
+        }
+        break;
+      }
+
       case 'SEND_CHAT': {
         const { botId, message, targetAccount } = msg.payload;
         if (targetAccount && targetAccount !== 'all') {

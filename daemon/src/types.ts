@@ -88,6 +88,7 @@ export type ClientMessage =
   | { type: 'START_BOT'; payload: BotConfig }
   | { type: 'STOP_BOT'; payload: { botId: string } }
   | { type: 'RESTART_BOT'; payload: { botId: string } }
+  | { type: 'RESTART_DAEMON'; payload?: { reason?: string } }
   | { type: 'SEND_CHAT'; payload: { botId: string; message: string; targetAccount?: string } }
   | { type: 'CLICK_SLOT'; payload: { botId: string; windowId: number; slot: number; mouseButton?: number; mode?: number } }
   | { type: 'CLOSE_WINDOW'; payload: { botId: string; windowId: number } }
