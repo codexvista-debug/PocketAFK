@@ -63,6 +63,7 @@ fi
 # 4. Clean up any previous background instances
 pkill -f "tsx src/index.ts" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
+rm -f "$HOME/.pocketafk_accounts.json" 2>/dev/null || true
 sleep 1
 
 # 5. Launch daemon & tunnel

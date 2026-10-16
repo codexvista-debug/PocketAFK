@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
     }
 
     const accounts: string[] = [];
-    const servers: string[] = [];
 
     if (supabase) {
       const cleanUser = username.replace(/^@/, '');
@@ -31,12 +30,6 @@ export async function GET(req: NextRequest) {
               accounts.push(ign);
             }
           }
-          if (row.server_host) {
-            const srvStr = `${row.server_host}:${row.server_port || 25565}`;
-            if (!servers.includes(srvStr)) {
-              servers.push(srvStr);
-            }
-          }
         });
       }
     }
@@ -44,9 +37,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       username,
       accounts,
-      servers,
       totalAccounts: accounts.length,
-      totalServers: servers.length,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

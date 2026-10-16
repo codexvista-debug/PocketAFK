@@ -692,6 +692,27 @@ export default function Dashboard() {
     const accKey = `pocketafk_accounts_${currentUser}`;
     const srvKey = `pocketafk_servers_${currentUser}`;
 
+    // 1. Terminate and disconnect any running bot in-game for this account
+    if (target) {
+      stopBot(target.id);
+      if (target.ign) stopBot(target.ign);
+      if (target.username) stopBot(target.username);
+    }
+    // Also stop all servers where this account was assigned
+    servers.forEach((srv) => {
+      const isAssigned =
+        srv.accountId === id ||
+        srv.accountId === target?.ign ||
+        srv.accountId === target?.username ||
+        (Array.isArray(srv.assignedAccountIds) &&
+          srv.assignedAccountIds.some(
+            (accId) => accId === id || accId === target?.ign || accId === target?.username
+          ));
+      if (isAssigned) {
+        stopBot(srv.id);
+      }
+    });
+
     const updatedAccounts = accounts.filter((a) => a.id !== id);
     setAccounts(updatedAccounts);
     localStorage.setItem(accKey, JSON.stringify(updatedAccounts));
@@ -1148,13 +1169,13 @@ export default function Dashboard() {
               {/* Profiles List */}
               {servers.map((srv) => {
                 const isSelected = srv.id === activeServerId;
-                const srvState = botStates[srv.id] || 'DISCONNECTED';
-                const isRunning = srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
                 const srvAssignedCount = (
                   Array.isArray(srv.assignedAccountIds)
                     ? srv.assignedAccountIds
                     : srv.accountId ? [srv.accountId] : []
                 ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
+                const rawState = botStates[srv.id] || 'DISCONNECTED';
+                const isRunning = (rawState === 'SPAWNED' || rawState === 'LOGGED_IN' || rawState === 'CONNECTING') && srvAssignedCount > 0;
 
                 return (
                   <div key={srv.id} className="space-y-1 pt-1">
@@ -1339,8 +1360,8 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {servers.map((srv) => {
-                      const srvState = botStates[srv.id] || 'DISCONNECTED';
                       const assigned = resolveServerAccount(srv);
+                      const srvState = assigned ? (botStates[srv.id] || 'DISCONNECTED') : 'DISCONNECTED';
                       return (
                         <div
                           key={srv.id}

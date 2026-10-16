@@ -33,11 +33,25 @@ export class BotManager {
     return instance;
   }
 
-  public stopBot(id: string) {
-    const bot = this.bots.get(id);
-    if (bot) {
-      bot.stop();
-      this.bots.delete(id);
+  public stopBot(idOrName: string) {
+    if (!idOrName) return;
+    const target = idOrName.toLowerCase();
+
+    // Direct match by key
+    const directBot = this.bots.get(idOrName);
+    if (directBot) {
+      directBot.stop();
+      this.bots.delete(idOrName);
+    }
+
+    // Match by ID, username, or active bot IGN
+    for (const [bId, instance] of Array.from(this.bots.entries())) {
+      const cfgUser = instance.config?.username?.toLowerCase();
+      const botUser = instance.bot?.username?.toLowerCase();
+      if (bId.toLowerCase() === target || cfgUser === target || botUser === target) {
+        instance.stop();
+        this.bots.delete(bId);
+      }
     }
   }
 
@@ -91,7 +105,7 @@ export class BotManager {
         break;
 
       case 'STOP_BOT':
-        this.stopBot(msg.payload.botId);
+        this.stopBot(msg.payload.botId || (msg.payload as any).username || (msg.payload as any).ign);
         break;
 
       case 'RESTART_BOT': {
