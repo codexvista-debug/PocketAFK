@@ -25,6 +25,7 @@ export interface MinecraftAccount {
   addedAt: number;
   authError?: string;             // Error details if verification failed or mismatched
   expectedIgn?: string;           // Target Minecraft username expected when verification was started
+  settings?: Record<string, any>; // Account session settings stored in Supabase
 }
 
 // Backward compatibility alias
@@ -68,6 +69,8 @@ export interface ChatMessage {
 
 export interface Telemetry {
   botId: string;
+  accountUsername?: string;
+  connectedAt?: number;
   health: number;
   maxHealth: number;
   food: number;

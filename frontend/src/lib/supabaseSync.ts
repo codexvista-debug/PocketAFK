@@ -99,3 +99,116 @@ export async function deleteAccountFromSupabase(currentUser: string, ign: string
     console.warn('Failed to delete account from Supabase:', err);
   }
 }
+
+/**
+ * Records that a bot connected, saving the start time and server IP to Supabase.
+ */
+export async function recordAccountConnectionStart(
+  currentUser: string,
+  accountName: string,
+  serverHost: string,
+  startTime: number
+) {
+  if (!supabase || !currentUser || !accountName) return;
+  try {
+    const cleanUser = currentUser.trim();
+    const cleanName = accountName.trim();
+
+    const { data } = await supabase
+      .from('accounts')
+      .select('id, settings')
+      .ilike('username', cleanUser)
+      .ilike('bot_name', cleanName)
+      .limit(1);
+
+    const existingSettings = data?.[0]?.settings || {};
+    const newSettings = {
+      ...existingSettings,
+      connected_at: startTime,
+      is_connected: true,
+      server_host: serverHost,
+    };
+
+    await supabase
+      .from('accounts')
+      .update({
+        server_host: serverHost,
+        settings: newSettings,
+        updated_at: new Date().toISOString(),
+      })
+      .ilike('username', cleanUser)
+      .ilike('bot_name', cleanName);
+  } catch (err) {
+    console.warn('Failed to record connection start to Supabase:', err);
+  }
+}
+
+/**
+ * Records that a bot disconnected in Supabase.
+ */
+export async function recordAccountConnectionStop(
+  currentUser: string,
+  accountName: string
+) {
+  if (!supabase || !currentUser || !accountName) return;
+  try {
+    const cleanUser = currentUser.trim();
+    const cleanName = accountName.trim();
+
+    const { data } = await supabase
+      .from('accounts')
+      .select('id, settings')
+      .ilike('username', cleanUser)
+      .ilike('bot_name', cleanName)
+      .limit(1);
+
+    if (data && data.length > 0) {
+      const existingSettings = data[0].settings || {};
+      await supabase
+        .from('accounts')
+        .update({
+          settings: {
+            ...existingSettings,
+            is_connected: false,
+            disconnected_at: Date.now(),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .ilike('username', cleanUser)
+        .ilike('bot_name', cleanName);
+    }
+  } catch (err) {
+    console.warn('Failed to record connection stop to Supabase:', err);
+  }
+}
+
+/**
+ * Loads all active connection start times and sessions from Supabase.
+ */
+export async function loadAccountSessionsFromSupabase(currentUser: string): Promise<Record<string, number>> {
+  if (!supabase || !currentUser) return {};
+  try {
+    const cleanUser = currentUser.trim();
+    const { data } = await supabase
+      .from('accounts')
+      .select('bot_name, server_host, settings')
+      .ilike('username', cleanUser);
+
+    const sessions: Record<string, number> = {};
+    if (data) {
+      for (const row of data) {
+        const connectedAt = row.settings?.connected_at;
+        const isConnected = row.settings?.is_connected;
+        if (connectedAt && typeof connectedAt === 'number' && isConnected !== false) {
+          if (row.bot_name) sessions[row.bot_name] = connectedAt;
+          if (row.server_host) sessions[row.server_host] = connectedAt;
+        }
+      }
+    }
+    return sessions;
+  } catch (err) {
+    console.warn('Failed to load connection sessions from Supabase:', err);
+    return {};
+  }
+}
+

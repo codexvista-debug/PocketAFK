@@ -127,11 +127,31 @@ export function useDaemonSocket(
               break;
 
             case 'BOT_STATE': {
-              const { botId, state, reason } = data.payload;
+              const { botId, state, reason, connectedAt, uptime } = data.payload;
               if (botId) {
                 setBotStates((prev) => ({ ...prev, [botId]: state }));
                 if (reason !== undefined) {
                   setBotStateReasons((prev) => ({ ...prev, [botId]: reason }));
+                }
+                if (uptime !== undefined || connectedAt !== undefined) {
+                  setTelemetries((prev) => ({
+                    ...prev,
+                    [botId]: {
+                      ...(prev[botId] || {
+                        botId,
+                        health: 20,
+                        maxHealth: 20,
+                        food: 20,
+                        saturation: 5,
+                        position: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 },
+                        dimension: 'overworld',
+                        gamemode: 'survival',
+                        ping: 0,
+                      }),
+                      connectedAt: connectedAt ?? prev[botId]?.connectedAt,
+                      uptime: uptime ?? prev[botId]?.uptime,
+                    },
+                  }));
                 }
                 // Automatically dismiss Microsoft Auth modal once the bot connects or logs in!
                 if (state === 'LOGGED_IN' || state === 'SPAWNED') {

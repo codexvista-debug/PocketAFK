@@ -190,11 +190,14 @@ export class BotManager {
 
       case 'REQUEST_SYNC': {
         for (const bot of this.bots.values()) {
+          const uptime = bot.connectedAt ? Math.floor((Date.now() - bot.connectedAt) / 1000) : 0;
           this.broadcastFn({
             type: 'BOT_STATE',
             payload: {
               botId: bot.config.id,
-              state: bot.state
+              state: bot.state,
+              connectedAt: bot.connectedAt || 0,
+              uptime,
             }
           });
           bot.emitTelemetry();

@@ -16,7 +16,13 @@ import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
-import { syncAllToSupabase, deleteAccountFromSupabase } from '../lib/supabaseSync';
+import {
+  syncAllToSupabase,
+  deleteAccountFromSupabase,
+  recordAccountConnectionStart,
+  recordAccountConnectionStop,
+  loadAccountSessionsFromSupabase,
+} from '../lib/supabaseSync';
 import { 
   Play, 
   Square, 
@@ -393,7 +399,7 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Reload session start times when user switches
+  // Reload session start times when user switches or logs in
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -401,10 +407,35 @@ export default function Dashboard() {
       const saved = localStorage.getItem(`pocketafk_sessions_${u}`);
       if (saved) setSessionStartTimes(JSON.parse(saved));
     } catch (e) {}
+
+    if (currentUser) {
+      loadAccountSessionsFromSupabase(currentUser).then((remote) => {
+        if (remote && Object.keys(remote).length > 0) {
+          setSessionStartTimes((prev) => {
+            const merged = { ...remote };
+            for (const [k, v] of Object.entries(prev)) {
+              if (!merged[k] || v < merged[k]) {
+                merged[k] = v;
+              }
+            }
+            const u = currentUser || 'guest';
+            try {
+              localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
+        }
+      }).catch(() => {});
+    }
   }, [currentUser]);
 
   // Update session start times when bot states change
   useEffect(() => {
+    // CRITICAL: Do NOT wipe or modify sessions if socket is still connecting or not authenticated yet!
+    // On page load/refresh, socketStatus starts as DISCONNECTED/CONNECTING, and botState is DISCONNECTED.
+    // If we acted on DISCONNECTED during initial mount, it would erase valid saved sessions!
+    if (socketStatus !== 'AUTHENTICATED') return;
+
     setSessionStartTimes((prev) => {
       const next = { ...prev };
       let changed = false;
@@ -417,9 +448,12 @@ export default function Dashboard() {
             changed = true;
           }
         } else if (st === 'DISCONNECTED' || st === 'ERROR' || st === 'KICKED') {
-          if (next[bId]) {
-            delete next[bId];
-            changed = true;
+          const reason = botStateReasons?.[bId];
+          if (reason === 'Stopped by user') {
+            if (next[bId]) {
+              delete next[bId];
+              changed = true;
+            }
           }
         }
       });
@@ -431,9 +465,11 @@ export default function Dashboard() {
             changed = true;
           }
         } else if (botState === 'DISCONNECTED' || botState === 'ERROR' || botState === 'KICKED') {
-          if (next[activeServerId]) {
-            delete next[activeServerId];
-            changed = true;
+          if (botStateReason === 'Stopped by user') {
+            if (next[activeServerId]) {
+              delete next[activeServerId];
+              changed = true;
+            }
           }
         }
       }
@@ -445,9 +481,9 @@ export default function Dashboard() {
 
       return changed ? next : prev;
     });
-  }, [botStates, botState, activeServerId, currentUser]);
+  }, [botStates, botState, botStateReason, botStateReasons, activeServerId, currentUser, socketStatus]);
 
-  // Calibrate local session start times using authoritative daemon telemetry uptime
+  // Calibrate local session start times using authoritative daemon telemetry uptime or connectedAt
   useEffect(() => {
     const teleList = telemetries ? Object.values(telemetries) : [];
     if (telemetry && !teleList.some((t) => t?.botId === telemetry.botId)) {
@@ -461,13 +497,24 @@ export default function Dashboard() {
       const now = Date.now();
 
       teleList.forEach((t) => {
-        if (t && t.botId && typeof t.uptime === 'number' && t.uptime > 0) {
-          const daemonStart = now - t.uptime * 1000;
-          const currentStart = next[t.botId];
-          // If no recorded start, or more than 3 seconds off from daemon's real start time, calibrate!
-          if (!currentStart || Math.abs(currentStart - daemonStart) > 3000) {
-            next[t.botId] = daemonStart;
-            changed = true;
+        if (t && t.botId) {
+          let daemonStart: number | null = null;
+          if (typeof t.connectedAt === 'number' && t.connectedAt > 0) {
+            daemonStart = t.connectedAt;
+          } else if (typeof t.uptime === 'number' && t.uptime > 0) {
+            daemonStart = now - t.uptime * 1000;
+          }
+
+          if (daemonStart) {
+            const currentStart = next[t.botId];
+            // If no recorded start, or daemon started earlier than recorded, or more than 3 seconds off
+            if (!currentStart || daemonStart < currentStart || Math.abs(currentStart - daemonStart) > 3000) {
+              next[t.botId] = daemonStart;
+              if (t.accountUsername) {
+                next[t.accountUsername] = daemonStart;
+              }
+              changed = true;
+            }
           }
         }
       });
@@ -1100,6 +1147,27 @@ export default function Dashboard() {
     if (!currentUser) return;
     const assignedAcc = targetAcc || resolveServerAccount(profile);
     const cleanPlayerName = assignedAcc?.ign || assignedAcc?.username || profile.name;
+    const now = Date.now();
+
+    // Optimistically record start time locally
+    setSessionStartTimes((prev) => {
+      const updated = {
+        ...prev,
+        [profile.id]: now,
+        [cleanPlayerName]: now,
+        ...(assignedAcc ? { [assignedAcc.id]: now } : {}),
+      };
+      if (typeof window !== 'undefined') {
+        const u = currentUser || 'guest';
+        localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    // Record in Supabase for persistence across devices/refreshes
+    if (currentUser && cleanPlayerName) {
+      recordAccountConnectionStart(currentUser, cleanPlayerName, profile.serverHost, now).catch(() => {});
+    }
 
     // Track connections count
     setServerConnections((prev) => {
@@ -1124,6 +1192,29 @@ export default function Dashboard() {
   };
 
   const handleStopServer = (profileId: string) => {
+    const srv = servers.find((s) => s.id === profileId);
+    const acc = srv ? resolveServerAccount(srv) : activeAccount;
+    const cleanPlayerName = acc?.ign || acc?.username;
+
+    // Remove from local sessionStartTimes
+    setSessionStartTimes((prev) => {
+      const next = { ...prev };
+      delete next[profileId];
+      if (acc) {
+        delete next[acc.id];
+        if (cleanPlayerName) delete next[cleanPlayerName];
+      }
+      if (typeof window !== 'undefined') {
+        const u = currentUser || 'guest';
+        localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    if (currentUser && cleanPlayerName) {
+      recordAccountConnectionStop(currentUser, cleanPlayerName).catch(() => {});
+    }
+
     stopBot(profileId);
     showToast('Bot connection stopped.', 'info');
   };
@@ -2323,19 +2414,25 @@ export default function Dashboard() {
                               assignedAccounts.map((acc) => {
                                 const isChecked = selectedAccountIds.includes(acc.id);
                                 const isAssignedActive = activeAccount?.id === acc.id;
-                                const currentBotState = isAssignedActive ? botState : 'DISCONNECTED';
+                                const currentBotState = isAssignedActive ? (botStates[activeServer.id] || botState) : (botStates[acc.id] || 'DISCONNECTED');
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = isAssignedActive && (currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN');
-                                const srvStart = sessionStartTimes[activeServer.id] || sessionStartTimes[acc.id];
+                                const srvStart =
+                                  sessionStartTimes[activeServer.id] ||
+                                  sessionStartTimes[acc.id] ||
+                                  sessionStartTimes[acc.ign || ''] ||
+                                  sessionStartTimes[acc.username] ||
+                                  sessionStartTimes[activeServer.serverHost] ||
+                                  acc.settings?.connected_at;
                                 const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
-                                const srvTel = telemetries?.[activeServer.id];
+                                const srvTel = telemetries?.[activeServer.id] || (telemetry?.botId === activeServer.id ? telemetry : null);
                                 const daemonUptime =
-                                  telemetry?.botId === activeServer.id && typeof telemetry.uptime === 'number' && telemetry.uptime > 0
-                                    ? telemetry.uptime
-                                    : srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
+                                  srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
                                     ? srvTel.uptime
+                                    : srvTel && typeof srvTel.connectedAt === 'number' && srvTel.connectedAt > 0
+                                    ? Math.max(0, Math.floor((nowTick - srvTel.connectedAt) / 1000))
                                     : 0;
-                                const accountUptime = isBotOnline ? (daemonUptime || localSec) : 0;
+                                const accountUptime = isBotOnline ? Math.max(daemonUptime, localSec) : 0;
 
                                 return (
                                   <tr
