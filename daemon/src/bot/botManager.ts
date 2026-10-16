@@ -121,9 +121,40 @@ export class BotManager {
       }
 
       case 'SEND_CHAT': {
-        const bot = this.bots.get(msg.payload.botId);
-        if (bot) {
-          bot.chat(msg.payload.message);
+        const { botId, message, targetAccount } = msg.payload;
+        if (targetAccount && targetAccount !== 'all') {
+          const lower = targetAccount.toLowerCase();
+          const targetBot = Array.from(this.bots.values()).find(
+            (b) =>
+              b.config.username.toLowerCase() === lower ||
+              b.bot?.username?.toLowerCase() === lower ||
+              b.config.id.toLowerCase() === lower
+          );
+          if (targetBot) {
+            targetBot.chat(message);
+            break;
+          }
+        }
+
+        if (!botId || botId === 'all') {
+          for (const bot of this.bots.values()) {
+            bot.chat(message);
+          }
+        } else {
+          const bot = this.bots.get(botId);
+          if (bot) {
+            bot.chat(message);
+          } else {
+            const lower = botId.toLowerCase();
+            const foundBot = Array.from(this.bots.values()).find(
+              (b) =>
+                b.config.username.toLowerCase() === lower ||
+                b.bot?.username?.toLowerCase() === lower
+            );
+            if (foundBot) {
+              foundBot.chat(message);
+            }
+          }
         }
         break;
       }

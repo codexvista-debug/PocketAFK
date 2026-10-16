@@ -33,6 +33,7 @@ export type BotLifecycleState =
 
 export interface ChatMessagePayload {
   botId: string;
+  accountUsername?: string;
   id: string;
   timestamp: number;
   raw: string;
@@ -84,7 +85,7 @@ export type ClientMessage =
   | { type: 'START_BOT'; payload: BotConfig }
   | { type: 'STOP_BOT'; payload: { botId: string } }
   | { type: 'RESTART_BOT'; payload: { botId: string } }
-  | { type: 'SEND_CHAT'; payload: { botId: string; message: string } }
+  | { type: 'SEND_CHAT'; payload: { botId: string; message: string; targetAccount?: string } }
   | { type: 'CLICK_SLOT'; payload: { botId: string; windowId: number; slot: number; mouseButton?: number; mode?: number } }
   | { type: 'CLOSE_WINDOW'; payload: { botId: string; windowId: number } }
   | { type: 'UPDATE_SETTINGS'; payload: { botId: string; settings: Partial<BotSettings> } }

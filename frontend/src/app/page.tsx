@@ -55,6 +55,7 @@ import {
   Trash2,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Heart,
   Utensils,
   Terminal as TerminalIcon,
@@ -172,6 +173,23 @@ export default function Dashboard() {
     return () => {
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
     };
+  }, []);
+
+  // Chat Receivers & Sender selection state
+  const [chatReceiverAccountIds, setChatReceiverAccountIds] = useState<string[]>([]);
+  const [isReceiverDropdownOpen, setIsReceiverDropdownOpen] = useState(false);
+  const [receiverSearch, setReceiverSearch] = useState('');
+  const [chatSenderAccountId, setChatSenderAccountId] = useState<string>('all');
+  const receiverDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (receiverDropdownRef.current && !receiverDropdownRef.current.contains(e.target as Node)) {
+        setIsReceiverDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Handle Account Verification callback from daemon
@@ -1185,6 +1203,64 @@ export default function Dashboard() {
     };
     handleSaveServer(updatedServer);
     showToast(`Added ${targetAcc?.ign || targetAcc?.username || 'account'} to ${activeServer.name}`, 'success');
+  };
+
+  // Accounts for the active server profile (unfiltered by search term)
+  const serverProfileAccounts = useMemo(() => {
+    if (!activeServer) return [];
+    const valid = accounts.filter((a) => profileAccountIds.includes(a.id));
+    return valid.length > 0 ? valid : (activeAccount ? [activeAccount] : accounts);
+  }, [activeServer, accounts, profileAccountIds, activeAccount]);
+
+  const effectiveReceiverIds = useMemo(() => {
+    if (chatReceiverAccountIds.length === 0) {
+      return serverProfileAccounts.map((a) => a.id);
+    }
+    return chatReceiverAccountIds;
+  }, [chatReceiverAccountIds, serverProfileAccounts]);
+
+  const isAllReceiversSelected =
+    serverProfileAccounts.length > 0 &&
+    serverProfileAccounts.every((a) =>
+      effectiveReceiverIds.includes(a.id) || effectiveReceiverIds.includes(a.ign || '')
+    );
+
+  const availableChatSenders = useMemo(() => {
+    return serverProfileAccounts.map((acc) => ({
+      id: acc.id,
+      name: acc.username,
+      ign: acc.ign,
+      isOnline:
+        botStates[activeServer?.id || ''] === 'SPAWNED' ||
+        botStates[activeServer?.id || ''] === 'LOGGED_IN',
+    }));
+  }, [serverProfileAccounts, botStates, activeServer]);
+
+  const filteredChatMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+    if (isAllReceiversSelected) return messages;
+
+    const selectedIgns = serverProfileAccounts
+      .filter((a) => effectiveReceiverIds.includes(a.id) || effectiveReceiverIds.includes(a.ign || ''))
+      .map((a) => (a.ign || a.username).toLowerCase());
+
+    return messages.filter((msg) => {
+      if (msg.accountUsername) {
+        return selectedIgns.includes(msg.accountUsername.toLowerCase());
+      }
+      return true;
+    });
+  }, [messages, isAllReceiversSelected, effectiveReceiverIds, serverProfileAccounts]);
+
+  const handleSendChatMessage = (msg: string, senderId?: string) => {
+    if (!activeServer) return;
+    if (!senderId || senderId === 'all') {
+      sendChat(activeServer.id, msg, 'all');
+    } else {
+      const senderAcc = serverProfileAccounts.find((a) => a.id === senderId || a.ign === senderId);
+      const targetName = senderAcc?.ign || senderAcc?.username || senderId;
+      sendChat(activeServer.id, msg, targetName);
+    }
   };
 
   const handleSelectAllToggle = () => {
@@ -2468,28 +2544,171 @@ export default function Dashboard() {
                   {/* SUB-TAB 2: CHAT */}
                   {activeSubTab === 'chat' && (
                     <div className="flex flex-col h-[calc(100vh-140px)] min-h-[580px] space-y-3">
-                      <div className="flex items-center justify-between shrink-0">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xs font-bold text-slate-600">Chat receivers:</span>
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-                            {activeAccount?.ign ? (
-                              <img
-                                src={`https://minotar.net/helm/${encodeURIComponent(activeAccount.ign)}/20.png`}
-                                alt={activeAccount.ign}
-                                className="w-5 h-5 rounded-md shadow-2xs border border-slate-200"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
-                                }}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                        {/* Chat Receivers Dropdown (Matches VistaAFK) */}
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Chat receivers:</span>
+
+                          <div className="relative w-full sm:w-auto" ref={receiverDropdownRef}>
+                            <button
+                              type="button"
+                              onClick={() => setIsReceiverDropdownOpen((prev) => !prev)}
+                              className="flex items-center justify-between gap-3 w-full sm:min-w-[260px] px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs transition cursor-pointer text-xs"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                {effectiveReceiverIds.length === 1 ? (
+                                  (() => {
+                                    const singleAcc = serverProfileAccounts.find(
+                                      (a) => a.id === effectiveReceiverIds[0] || a.ign === effectiveReceiverIds[0]
+                                    );
+                                    return (
+                                      <>
+                                        <img
+                                          src={`https://minotar.net/helm/${encodeURIComponent(
+                                            singleAcc?.ign || singleAcc?.username || 'Player'
+                                          )}/20.png`}
+                                          alt="skin"
+                                          className="w-5 h-5 rounded shadow-2xs border border-slate-200 shrink-0"
+                                          onError={(e) => {
+                                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                          }}
+                                        />
+                                        <span className="font-bold text-slate-800 font-mono truncate">
+                                          {singleAcc?.ign || singleAcc?.username}
+                                        </span>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                      </>
+                                    );
+                                  })()
+                                ) : (
+                                  <>
+                                    <div className="w-5 h-5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                                      <Users className="w-3.5 h-3.5" />
+                                    </div>
+                                    <span className="font-bold text-slate-800">
+                                      {isAllReceiversSelected
+                                        ? `All accounts (${serverProfileAccounts.length})`
+                                        : `${effectiveReceiverIds.length} accounts selected`}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <ChevronDown
+                                className={`w-4 h-4 text-slate-400 transition-transform duration-150 ${
+                                  isReceiverDropdownOpen ? 'rotate-180' : ''
+                                }`}
                               />
-                            ) : (
-                              <div className="w-5 h-5 rounded-md bg-emerald-100 border border-emerald-300 flex items-center justify-center text-[10px] font-bold text-emerald-800">
-                                ⛏
+                            </button>
+
+                            {/* Dropdown panel */}
+                            {isReceiverDropdownOpen && (
+                              <div className="absolute left-0 top-full mt-2 w-full sm:w-[320px] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2.5 space-y-2">
+                                {/* Search input */}
+                                <div className="relative">
+                                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                  <input
+                                    type="text"
+                                    value={receiverSearch}
+                                    onChange={(e) => setReceiverSearch(e.target.value)}
+                                    placeholder="Search.."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-mono placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
+                                  />
+                                </div>
+
+                                {/* All accounts toggle */}
+                                <div
+                                  onClick={() => {
+                                    if (isAllReceiversSelected) {
+                                      setChatReceiverAccountIds([serverProfileAccounts[0]?.id].filter(Boolean));
+                                    } else {
+                                      setChatReceiverAccountIds(serverProfileAccounts.map((a) => a.id));
+                                    }
+                                  }}
+                                  className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 transition cursor-pointer border border-transparent hover:border-slate-100"
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center">
+                                      <Users className="w-3 h-3" />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-800">All accounts</span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isAllReceiversSelected}
+                                    onChange={() => {}}
+                                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 pointer-events-none cursor-pointer"
+                                  />
+                                </div>
+
+                                <div className="border-t border-slate-100" />
+
+                                {/* Individual accounts list */}
+                                <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                                  {serverProfileAccounts
+                                    .filter((acc) => {
+                                      if (!receiverSearch.trim()) return true;
+                                      const q = receiverSearch.toLowerCase();
+                                      return (
+                                        (acc.ign || '').toLowerCase().includes(q) ||
+                                        (acc.username || '').toLowerCase().includes(q)
+                                      );
+                                    })
+                                    .map((acc) => {
+                                      const isChecked =
+                                        effectiveReceiverIds.includes(acc.id) ||
+                                        effectiveReceiverIds.includes(acc.ign || '');
+                                      return (
+                                        <div
+                                          key={acc.id}
+                                          onClick={() => {
+                                            if (isChecked) {
+                                              if (effectiveReceiverIds.length > 1) {
+                                                setChatReceiverAccountIds(
+                                                  effectiveReceiverIds.filter(
+                                                    (id) => id !== acc.id && id !== acc.ign
+                                                  )
+                                                );
+                                              }
+                                            } else {
+                                              setChatReceiverAccountIds([...effectiveReceiverIds, acc.id]);
+                                            }
+                                          }}
+                                          className={`flex items-center justify-between px-3 py-2 rounded-xl transition cursor-pointer ${
+                                            isChecked
+                                              ? 'bg-emerald-50/60 border border-emerald-200/70'
+                                              : 'hover:bg-slate-50 border border-transparent'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <img
+                                              src={`https://minotar.net/helm/${encodeURIComponent(
+                                                acc.ign || acc.username
+                                              )}/20.png`}
+                                              alt="skin"
+                                              className="w-5 h-5 rounded shadow-2xs border border-slate-200 shrink-0"
+                                              onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                              }}
+                                            />
+                                            <span className="text-xs font-bold font-mono text-slate-800 truncate">
+                                              {acc.ign || acc.username}
+                                            </span>
+                                            {isActiveServerRunning && (
+                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                            )}
+                                          </div>
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => {}}
+                                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 pointer-events-none cursor-pointer shrink-0"
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                </div>
                               </div>
                             )}
-                            <span className="text-xs font-black text-slate-800 tracking-tight">
-                              {activeAccount?.ign || activeAccount?.username || 'All accounts'}
-                            </span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           </div>
                         </div>
                       </div>
@@ -2497,13 +2716,16 @@ export default function Dashboard() {
                       {/* In-Game Minecraft Styled Console */}
                       <div className="flex-1 min-h-0">
                         <Terminal
-                          messages={messages}
-                          onSendMessage={(msg) => sendChat(activeServer.id, msg)}
+                          messages={filteredChatMessages}
+                          onSendMessage={(msg, senderId) => handleSendChatMessage(msg, senderId)}
                           onClear={() => clearMessages(activeServer.id)}
                           disabled={!isActiveServerRunning}
                           serverName={activeServer.name}
                           serverHost={activeServer.serverHost}
                           serverPort={activeServer.serverPort}
+                          availableSenders={availableChatSenders}
+                          selectedSenderId={chatSenderAccountId}
+                          onSelectSender={(senderId) => setChatSenderAccountId(senderId)}
                         />
                       </div>
                     </div>

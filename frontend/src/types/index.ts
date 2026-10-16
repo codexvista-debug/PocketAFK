@@ -56,6 +56,7 @@ export type BotLifecycleState =
 
 export interface ChatMessage {
   botId: string;
+  accountUsername?: string;
   id: string;
   timestamp: number;
   raw: string;

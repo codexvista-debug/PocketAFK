@@ -255,8 +255,8 @@ export function useDaemonSocket(
     return sendJson({ type: 'RESTART_BOT', payload: { botId } });
   }, [sendJson]);
 
-  const sendChat = useCallback((botId: string, message: string) => {
-    return sendJson({ type: 'SEND_CHAT', payload: { botId, message } });
+  const sendChat = useCallback((botId: string, message: string, targetAccount?: string) => {
+    return sendJson({ type: 'SEND_CHAT', payload: { botId, message, targetAccount } });
   }, [sendJson]);
 
   const clickSlot = useCallback((botId: string, windowId: number, slot: number, mouseButton = 0, mode = 0) => {

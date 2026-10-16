@@ -619,6 +619,7 @@ export class PocketBotInstance {
   private logConsole(data: Omit<ChatMessagePayload, 'botId' | 'id' | 'timestamp'>) {
     const payload: ChatMessagePayload = {
       botId: this.config.id,
+      accountUsername: this.bot?.username || this.config.username,
       id: Math.random().toString(36).substring(2, 9),
       timestamp: Date.now(),
       ...data

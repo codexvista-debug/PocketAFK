@@ -2,17 +2,27 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
-import { Send, Trash2, ArrowDown, Terminal as TerminalIcon, MessageSquare, Radio } from 'lucide-react';
+import { Send, Trash2, ArrowDown, Terminal as TerminalIcon, MessageSquare, Radio, Users, ChevronDown, Check } from 'lucide-react';
 import { MinecraftChatMessage } from './MinecraftChatMessage';
+
+export interface ChatAccountItem {
+  id: string;
+  name: string;
+  ign?: string;
+  isOnline?: boolean;
+}
 
 interface TerminalProps {
   messages: ChatMessage[];
-  onSendMessage: (msg: string) => void;
+  onSendMessage: (msg: string, senderAccountId?: string) => void;
   onClear: () => void;
   disabled?: boolean;
   serverName?: string;
   serverHost?: string;
   serverPort?: number;
+  availableSenders?: ChatAccountItem[];
+  selectedSenderId?: string;
+  onSelectSender?: (senderId: string) => void;
 }
 
 const QUICK_COMMANDS = [
@@ -34,12 +44,31 @@ export const Terminal: React.FC<TerminalProps> = ({
   serverName,
   serverHost,
   serverPort,
+  availableSenders = [],
+  selectedSenderId = 'all',
+  onSelectSender,
 }) => {
   const [input, setInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'chat' | 'system'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [isSenderDropdownOpen, setIsSenderDropdownOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const senderDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (senderDropdownRef.current && !senderDropdownRef.current.contains(event.target as Node)) {
+        setIsSenderDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedSenderAccount = availableSenders.find(
+    (s) => s.id === selectedSenderId || s.ign === selectedSenderId
+  );
 
   useEffect(() => {
     if (autoScroll && scrollContainerRef.current) {
@@ -50,7 +79,7 @@ export const Terminal: React.FC<TerminalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || disabled) return;
-    onSendMessage(input.trim());
+    onSendMessage(input.trim(), selectedSenderId);
     setInput('');
   };
 
@@ -63,7 +92,7 @@ export const Terminal: React.FC<TerminalProps> = ({
 
   const sendQuickCommand = (cmd: string) => {
     if (disabled) return;
-    onSendMessage(cmd);
+    onSendMessage(cmd, selectedSenderId);
   };
 
   const filteredMessages = messages.filter((msg) => {
@@ -209,7 +238,7 @@ export const Terminal: React.FC<TerminalProps> = ({
       </div>
 
       {/* Chat Input Dock */}
-      <form onSubmit={handleSubmit} className="p-3 bg-white flex items-center gap-2.5">
+      <form onSubmit={handleSubmit} className="p-3 bg-white flex items-center gap-2.5 relative">
         <span className="text-emerald-600 font-mono font-black text-base px-1 select-none">&gt;</span>
         <input
           type="text"
@@ -221,8 +250,114 @@ export const Terminal: React.FC<TerminalProps> = ({
               : 'Type message or command (e.g. /spawn, /lifesteal, hello)...'
           }
           disabled={disabled}
-          className="flex-1 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
+          className="flex-1 min-w-0 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
         />
+
+        {/* Sender Account Picker (Matches VistaAFK) */}
+        {availableSenders && availableSenders.length > 0 && (
+          <div className="relative shrink-0" ref={senderDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
+              disabled={disabled}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+              title="Select which account sends this message"
+            >
+              {selectedSenderAccount ? (
+                <>
+                  <img
+                    src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/18.png`}
+                    alt={selectedSenderAccount.name}
+                    className="w-4 h-4 rounded shadow-2xs border border-slate-200 shrink-0"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <span className="truncate max-w-[100px] font-mono text-emerald-700">
+                    {selectedSenderAccount.ign || selectedSenderAccount.name}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Users className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-slate-700 whitespace-nowrap">All accounts</span>
+                </>
+              )}
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isSenderDropdownOpen && (
+              <div className="absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
+                <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Send message as
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectSender?.('all');
+                    setIsSenderDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${
+                    !selectedSenderId || selectedSenderId === 'all'
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
+                      <Users className="w-3 h-3" />
+                    </div>
+                    <span>All accounts</span>
+                  </div>
+                  {(!selectedSenderId || selectedSenderId === 'all') && (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  )}
+                </button>
+
+                <div className="border-t border-slate-100 my-1" />
+
+                <div className="max-h-48 overflow-y-auto">
+                  {availableSenders.map((acc) => {
+                    const isSelected = selectedSenderId === acc.id || selectedSenderId === acc.ign;
+                    return (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => {
+                          onSelectSender?.(acc.id);
+                          setIsSenderDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <img
+                            src={`https://minotar.net/helm/${encodeURIComponent(acc.ign || acc.name)}/20.png`}
+                            alt={acc.name}
+                            className="w-5 h-5 rounded shadow-2xs border border-slate-200 shrink-0"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                          <span className="truncate font-mono">{acc.ign || acc.name}</span>
+                          {acc.isOnline && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                          )}
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={disabled || !input.trim()}
