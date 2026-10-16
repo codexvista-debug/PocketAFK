@@ -90,10 +90,24 @@ export class PocketBotInstance {
     // Login event
     this.bot.once('login', () => {
       this.setState('LOGGED_IN');
+      const realIgn = this.bot?.username || (this.bot?.player as any)?.username || this.config.username;
+      const playerUuid = (this.bot as any)?._client?.uuid;
+
+      // Broadcast real verified Java IGN back to frontend!
+      this.broadcast({
+        type: 'ACCOUNT_VERIFIED',
+        payload: {
+          botId: this.config.id,
+          email: this.config.username,
+          ign: realIgn,
+          uuid: playerUuid,
+        }
+      });
+
       this.logConsole({
         type: 'system',
-        raw: `[PocketAFK] Successfully authenticated as ${this.config.username}`,
-        formattedText: `<span style="color:#55FF55">[PocketAFK] Authenticated as <b>${this.config.username}</b></span>`
+        raw: `[PocketAFK] Verified Java Account: ${realIgn}`,
+        formattedText: `<span style="color:#55FF55">[PocketAFK] Verified Java IGN: <b>${realIgn}</b></span>`
       });
     });
 

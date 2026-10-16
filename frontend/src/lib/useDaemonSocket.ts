@@ -12,7 +12,17 @@ export interface MsAuthData {
   message: string;
 }
 
-export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
+export interface AccountVerifiedData {
+  botId: string;
+  email: string;
+  ign: string;
+  uuid?: string;
+}
+
+export function useDaemonSocket(
+  activeBotId?: string | null,
+  onAccountVerified?: (data: AccountVerifiedData) => void
+) {
   const [daemonUrl, setDaemonUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('pocketafk_daemon_url');
@@ -22,32 +32,32 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
       }
       if (stored) return stored;
     }
-    if (initialUrl && !initialUrl.includes('localhost') && !initialUrl.includes('127.0.0.1')) {
-      return initialUrl;
-    }
     return '';
   });
 
   const [authToken, setAuthToken] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('pocketafk_daemon_token') || initialToken || '';
+      return localStorage.getItem('pocketafk_daemon_token') || '';
     }
-    return initialToken || '';
+    return '';
   });
 
   const [status, setStatus] = useState<SocketStatus>('DISCONNECTED');
-  const [botState, setBotState] = useState<BotLifecycleState>('DISCONNECTED');
-  const [botStateReason, setBotStateReason] = useState<string>('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
-  const [containerWindow, setContainerWindow] = useState<ContainerWindow | null>(null);
+  
+  // Per-bot dictionaries to support multiple running server instances simultaneously
+  const [botStates, setBotStates] = useState<Record<string, BotLifecycleState>>({});
+  const [botStateReasons, setBotStateReasons] = useState<Record<string, string>>({});
+  const [telemetries, setTelemetries] = useState<Record<string, Telemetry>>({});
+  const [messagesByBot, setMessagesByBot] = useState<Record<string, ChatMessage[]>>({});
+  const [containerWindows, setContainerWindows] = useState<Record<string, ContainerWindow | null>>({});
   const [msAuthData, setMsAuthData] = useState<MsAuthData | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const onAccountVerifiedRef = useRef(onAccountVerified);
+  onAccountVerifiedRef.current = onAccountVerified;
 
   const saveSettings = useCallback((url: string, token: string) => {
-    // If user tries to set localhost, prevent it on https production
     const cleanUrl = url.trim();
     setDaemonUrl(cleanUrl);
     setAuthToken(token);
@@ -70,7 +80,6 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
       }
     }
 
-    // Never connect if empty, or if localhost
     if (!daemonUrl || daemonUrl.trim() === '' || daemonUrl.includes('localhost') || daemonUrl.includes('127.0.0.1')) {
       setStatus('DISCONNECTED');
       return;
@@ -101,30 +110,62 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
               }
               break;
 
-            case 'BOT_STATE':
-              setBotState(data.payload.state);
-              setBotStateReason(data.payload.reason || '');
+            case 'BOT_STATE': {
+              const { botId, state, reason } = data.payload;
+              if (botId) {
+                setBotStates((prev) => ({ ...prev, [botId]: state }));
+                if (reason !== undefined) {
+                  setBotStateReasons((prev) => ({ ...prev, [botId]: reason }));
+                }
+              }
               break;
+            }
 
-            case 'CHAT_MESSAGE':
-              setMessages((prev) => [...prev.slice(-250), data.payload]);
+            case 'CHAT_MESSAGE': {
+              const msg: ChatMessage = data.payload;
+              const bId = msg.botId || 'default';
+              setMessagesByBot((prev) => ({
+                ...prev,
+                [bId]: [...(prev[bId] || []).slice(-250), msg]
+              }));
               break;
+            }
 
-            case 'TELEMETRY':
-              setTelemetry(data.payload);
+            case 'TELEMETRY': {
+              const t: Telemetry = data.payload;
+              if (t.botId) {
+                setTelemetries((prev) => ({ ...prev, [t.botId]: t }));
+              }
               break;
+            }
 
-            case 'CONTAINER_WINDOW':
-              setContainerWindow(data.payload);
+            case 'CONTAINER_WINDOW': {
+              const cw: ContainerWindow = data.payload;
+              if (cw.botId) {
+                setContainerWindows((prev) => ({ ...prev, [cw.botId]: cw }));
+              }
               break;
+            }
 
-            case 'WINDOW_CLOSE':
-              setContainerWindow(null);
+            case 'WINDOW_CLOSE': {
+              const bId = data.payload?.botId;
+              if (bId) {
+                setContainerWindows((prev) => ({ ...prev, [bId]: null }));
+              }
               break;
+            }
 
-            case 'MS_AUTH_CODE':
+            case 'MS_AUTH_CODE': {
               setMsAuthData(data.payload);
               break;
+            }
+
+            case 'ACCOUNT_VERIFIED': {
+              if (onAccountVerifiedRef.current) {
+                onAccountVerifiedRef.current(data.payload);
+              }
+              break;
+            }
           }
         } catch (e) {
           console.error('Error parsing WebSocket message:', e);
@@ -169,6 +210,8 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
   }, [sendJson]);
 
   const stopBot = useCallback((botId: string) => {
+    // Optimistically set to DISCONNECTED
+    setBotStates((prev) => ({ ...prev, [botId]: 'DISCONNECTED' }));
     return sendJson({ type: 'STOP_BOT', payload: { botId } });
   }, [sendJson]);
 
@@ -185,7 +228,7 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
   }, [sendJson]);
 
   const closeWindow = useCallback((botId: string, windowId: number) => {
-    setContainerWindow(null);
+    setContainerWindows((prev) => ({ ...prev, [botId]: null }));
     return sendJson({ type: 'CLOSE_WINDOW', payload: { botId, windowId } });
   }, [sendJson]);
 
@@ -193,21 +236,41 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
     return sendJson({ type: 'UPDATE_SETTINGS', payload: { botId, settings } });
   }, [sendJson]);
 
-  const clearMessages = useCallback(() => {
-    setMessages([]);
+  const clearMessages = useCallback((botId?: string) => {
+    if (botId) {
+      setMessagesByBot((prev) => ({ ...prev, [botId]: [] }));
+    } else {
+      setMessagesByBot({});
+    }
   }, []);
+
+  // Scoped getters for active instance
+  const currentBotId = activeBotId || '';
+  const currentBotState: BotLifecycleState = (currentBotId && botStates[currentBotId]) || 'DISCONNECTED';
+  const currentBotReason: string = (currentBotId && botStateReasons[currentBotId]) || '';
+  const currentTelemetry: Telemetry | null = (currentBotId && telemetries[currentBotId]) || null;
+  const currentMessages: ChatMessage[] = (currentBotId && messagesByBot[currentBotId]) || [];
+  const currentWindow: ContainerWindow | null = (currentBotId && containerWindows[currentBotId]) || null;
 
   return {
     status,
-    botState,
-    botStateReason,
-    messages,
-    telemetry,
-    containerWindow,
+    // Active instance state
+    botState: currentBotState,
+    botStateReason: currentBotReason,
+    telemetry: currentTelemetry,
+    messages: currentMessages,
+    containerWindow: currentWindow,
+    // All instance states (for server list cards)
+    botStates,
+    botStateReasons,
+    telemetries,
+    messagesByBot,
+    // Connection & Settings
     daemonUrl,
     authToken,
     saveSettings,
     reconnect: connect,
+    // Actions
     startBot,
     stopBot,
     restartBot,
@@ -216,6 +279,7 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
     closeWindow,
     updateSettings,
     clearMessages,
+    // Microsoft Auth
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),
   };

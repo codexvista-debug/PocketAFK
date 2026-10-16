@@ -12,34 +12,28 @@ export interface BotSettings {
   autoReconnectDelay: number;     // Delay before reconnecting in ms (Default: 5000)
 }
 
-export interface Account {
-  id: string;
-  user_id?: string;
-  username: string;
-  auth_type: 'microsoft' | 'offline';
-  server_host: string;
-  server_port: number;
-  server_version?: string;
-  auto_reconnect: boolean;
-  anti_afk: {
-    enabled: boolean;
-    interval: number;
-  };
-  survival: {
-    autoEat: boolean;
-    autoTotem: boolean;
-  };
-  mob_farm: {
-    enabled: boolean;
-    targetRange: number;
-    attackCooldownMs: number;
-  };
-  settings: {
-    physics: boolean;
-    acceptResourcePacks: boolean;
-    muteErrors?: boolean;
-    autoDisconnectOnBan?: boolean;
-  };
+export interface MinecraftAccount {
+  id: string;                     // Unique account identifier (e.g. "acc_abc123")
+  username: string;               // Microsoft account email (e.g. "player@outlook.com")
+  auth_type: 'microsoft';         // Strictly 100% official Java
+  ign?: string;                   // Real verified In-Game Name once authenticated (e.g. "Notch")
+  uuid?: string;                  // Minecraft Java UUID
+  verified: boolean;              // True once authenticated via Microsoft MSA
+  addedAt: number;
+}
+
+// Backward compatibility alias
+export type Account = MinecraftAccount;
+
+export interface ServerProfile {
+  id: string;                     // Unique instance ID (passed as botId to daemon)
+  name: string;                   // Custom display name (e.g. "Hypixel AFK", "DonutSMP Base")
+  accountId: string;              // Linked MinecraftAccount id
+  serverHost: string;             // Hostname / IP (e.g. "donutsmp.net", "mc.hypixel.net")
+  serverPort: number;             // Port (default: 25565)
+  serverVersion: string;          // Minecraft version (default: "auto", or "1.20.4", etc.)
+  autoReconnect: boolean;         // Auto reconnect on kick
+  settings: BotSettings;          // Instance-specific AFK & physics settings
 }
 
 export type BotLifecycleState =
