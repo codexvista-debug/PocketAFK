@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ServerProfile, MinecraftAccount, BotSettings } from '../types';
 import { X, Server, Globe, Cpu, Shield, Sparkles, Swords, Trash2, UserPlus, Check } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
@@ -32,16 +32,25 @@ const DEFAULT_SETTINGS: BotSettings = {
 
 const COMMON_VERSIONS = [
   { label: 'Auto-detect (Recommended)', value: 'auto' },
+  { label: '26.3 (Latest 2026 Release)', value: '26.3' },
+  { label: '26.2 (Active Release)', value: '26.2' },
+  { label: '26.1.2', value: '26.1.2' },
+  { label: '26.1', value: '26.1' },
+  { label: '1.21.11', value: '1.21.11' },
+  { label: '1.21.4', value: '1.21.4' },
+  { label: '1.21.3', value: '1.21.3' },
+  { label: '1.21.2', value: '1.21.2' },
   { label: '1.21.1 / 1.21', value: '1.21.1' },
+  { label: '1.20.6 / 1.20.5', value: '1.20.6' },
   { label: '1.20.4', value: '1.20.4' },
   { label: '1.20.2', value: '1.20.2' },
   { label: '1.20.1', value: '1.20.1' },
   { label: '1.19.4', value: '1.19.4' },
-  { label: '1.19.2', value: '1.19.2' },
   { label: '1.18.2', value: '1.18.2' },
   { label: '1.16.5', value: '1.16.5' },
   { label: '1.12.2', value: '1.12.2' },
   { label: '1.8.9', value: '1.8.9' },
+  { label: 'Custom / Other Version...', value: 'custom' },
 ];
 
 export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
@@ -57,37 +66,57 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   const [name, setName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [serverHost, setServerHost] = useState('');
-  const [serverPort, setServerPort] = useState(25565);
+  const [serverPort, setServerPort] = useState<string | number>(25565);
   const [serverVersion, setServerVersion] = useState('auto');
+  const [customVersion, setCustomVersion] = useState('');
   const [autoReconnect, setAutoReconnect] = useState(true);
   const [settings, setSettings] = useState<BotSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const wasOpenRef = useRef(false);
+  const activeProfileIdRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
-    if (initialProfile) {
-      setName(initialProfile.name);
-      // Robust matching: by id, or by ign/username, or fallback to first account if available
-      const matchingAcc = accounts.find((a) => a.id === initialProfile.accountId)
-        || accounts.find((a) => (a.ign || a.username).toLowerCase() === (initialProfile.accountId || '').toLowerCase())
-        || accounts.find((a) => initialProfile.name.toLowerCase().startsWith((a.ign || a.username).toLowerCase()))
-        || accounts[0];
-      setAccountId(matchingAcc ? matchingAcc.id : (accounts[0]?.id || ''));
-      setServerHost(initialProfile.serverHost);
-      setServerPort(initialProfile.serverPort || 25565);
-      setServerVersion(initialProfile.serverVersion || 'auto');
-      setAutoReconnect(initialProfile.autoReconnect ?? true);
-      setSettings(initialProfile.settings || DEFAULT_SETTINGS);
-    } else {
-      setName('');
-      setAccountId(accounts[0]?.id || '');
-      setServerHost('');
-      setServerPort(25565);
-      setServerVersion('auto');
-      setAutoReconnect(true);
-      setSettings(DEFAULT_SETTINGS);
+    const justOpened = isOpen && !wasOpenRef.current;
+    const profileChanged = initialProfile?.id !== activeProfileIdRef.current;
+
+    if (isOpen && (justOpened || profileChanged)) {
+      if (initialProfile) {
+        setName(initialProfile.name || '');
+        const matchingAcc = accounts.find((a) => a.id === initialProfile.accountId)
+          || accounts.find((a) => (a.ign || a.username).toLowerCase() === (initialProfile.accountId || '').toLowerCase())
+          || accounts.find((a) => initialProfile.name.toLowerCase().startsWith((a.ign || a.username).toLowerCase()))
+          || accounts[0];
+        setAccountId(matchingAcc ? matchingAcc.id : (accounts[0]?.id || ''));
+        setServerHost(initialProfile.serverHost || '');
+        setServerPort(initialProfile.serverPort || 25565);
+        const ver = initialProfile.serverVersion || 'auto';
+        const isStandard = COMMON_VERSIONS.some((v) => v.value === ver);
+        if (!isStandard && ver !== 'auto') {
+          setServerVersion('custom');
+          setCustomVersion(ver);
+        } else {
+          setServerVersion(ver);
+          setCustomVersion('');
+        }
+        setAutoReconnect(initialProfile.autoReconnect ?? true);
+        setSettings(initialProfile.settings || DEFAULT_SETTINGS);
+      } else {
+        setName('');
+        setAccountId(accounts[0]?.id || '');
+        setServerHost('');
+        setServerPort(25565);
+        setServerVersion('auto');
+        setCustomVersion('');
+        setAutoReconnect(true);
+        setSettings(DEFAULT_SETTINGS);
+      }
     }
-  }, [initialProfile, accounts, isOpen]);
+
+    wasOpenRef.current = isOpen;
+    activeProfileIdRef.current = initialProfile?.id;
+  }, [isOpen, initialProfile?.id, accounts]);
 
   if (!isOpen) return null;
 
@@ -102,6 +131,10 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
 
     setLoading(true);
     try {
+      const finalVersion = serverVersion === 'custom'
+        ? (customVersion.trim() || 'auto')
+        : (serverVersion.trim() || 'auto');
+
       const profile: ServerProfile = {
         id: initialProfile?.id || `srv_${Math.random().toString(36).substring(2, 9)}`,
         name: name.trim(),
@@ -109,7 +142,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
         accountId: effectiveAccountId,
         serverHost: serverHost.trim(),
         serverPort: Number(serverPort) || 25565,
-        serverVersion: serverVersion.trim() || 'auto',
+        serverVersion: finalVersion,
         authType: 'microsoft',
         autoReconnect,
         settings,
@@ -167,9 +200,9 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
             />
           </div>
 
-          {/* Minecraft Account Selector */}
+          {/* Minecraft Account Selector with Real Skin Head */}
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between mb-1.5">
               <label className="block font-semibold text-slate-700">
                 Assigned Java Account
               </label>
@@ -194,21 +227,59 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                 </button>
               </div>
             ) : (
-              <select
-                value={accountId || accounts[0]?.id || ''}
-                onChange={(e) => setAccountId(e.target.value)}
-                required
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-semibold text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs cursor-pointer"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.ign || acc.username} {acc.verified ? '✓ Verified' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {accounts.map((acc) => {
+                  const isSelected = (accountId || accounts[0]?.id) === acc.id;
+                  const displayName = acc.ign || acc.username;
+                  const rawName = displayName.includes('@') ? displayName.split('@')[0] : displayName;
+                  const avatarUrl = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
+
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => setAccountId(acc.id)}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 shadow-2xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 shrink-0 shadow-2xs">
+                        <img
+                          src={avatarUrl}
+                          alt={rawName}
+                          className="w-full h-full object-cover [image-rendering:pixelated]"
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            if (!img.src.includes('mc-heads')) {
+                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent(rawName)}/48`;
+                            } else {
+                              img.src = 'https://minotar.net/helm/MHF_Steve/48.png';
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 justify-between">
+                          <span className="font-extrabold text-xs text-slate-900 truncate">
+                            {displayName}
+                          </span>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          )}
+                        </div>
+                        <span className="text-[10px] text-emerald-700 font-semibold block">
+                          ✓ Verified Java
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
             <p className="text-[11px] text-slate-500 mt-1">
-              You can connect the <b>same Java account</b> to multiple servers simultaneously.
+              Select which verified Java account to deploy onto this server.
             </p>
           </div>
 
@@ -224,7 +295,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                 required
                 value={serverHost}
                 onChange={(e) => setServerHost(e.target.value)}
-                placeholder="e.g. donutsmp.net or mc.hypixel.net"
+                placeholder="e.g. play.freshsmp.fun or mc.hypixel.net"
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
               />
             </div>
@@ -234,10 +305,11 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                 Port
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 required
                 value={serverPort}
-                onChange={(e) => setServerPort(Number(e.target.value))}
+                onChange={(e) => setServerPort(e.target.value)}
                 placeholder="25565"
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
               />
@@ -261,6 +333,16 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                 </option>
               ))}
             </select>
+            {serverVersion === 'custom' && (
+              <input
+                type="text"
+                required
+                value={customVersion}
+                onChange={(e) => setCustomVersion(e.target.value)}
+                placeholder="Type custom version, e.g. 26.2, 1.21.4"
+                className="w-full mt-2 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white shadow-2xs"
+              />
+            )}
             <p className="text-[11px] text-slate-500 mt-1">
               PocketAFK automatically negotiates server version handshake by default.
             </p>

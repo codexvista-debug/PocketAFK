@@ -102,8 +102,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               ) : (
                 <div className="space-y-3">
                   {uniqueVerifiedAccounts.map((acc) => {
-                    const avatarName = acc.ign || acc.username || 'MHF_Steve';
-                    const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/36`;
+                    const displayName = acc.ign || acc.username || 'Minecraft';
+                    const rawName = displayName.includes('@') ? displayName.split('@')[0] : displayName;
+                    const primaryAvatarUrl = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
 
                     return (
                       <div
@@ -112,13 +113,18 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                       >
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           {/* Player Head Skin Avatar */}
-                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-300 shrink-0 bg-slate-100 shadow-2xs">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-300 shrink-0 bg-slate-100 shadow-2xs">
                             <img
-                              src={avatarUrl}
-                              alt={avatarName}
-                              className="w-full h-full object-cover rendering-pixelated"
+                              src={primaryAvatarUrl}
+                              alt={rawName}
+                              className="w-full h-full object-cover [image-rendering:pixelated]"
                               onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/36';
+                                const img = e.target as HTMLImageElement;
+                                if (!img.src.includes('mc-heads')) {
+                                  img.src = `https://mc-heads.net/avatar/${encodeURIComponent(rawName)}/48`;
+                                } else {
+                                  img.src = 'https://minotar.net/helm/MHF_Steve/48.png';
+                                }
                               }}
                             />
                           </div>
@@ -126,7 +132,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-xs text-slate-900 truncate">
-                                {acc.ign || acc.username}
+                                {displayName}
                               </span>
                               <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
                                 <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />

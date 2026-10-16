@@ -933,10 +933,32 @@ export default function Dashboard() {
                                   </span>
                                   {getStatusBadge(srvState)}
                                 </div>
-                                <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1">
-                                  <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span>{srv.serverHost}:{srv.serverPort}</span>
-                                  <span className="text-[10px] text-slate-400">({srv.serverVersion})</span>
+                                <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                  {assignedAcc && (
+                                    <div className="flex items-center gap-1 text-[10px] text-slate-700 font-sans font-semibold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">
+                                      <div className="w-3.5 h-3.5 rounded-xs overflow-hidden border border-slate-300 bg-slate-200 shrink-0">
+                                        <img
+                                          src={`https://minotar.net/helm/${encodeURIComponent((assignedAcc.ign || assignedAcc.username).split('@')[0])}/32.png`}
+                                          alt={assignedAcc.ign || assignedAcc.username}
+                                          className="w-full h-full object-cover [image-rendering:pixelated]"
+                                          onError={(e) => {
+                                            const img = e.target as HTMLImageElement;
+                                            if (!img.src.includes('mc-heads')) {
+                                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent((assignedAcc.ign || assignedAcc.username).split('@')[0])}/32`;
+                                            } else {
+                                              img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                                            }
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="truncate max-w-[80px]">{assignedAcc.ign || assignedAcc.username}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1">
+                                    <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span>{srv.serverHost}:{srv.serverPort}</span>
+                                    <span className="text-[10px] text-slate-400">({srv.serverVersion})</span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -1034,9 +1056,24 @@ export default function Dashboard() {
                             {activeAccount && (
                               <>
                                 <span>&bull;</span>
-                                <span className="font-bold text-slate-700 flex items-center gap-1">
+                                <span className="font-bold text-slate-800 flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg text-[10px]">
+                                  <div className="w-4 h-4 rounded-xs overflow-hidden border border-slate-300 bg-slate-200 shrink-0">
+                                    <img
+                                      src={`https://minotar.net/helm/${encodeURIComponent((activeAccount.ign || activeAccount.username).split('@')[0])}/32.png`}
+                                      alt={activeAccount.ign || activeAccount.username}
+                                      className="w-full h-full object-cover [image-rendering:pixelated]"
+                                      onError={(e) => {
+                                        const img = e.target as HTMLImageElement;
+                                        if (!img.src.includes('mc-heads')) {
+                                          img.src = `https://mc-heads.net/avatar/${encodeURIComponent((activeAccount.ign || activeAccount.username).split('@')[0])}/32`;
+                                        } else {
+                                          img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                                        }
+                                      }}
+                                    />
+                                  </div>
                                   <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                  {activeAccount.ign || activeAccount.username}
+                                  <span>{activeAccount.ign || activeAccount.username}</span>
                                 </span>
                               </>
                             )}
