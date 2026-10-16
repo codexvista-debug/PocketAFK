@@ -31,6 +31,12 @@ export interface MinecraftAccount {
 // Backward compatibility alias
 export type Account = MinecraftAccount;
 
+export interface QuickCommandItem {
+  cmd: string;
+  label?: string;
+  color?: string;
+}
+
 export interface ServerProfile {
   id: string;                     // Unique instance ID (passed as botId to daemon)
   name: string;                   // Custom display name (e.g. "Hypixel AFK", "DonutSMP Base")
@@ -43,6 +49,7 @@ export interface ServerProfile {
   authType?: 'offline' | 'microsoft'; // Direct / Instant vs Microsoft Online
   autoReconnect: boolean;         // Auto reconnect on kick
   settings: BotSettings;          // Instance-specific AFK & physics settings
+  quickCommands?: QuickCommandItem[]; // Custom quick command macros for this server
   createdAt?: number;             // Timestamp when profile was created
   connectionsCount?: number;      // Total connections made
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDaemonSocket, AccountVerifiedData } from '../lib/useDaemonSocket';
-import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState } from '../types';
+import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState, QuickCommandItem } from '../types';
 import { Terminal } from '../components/Terminal';
 import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
@@ -14,6 +14,7 @@ import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
+import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickCommandsModal';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -25,6 +26,8 @@ import {
   saveServersToSupabase,
   loadServersFromSupabase,
   loadAccountsFromSupabase,
+  saveQuickCommandsToSupabase,
+  loadQuickCommandsFromSupabase,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -155,6 +158,7 @@ export default function Dashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDangerousSettingsOpen, setIsDangerousSettingsOpen] = useState(false);
   const [isContainerOpen, setIsContainerOpen] = useState(false);
+  const [isQuickCommandsModalOpen, setIsQuickCommandsModalOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
 
   // In-app Microsoft OAuth Polling state
@@ -784,6 +788,19 @@ export default function Dashboard() {
             await saveServersToSupabase(currentUser, finalServers);
           }
 
+          // Ensure each server profile loads its server-specific quick commands
+          for (let i = 0; i < finalServers.length; i++) {
+            const s = finalServers[i];
+            if (!s.quickCommands || s.quickCommands.length === 0) {
+              const savedCmds = await loadQuickCommandsFromSupabase(currentUser, s.id);
+              if (savedCmds && savedCmds.length > 0) {
+                finalServers[i] = { ...s, quickCommands: savedCmds };
+              } else {
+                finalServers[i] = { ...s, quickCommands: DEFAULT_QUICK_COMMANDS };
+              }
+            }
+          }
+
           setServers(finalServers);
           localStorage.setItem(srvKey, JSON.stringify(finalServers));
           if (finalServers.length > 0) {
@@ -1112,6 +1129,17 @@ export default function Dashboard() {
     };
     handleSaveServer(updatedServer);
     updateSettings(activeServer.id, { [key]: value });
+  };
+
+  const handleSaveQuickCommands = (newCommands: QuickCommandItem[]) => {
+    if (!activeServer || !currentUser) return;
+    const updatedServer: ServerProfile = {
+      ...activeServer,
+      quickCommands: newCommands,
+    };
+    handleSaveServer(updatedServer);
+    saveQuickCommandsToSupabase(currentUser, activeServer.id, newCommands).catch(() => {});
+    showToast(`Quick commands updated for "${activeServer.name}"!`, 'success');
   };
 
   // Bot Lifecycle Controls
@@ -1503,6 +1531,17 @@ export default function Dashboard() {
           }
         }}
       />
+
+      {/* Quick Commands Modal */}
+      {activeServer && (
+        <QuickCommandsModal
+          isOpen={isQuickCommandsModalOpen}
+          onClose={() => setIsQuickCommandsModalOpen(false)}
+          serverName={activeServer.name}
+          initialCommands={activeServer.quickCommands || DEFAULT_QUICK_COMMANDS}
+          onSave={handleSaveQuickCommands}
+        />
+      )}
 
       {/* LOGGED OUT GATEWAY */}
       {!currentUser ? (
@@ -2806,6 +2845,8 @@ export default function Dashboard() {
                           availableSenders={availableChatSenders}
                           selectedSenderId={chatSenderAccountId}
                           onSelectSender={(senderId) => setChatSenderAccountId(senderId)}
+                          quickCommands={activeServer.quickCommands}
+                          onEditQuickCommands={() => setIsQuickCommandsModalOpen(true)}
                         />
                       </div>
                     </div>

@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ChatMessage } from '../types';
-import { Send, Trash2, ArrowDown, Terminal as TerminalIcon, MessageSquare, Radio, Users, ChevronDown, Check } from 'lucide-react';
+import { ChatMessage, QuickCommandItem } from '../types';
+import { Send, Trash2, ArrowDown, Terminal as TerminalIcon, MessageSquare, Radio, Users, ChevronDown, Check, Pencil } from 'lucide-react';
 import { MinecraftChatMessage } from './MinecraftChatMessage';
 
 export interface ChatAccountItem {
@@ -23,9 +23,11 @@ interface TerminalProps {
   availableSenders?: ChatAccountItem[];
   selectedSenderId?: string;
   onSelectSender?: (senderId: string) => void;
+  quickCommands?: QuickCommandItem[];
+  onEditQuickCommands?: () => void;
 }
 
-const QUICK_COMMANDS = [
+const DEFAULT_QUICK_COMMANDS: QuickCommandItem[] = [
   { cmd: '/afk', color: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-600 hover:text-white' },
   { cmd: '/lifesteal', color: 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-600 hover:text-white' },
   { cmd: '/home', color: 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-600 hover:text-white' },
@@ -47,6 +49,8 @@ export const Terminal: React.FC<TerminalProps> = ({
   availableSenders = [],
   selectedSenderId = 'all',
   onSelectSender,
+  quickCommands,
+  onEditQuickCommands,
 }) => {
   const [input, setInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'chat' | 'system'>('all');
@@ -192,20 +196,32 @@ export const Terminal: React.FC<TerminalProps> = ({
       </div>
 
       {/* Quick Macro Commands Bar */}
-      <div className="px-4 py-2 bg-slate-50/90 border-b border-slate-200/90 flex items-center space-x-2 overflow-x-auto text-xs shrink-0">
-        <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider shrink-0 select-none mr-0.5">
-          Quick:
-        </span>
-        {QUICK_COMMANDS.map(({ cmd, color }) => (
+      <div className="px-4 py-2 bg-slate-50/90 border-b border-slate-200/90 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center space-x-2 overflow-x-auto text-xs min-w-0 flex-1">
+          <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider shrink-0 select-none mr-0.5">
+            Quick:
+          </span>
+          {(quickCommands && quickCommands.length > 0 ? quickCommands : DEFAULT_QUICK_COMMANDS).map(({ cmd, color }) => (
+            <button
+              key={cmd}
+              onClick={() => sendQuickCommand(cmd)}
+              disabled={disabled}
+              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold shadow-2xs transition whitespace-nowrap cursor-pointer shrink-0 disabled:opacity-40 active:scale-95 ${color || 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-600 hover:text-white'}`}
+            >
+              {cmd}
+            </button>
+          ))}
+        </div>
+
+        {onEditQuickCommands && (
           <button
-            key={cmd}
-            onClick={() => sendQuickCommand(cmd)}
-            disabled={disabled}
-            className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold shadow-2xs transition whitespace-nowrap cursor-pointer shrink-0 disabled:opacity-40 active:scale-95 ${color}`}
+            onClick={onEditQuickCommands}
+            title="Edit Quick Commands for this server"
+            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 hover:border-slate-300 text-slate-500 hover:text-slate-800 transition cursor-pointer shadow-2xs shrink-0 flex items-center gap-1"
           >
-            {cmd}
+            <Pencil className="w-3.5 h-3.5 text-slate-500" />
           </button>
-        ))}
+        )}
       </div>
 
       {/* Chat Messages Stream */}

@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { MinecraftAccount, ServerProfile } from '@/types';
+import { MinecraftAccount, ServerProfile, QuickCommandItem } from '@/types';
 
 /**
  * Universal Server Profiles Sync:
@@ -307,3 +307,80 @@ export async function loadAccountSessionsFromSupabase(currentUser: string): Prom
     return {};
   }
 }
+
+/**
+ * Saves server-specific quick command macros in Supabase.
+ */
+export async function saveQuickCommandsToSupabase(
+  currentUser: string,
+  serverId: string,
+  commands: QuickCommandItem[]
+) {
+  if (!supabase || !currentUser || !serverId) return;
+  try {
+    const cleanUser = currentUser.trim();
+    const { data: existing } = await supabase
+      .from('accounts')
+      .select('id, settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_quick_commands__')
+      .limit(1);
+
+    const existingSettings = existing?.[0]?.settings || {};
+    const updatedSettings = {
+      ...existingSettings,
+      [serverId]: commands,
+      updatedAt: Date.now(),
+    };
+
+    if (existing && existing.length > 0) {
+      await supabase
+        .from('accounts')
+        .update({ settings: updatedSettings, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('accounts').insert([
+        {
+          username: cleanUser,
+          bot_name: '__meta_quick_commands__',
+          server_host: 'pocketafk.internal',
+          server_port: 25565,
+          settings: updatedSettings,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.warn('Failed to save quick commands to Supabase:', err);
+  }
+}
+
+/**
+ * Loads server-specific quick command macros from Supabase.
+ */
+export async function loadQuickCommandsFromSupabase(
+  currentUser: string,
+  serverId: string
+): Promise<QuickCommandItem[] | null> {
+  if (!supabase || !currentUser || !serverId) return null;
+  try {
+    const cleanUser = currentUser.trim();
+    const { data } = await supabase
+      .from('accounts')
+      .select('settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_quick_commands__')
+      .limit(1);
+
+    if (data && data.length > 0 && data[0].settings) {
+      const serverCmds = data[0].settings[serverId];
+      if (Array.isArray(serverCmds) && serverCmds.length > 0) {
+        return serverCmds;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to load quick commands from Supabase:', err);
+    return null;
+  }
+}
+
