@@ -28,10 +28,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [urlInput, setUrlInput] = useState(daemonUrl);
   const [tokenInput, setTokenInput] = useState(authToken);
   const [isSaved, setIsSaved] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
+
+  // Sync inputs when props change
+  React.useEffect(() => {
+    setUrlInput(daemonUrl);
+  }, [daemonUrl]);
+
+  React.useEffect(() => {
+    setTokenInput(authToken);
+  }, [authToken]);
 
   if (!isOpen) return null;
-
-  const [copiedCommand, setCopiedCommand] = useState(false);
 
   const handleCopyCommand = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
