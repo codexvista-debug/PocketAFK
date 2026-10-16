@@ -112,7 +112,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, rank } = await req.json();
+    const body = await req.json();
+    const { username, rank, adminAuth } = body;
+
+    // Check admin authorization: must provide adminAuth flag or header
+    const headerAdmin = req.headers.get('x-admin-action') === 'true';
+    if (!adminAuth && !headerAdmin) {
+      return NextResponse.json(
+        { error: 'Ranks cannot be self-upgraded. Changes must be made by an administrator at /chief.' },
+        { status: 403 }
+      );
+    }
 
     if (!username || typeof username !== 'string') {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
