@@ -12,6 +12,8 @@ import { AuthModal } from '../components/AuthModal';
 import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
 import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
+import { RankModal } from '../components/RankModal';
+import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import { syncAllToSupabase, deleteAccountFromSupabase } from '../lib/supabaseSync';
 import { 
@@ -128,6 +130,11 @@ export default function Dashboard() {
   const [pinnedServerIds, setPinnedServerIds] = useState<string[]>([]);
   const [serverConnections, setServerConnections] = useState<Record<string, number>>({});
   const [serverFilter, setServerFilter] = useState('');
+
+  // User Rank State (Iron, Gold, Diamond, Emerald)
+  const [userRank, setUserRank] = useState<UserRank>('iron');
+  const [isRankModalOpen, setIsRankModalOpen] = useState(false);
+  const currentRankConfig = useMemo(() => getRankConfig(userRank), [userRank]);
 
   // Modals state
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -531,6 +538,42 @@ export default function Dashboard() {
     }
   };
 
+  // Sync and fetch authoritative user rank from server / Supabase
+  useEffect(() => {
+    if (!currentUser) return;
+    const cachedRank = localStorage.getItem(`pocketafk_rank_${currentUser}`);
+    if (cachedRank && RANKS[cachedRank as UserRank]) {
+      setUserRank(cachedRank as UserRank);
+    }
+    fetch(`/api/rank?username=${encodeURIComponent(currentUser)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.rank && RANKS[data.rank as UserRank]) {
+          setUserRank(data.rank as UserRank);
+          localStorage.setItem(`pocketafk_rank_${currentUser}`, data.rank);
+        }
+      })
+      .catch(() => {});
+  }, [currentUser]);
+
+  const handleSelectRank = async (newRank: UserRank) => {
+    setUserRank(newRank);
+    if (currentUser) {
+      localStorage.setItem(`pocketafk_rank_${currentUser}`, newRank);
+      try {
+        await fetch('/api/rank', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: currentUser, rank: newRank }),
+        });
+        showToast(`Upgraded to ${RANKS[newRank].name} Rank!`, 'success');
+      } catch (e) {
+        showToast('Rank saved locally.', 'info');
+      }
+    }
+    setIsRankModalOpen(false);
+  };
+
   // Load Accounts & Servers
   useEffect(() => {
     if (!currentUser) {
@@ -679,8 +722,14 @@ export default function Dashboard() {
       return;
     }
 
-    if (accounts.filter((a) => a.verified).length >= 5 && !target) {
-      showToast('Maximum limit of 5 accounts reached.', 'error');
+    if (accounts.filter((a) => a.verified).length >= currentRankConfig.maxAccounts && !target) {
+      showToast(
+        `Your ${currentRankConfig.name} rank limit of ${currentRankConfig.maxAccounts} ${
+          currentRankConfig.maxAccounts === 1 ? 'account' : 'accounts'
+        } has been reached. Upgrade your rank to add more!`,
+        'error'
+      );
+      setIsRankModalOpen(true);
       return;
     }
 
@@ -910,8 +959,14 @@ export default function Dashboard() {
 
     const existingIndex = servers.findIndex((s) => s.id === profile.id);
 
-    if (existingIndex < 0 && servers.length >= 3) {
-      showToast('Maximum of 3 servers reached.', 'error');
+    if (existingIndex < 0 && servers.length >= currentRankConfig.maxServers) {
+      showToast(
+        `Your ${currentRankConfig.name} rank allows up to ${currentRankConfig.maxServers} ${
+          currentRankConfig.maxServers === 1 ? 'server profile' : 'server profiles'
+        }. Upgrade your rank to add more servers!`,
+        'error'
+      );
+      setIsRankModalOpen(true);
       return;
     }
 
@@ -1214,6 +1269,15 @@ export default function Dashboard() {
         onSuccess={handleLoginSuccess}
       />
 
+      {/* Rank Tiers & Capacity Modal */}
+      <RankModal
+        isOpen={isRankModalOpen}
+        onClose={() => setIsRankModalOpen(false)}
+        currentRank={userRank}
+        onSelectRank={handleSelectRank}
+        currentAccountCount={accounts.length}
+      />
+
       {/* Container / Chest Menu Modal */}
       <ContainerModal
         window={containerWindow}
@@ -1300,7 +1364,7 @@ export default function Dashboard() {
                   Accounts
                 </div>
                 <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-mono font-bold">
-                  {accounts.length}/5
+                  {accounts.length}/{currentRankConfig.maxAccounts}
                 </span>
               </button>
             </div>
@@ -1312,10 +1376,16 @@ export default function Dashboard() {
               <div className="px-2 py-1 flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 <span>Server profiles</span>
                 <button
-                  disabled={servers.length >= 3}
+                  disabled={servers.length >= currentRankConfig.maxServers}
                   onClick={() => {
-                    if (servers.length >= 3) {
-                      showToast('Maximum limit of 3 servers reached.', 'error');
+                    if (servers.length >= currentRankConfig.maxServers) {
+                      showToast(
+                        `Your ${currentRankConfig.name} rank allows up to ${currentRankConfig.maxServers} ${
+                          currentRankConfig.maxServers === 1 ? 'server profile' : 'server profiles'
+                        }. Upgrade your rank to add more!`,
+                        'error'
+                      );
+                      setIsRankModalOpen(true);
                       return;
                     }
                     setEditingServer(null);
@@ -1453,20 +1523,30 @@ export default function Dashboard() {
             </div>
 
             {/* Bottom User Pill */}
-            <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between">
-              <div className="flex items-center gap-2 truncate">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-1">
+              <div className="flex items-center gap-2 truncate min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <span className="text-xs font-bold text-slate-800 font-mono truncate">
                   @{effectiveUser}
                 </span>
               </div>
-              <button
-                onClick={handleLogout}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => setIsRankModalOpen(true)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
+                  title="Click to view or upgrade Rank"
+                >
+                  <span>{currentRankConfig.gemIcon}</span>
+                  <span>{currentRankConfig.name}</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </aside>
 
@@ -1758,9 +1838,20 @@ export default function Dashboard() {
 
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={() => handleStartMicrosoftLogin()}
-                        disabled={accounts.length >= 5}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                        onClick={() => {
+                          if (accounts.length >= currentRankConfig.maxAccounts) {
+                            showToast(
+                              `Your ${currentRankConfig.name} rank limit of ${currentRankConfig.maxAccounts} ${
+                                currentRankConfig.maxAccounts === 1 ? 'account' : 'accounts'
+                              } has been reached. Upgrade your rank to add more!`,
+                              'info'
+                            );
+                            setIsRankModalOpen(true);
+                            return;
+                          }
+                          handleStartMicrosoftLogin();
+                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
                       >
                         <Plus className="w-4 h-4" />
                         <span>Add Account</span>
@@ -1784,8 +1875,8 @@ export default function Dashboard() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                         <tr>
-                          <th className="p-3.5 w-12 text-center">
-                            <span className="font-mono text-slate-700 font-bold">{accounts.length}</span>
+                          <th className="p-3.5 w-16 text-center">
+                            <span className="font-mono text-slate-700 font-bold">{accounts.length}/{currentRankConfig.maxAccounts}</span>
                           </th>
                           <th className="p-3.5">Account Name</th>
                           <th className="p-3.5">Account Access</th>

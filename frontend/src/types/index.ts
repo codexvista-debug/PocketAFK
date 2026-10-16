@@ -12,6 +12,8 @@ export interface BotSettings {
   autoReconnectDelay: number;     // Delay before reconnecting in ms (Default: 5000)
 }
 
+export type UserRank = 'iron' | 'gold' | 'diamond' | 'emerald';
+
 export interface MinecraftAccount {
   id: string;                     // Unique account identifier (e.g. "acc_abc123")
   username: string;               // Microsoft account email (e.g. "player@outlook.com")

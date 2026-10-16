@@ -26,10 +26,10 @@ export async function syncAllToSupabase(currentUser: string, accounts: Minecraft
         .filter((name) => name && !name.includes('@'))
     );
 
-    // Clean up any rows in Supabase that are no longer in accounts
+    // Clean up any rows in Supabase that are no longer in accounts (excluding metadata rows)
     for (const row of existingRows || []) {
       const botName = (row.bot_name || '').trim().toLowerCase();
-      if (botName && !currentActiveIgns.has(botName)) {
+      if (botName && !botName.startsWith('__') && !currentActiveIgns.has(botName)) {
         await supabase.from('accounts').delete().eq('id', row.id);
       }
     }
