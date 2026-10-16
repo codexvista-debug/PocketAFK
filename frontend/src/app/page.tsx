@@ -152,9 +152,13 @@ export default function Dashboard() {
   // Modern in-app toast notification state
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ id: Math.random().toString(36).substring(2, 9), message, type });
-  };
+  }, []);
+
+  const handleDismissToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   // Clean up polling timer on unmount
   useEffect(() => {
@@ -390,18 +394,26 @@ export default function Dashboard() {
     });
   }, [botStates, botState, activeServerId]);
 
-  // Automatically close Microsoft Authentication popup once a bot is connected / logged in
+  // Automatically close Microsoft Authentication popup and dismiss Connecting toast once bot is connected
   useEffect(() => {
     const isAnyConnected =
       botState === 'SPAWNED' ||
       botState === 'LOGGED_IN' ||
       Object.values(botStates).some((st) => st === 'SPAWNED' || st === 'LOGGED_IN');
 
-    if (isAnyConnected && (msAuthData || apiMsAuthData)) {
-      clearMsAuth();
-      setApiMsAuthData(null);
-      setIsPollingMs(false);
-      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    if (isAnyConnected) {
+      if (msAuthData || apiMsAuthData) {
+        clearMsAuth();
+        setApiMsAuthData(null);
+        setIsPollingMs(false);
+        if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+      }
+      setToast((prev) => {
+        if (prev && prev.message.includes('Connecting to')) {
+          return null;
+        }
+        return prev;
+      });
     }
   }, [botState, botStates, msAuthData, apiMsAuthData, clearMsAuth]);
 
@@ -1141,7 +1153,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-100/50 via-slate-50 to-sky-100/40 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20">
       {/* Toast Notification Container */}
-      <ModernToast toast={toast} onDismiss={() => setToast(null)} />
+      <ModernToast toast={toast} onDismiss={handleDismissToast} />
 
       {/* Microsoft In-App Device Auth Modal */}
       {(msAuthData || apiMsAuthData) && (

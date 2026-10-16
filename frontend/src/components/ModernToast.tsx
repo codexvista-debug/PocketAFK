@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 export interface ToastMessage {
@@ -15,40 +15,44 @@ interface ModernToastProps {
 }
 
 export const ModernToast: React.FC<ModernToastProps> = ({ toast, onDismiss }) => {
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => {
-      onDismiss();
-    }, 4000);
+      onDismissRef.current();
+    }, 3500);
     return () => clearTimeout(timer);
-  }, [toast, onDismiss]);
+  }, [toast?.id]);
 
   if (!toast) return null;
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] max-w-md w-full px-4 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-200">
       <div
-        className={`pointer-events-auto flex items-center gap-3 p-3.5 rounded-2xl shadow-2xl border backdrop-blur-md transition ${
+        className={`pointer-events-auto flex items-center gap-3 p-3.5 rounded-2xl shadow-xl border backdrop-blur-md transition ${
           toast.type === 'success'
-            ? 'bg-slate-900/95 text-emerald-400 border-emerald-500/40 shadow-emerald-950/20'
+            ? 'bg-white/95 text-slate-900 border-emerald-300 shadow-emerald-950/10'
             : toast.type === 'error'
-            ? 'bg-slate-900/95 text-rose-400 border-rose-500/40 shadow-rose-950/20'
-            : 'bg-slate-900/95 text-slate-100 border-slate-700/60 shadow-slate-950/20'
+            ? 'bg-white/95 text-slate-900 border-rose-300 shadow-rose-950/10'
+            : 'bg-white/95 text-slate-900 border-slate-200 shadow-slate-900/10'
         }`}
       >
         <div className="shrink-0">
-          {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-          {toast.type === 'error' && <AlertTriangle className="w-5 h-5 text-rose-400" />}
-          {toast.type === 'info' && <Info className="w-5 h-5 text-sky-400" />}
+          {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+          {toast.type === 'error' && <AlertTriangle className="w-5 h-5 text-rose-600" />}
+          {toast.type === 'info' && <Info className="w-5 h-5 text-sky-600" />}
         </div>
 
-        <div className="flex-1 text-xs font-semibold leading-relaxed">
+        <div className="flex-1 text-xs font-semibold leading-relaxed text-slate-800">
           {toast.message}
         </div>
 
         <button
-          onClick={onDismiss}
-          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+          onClick={() => onDismissRef.current()}
+          className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          title="Dismiss"
         >
           <X className="w-4 h-4" />
         </button>
