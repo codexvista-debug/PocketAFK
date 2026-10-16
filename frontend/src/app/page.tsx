@@ -279,6 +279,7 @@ export default function Dashboard() {
     botState,
     botStateReason,
     telemetry,
+    telemetries,
     messages,
     containerWindow,
     botStates,
@@ -352,8 +353,17 @@ export default function Dashboard() {
     return `${s}s`;
   };
 
-  // Uptime state & live 1-second ticker
-  const [sessionStartTimes, setSessionStartTimes] = useState<Record<string, number>>({});
+  // Uptime state & live 1-second ticker with persistent localStorage storage
+  const [sessionStartTimes, setSessionStartTimes] = useState<Record<string, number>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('pocketafk_user') || 'guest';
+        const saved = localStorage.getItem(`pocketafk_sessions_${u}`);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {};
+  });
   const [nowTick, setNowTick] = useState<number>(Date.now());
 
   useEffect(() => {
@@ -363,6 +373,16 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
+  // Reload session start times when user switches
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const u = currentUser || 'guest';
+      const saved = localStorage.getItem(`pocketafk_sessions_${u}`);
+      if (saved) setSessionStartTimes(JSON.parse(saved));
+    } catch (e) {}
+  }, [currentUser]);
+
   // Update session start times when bot states change
   useEffect(() => {
     setSessionStartTimes((prev) => {
@@ -371,6 +391,7 @@ export default function Dashboard() {
 
       Object.entries(botStates).forEach(([bId, st]) => {
         if (st === 'SPAWNED' || st === 'LOGGED_IN') {
+          // If we already have a recorded start time for this bot/server, KEEP IT!
           if (!next[bId]) {
             next[bId] = Date.now();
             changed = true;
@@ -397,9 +418,48 @@ export default function Dashboard() {
         }
       }
 
+      if (changed && typeof window !== 'undefined') {
+        const u = currentUser || 'guest';
+        localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(next));
+      }
+
       return changed ? next : prev;
     });
-  }, [botStates, botState, activeServerId]);
+  }, [botStates, botState, activeServerId, currentUser]);
+
+  // Calibrate local session start times using authoritative daemon telemetry uptime
+  useEffect(() => {
+    const teleList = telemetries ? Object.values(telemetries) : [];
+    if (telemetry && !teleList.some((t) => t?.botId === telemetry.botId)) {
+      teleList.push(telemetry);
+    }
+    if (teleList.length === 0) return;
+
+    setSessionStartTimes((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      const now = Date.now();
+
+      teleList.forEach((t) => {
+        if (t && t.botId && typeof t.uptime === 'number' && t.uptime > 0) {
+          const daemonStart = now - t.uptime * 1000;
+          const currentStart = next[t.botId];
+          // If no recorded start, or more than 3 seconds off from daemon's real start time, calibrate!
+          if (!currentStart || Math.abs(currentStart - daemonStart) > 3000) {
+            next[t.botId] = daemonStart;
+            changed = true;
+          }
+        }
+      });
+
+      if (changed && typeof window !== 'undefined') {
+        const u = currentUser || 'guest';
+        localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(next));
+      }
+
+      return changed ? next : prev;
+    });
+  }, [telemetry, telemetries, currentUser]);
 
   // Automatically close Microsoft Authentication popup and dismiss Connecting toast once bot is connected
   useEffect(() => {
@@ -2149,9 +2209,16 @@ export default function Dashboard() {
                                 const currentBotState = isAssignedActive ? botState : 'DISCONNECTED';
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = isAssignedActive && (currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN');
-                                const srvStart = sessionStartTimes[activeServer.id];
+                                const srvStart = sessionStartTimes[activeServer.id] || sessionStartTimes[acc.id];
                                 const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
-                                const accountUptime = isBotOnline ? (telemetry?.uptime ?? localSec) : 0;
+                                const srvTel = telemetries?.[activeServer.id];
+                                const daemonUptime =
+                                  telemetry?.botId === activeServer.id && typeof telemetry.uptime === 'number' && telemetry.uptime > 0
+                                    ? telemetry.uptime
+                                    : srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
+                                    ? srvTel.uptime
+                                    : 0;
+                                const accountUptime = isBotOnline ? (daemonUptime || localSec) : 0;
 
                                 return (
                                   <tr
