@@ -1118,8 +1118,8 @@ export default function Dashboard() {
     showToast('Server profile removed.', 'info');
   };
 
-  const handleToggleServerSetting = (key: keyof BotSettings, value: boolean) => {
-    if (!activeServer) return;
+  const handleUpdateServerSetting = (key: keyof BotSettings, value: any, silent = false) => {
+    if (!activeServer || !currentUser) return;
     const currentSettings = activeServer.settings || DEFAULT_BOT_SETTINGS;
     const updatedSettings = { ...currentSettings, [key]: value };
     const updatedServer: ServerProfile = {
@@ -1127,8 +1127,27 @@ export default function Dashboard() {
       settings: updatedSettings,
       ...(key === 'autoReconnect' ? { autoReconnect: value } : {}),
     };
-    handleSaveServer(updatedServer);
-    updateSettings(activeServer.id, { [key]: value });
+    const srvKey = `pocketafk_servers_${currentUser}`;
+    const existingIndex = servers.findIndex((s) => s.id === updatedServer.id);
+    let updated: ServerProfile[];
+    if (existingIndex >= 0) {
+      updated = [...servers];
+      updated[existingIndex] = updatedServer;
+    } else {
+      updated = [...servers, updatedServer];
+    }
+    setServers(updated);
+    localStorage.setItem(srvKey, JSON.stringify(updated));
+    saveServersToSupabase(currentUser, updated).catch(() => {});
+    syncAllToSupabase(currentUser, accounts, updated).catch(() => {});
+    updateSettings(activeServer.id, { [key]: value } as any);
+    if (!silent) {
+      showToast(`Saved settings for "${activeServer.name}"`, 'success');
+    }
+  };
+
+  const handleToggleServerSetting = (key: keyof BotSettings, value: boolean) => {
+    handleUpdateServerSetting(key, value, true);
   };
 
   const handleSaveQuickCommands = (newCommands: QuickCommandItem[]) => {
@@ -1583,7 +1602,6 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-slate-500 font-mono font-medium">v2.4 Java Core</span>
-                    <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">PRO</span>
                   </div>
                 </div>
               </div>
@@ -1839,26 +1857,32 @@ export default function Dashboard() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Termux Tunnel Status */}
+                {/* Termux Daemon Status - Animated Icon (Green: Active, Blue: Standby) */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-bold border border-slate-200 bg-white hover:bg-slate-50 transition cursor-pointer shadow-xs"
+                  title={
+                    socketStatus === 'AUTHENTICATED'
+                      ? 'Daemon Active & Online (Click to configure bridge)'
+                      : 'Daemon Standby / Not Connected (Click to configure bridge)'
+                  }
+                  className={`relative flex items-center justify-center w-8 h-8 rounded-full border transition cursor-pointer shadow-2xs group ${
+                    socketStatus === 'AUTHENTICATED'
+                      ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 text-emerald-600'
+                      : 'bg-sky-50 border-sky-300 hover:bg-sky-100 hover:border-sky-400 text-sky-600'
+                  }`}
                 >
-                  <span className="relative flex h-2 w-2">
-                    <span
-                      className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                        socketStatus === 'AUTHENTICATED' ? 'bg-emerald-400' : 'bg-rose-400'
-                      }`}
-                    />
-                    <span
-                      className={`relative inline-flex rounded-full h-2 w-2 ${
-                        socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500' : 'bg-rose-500'
-                      }`}
-                    />
-                  </span>
-                  <span className="text-slate-700">
-                    {socketStatus === 'AUTHENTICATED' ? 'Daemon Online' : 'Daemon Offline'}
-                  </span>
+                  <span
+                    className={`animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 pointer-events-none ${
+                      socketStatus === 'AUTHENTICATED' ? 'bg-emerald-400' : 'bg-sky-400'
+                    }`}
+                  />
+                  <span
+                    className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-2xs ${
+                      socketStatus === 'AUTHENTICATED'
+                        ? 'bg-emerald-500 ring-2 ring-emerald-300 animate-pulse'
+                        : 'bg-sky-500 ring-2 ring-sky-300 animate-pulse'
+                    }`}
+                  />
                 </button>
               </div>
             </header>
@@ -3103,12 +3127,8 @@ export default function Dashboard() {
                                   max={300}
                                   value={activeServer.settings?.joinDelay ?? 0}
                                   onChange={(e) => {
-                                    const val = parseInt(e.target.value, 10) || 0;
-                                    handleSaveServer({
-                                      ...activeServer,
-                                      settings: { ...activeServer.settings, joinDelay: val },
-                                    });
-                                    updateSettings(activeServer.id, { joinDelay: val } as any);
+                                    const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                                    handleUpdateServerSetting('joinDelay', val, true);
                                   }}
                                   className="w-12 bg-transparent text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
                                 />
@@ -3121,11 +3141,7 @@ export default function Dashboard() {
                                 onClick={() => {
                                   const currentVal = (activeServer.settings?.joinDelay ?? 0) > 0;
                                   const newVal = currentVal ? 0 : 5;
-                                  handleSaveServer({
-                                    ...activeServer,
-                                    settings: { ...activeServer.settings, joinDelay: newVal },
-                                  });
-                                  updateSettings(activeServer.id, { joinDelay: newVal } as any);
+                                  handleUpdateServerSetting('joinDelay', newVal, true);
                                 }}
                                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                                   (activeServer.settings?.joinDelay ?? 0) > 0 ? 'bg-emerald-600' : 'bg-slate-200'
@@ -3158,13 +3174,9 @@ export default function Dashboard() {
                                   max={300}
                                   value={Math.round((activeServer.settings?.autoReconnectDelay || 5000) / 1000)}
                                   onChange={(e) => {
-                                    const sec = parseInt(e.target.value, 10) || 5;
+                                    const sec = Math.max(1, parseInt(e.target.value, 10) || 5);
                                     const ms = sec * 1000;
-                                    handleSaveServer({
-                                      ...activeServer,
-                                      settings: { ...activeServer.settings, autoReconnectDelay: ms },
-                                    });
-                                    updateSettings(activeServer.id, { autoReconnectDelay: ms });
+                                    handleUpdateServerSetting('autoReconnectDelay', ms, true);
                                   }}
                                   className="w-12 bg-transparent text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
                                 />

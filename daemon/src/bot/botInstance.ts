@@ -26,7 +26,7 @@ export class PocketBotInstance {
     this.broadcast = broadcast;
   }
 
-  public start() {
+  public async start() {
     if (this.state === 'CONNECTING' || this.state === 'LOGGED_IN' || this.state === 'SPAWNED') {
       return;
     }
@@ -41,6 +41,17 @@ export class PocketBotInstance {
     });
 
     try {
+      const joinDelay = this.config.settings?.joinDelay;
+      if (typeof joinDelay === 'number' && joinDelay > 0) {
+        this.logConsole({
+          type: 'system',
+          raw: `[Join Delay] Waiting ${joinDelay}s before connecting...`,
+          formattedText: `<span style="color:#FFAA00">[Join Delay] Waiting <b>${joinDelay}s</b> before connecting...</span>`
+        });
+        await new Promise((r) => setTimeout(r, joinDelay * 1000));
+        if (this.isDestroyed) return;
+      }
+
       const cleanUsername = this.config.username.includes('@')
         ? this.config.username.split('@')[0]
         : this.config.username;

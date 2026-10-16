@@ -61,7 +61,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   const [name, setName] = useState('');
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState<string | number>(25565);
-  const [bedrockPort, setBedrockPort] = useState<string | number>(19132);
   const [serverVersion, setServerVersion] = useState('26.3');
   const [loading, setLoading] = useState(false);
   const [showBrowseSetups, setShowBrowseSetups] = useState(false);
@@ -80,13 +79,11 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
         setName(initialProfile.name || '');
         setServerHost(initialProfile.serverHost || '');
         setServerPort(initialProfile.serverPort || 25565);
-        setBedrockPort(19132);
         setServerVersion(initialProfile.serverVersion || '26.3');
       } else {
         setName('');
         setServerHost('');
         setServerPort(25565);
-        setBedrockPort(19132);
         setServerVersion('26.3');
       }
     }
@@ -243,18 +240,18 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
               </select>
             </div>
 
-            {/* Bedrock / Server Port */}
+            {/* Java / Server Port */}
             <div className="space-y-1.5">
               <label className="flex items-center gap-1 text-xs font-semibold text-slate-700">
-                <span>Bedrock port</span>
+                <span>Java port</span>
                 <Info className="w-3.5 h-3.5 text-slate-400" />
               </label>
               <input
                 type="text"
                 inputMode="numeric"
-                value={bedrockPort}
-                onChange={(e) => setBedrockPort(e.target.value)}
-                placeholder="19132"
+                value={serverPort}
+                onChange={(e) => setServerPort(e.target.value)}
+                placeholder="25565"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono font-medium focus:outline-none focus:border-emerald-600 focus:bg-white transition"
               />
             </div>
