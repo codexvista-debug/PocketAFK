@@ -10,6 +10,7 @@ export interface BotSettings {
   mobFarmIntervalMs: number;      // Attack cooldown in ms (Default: 650ms for 1.9+ sweep cooldown)
   autoReconnect: boolean;         // Auto reconnect on kick/disconnect (Default: true)
   autoReconnectDelay: number;     // Delay before reconnecting in ms (Default: 5000)
+  joinDelay?: number;             // Delay before joining in seconds (Default: 0)
 }
 
 export interface BotConfig {

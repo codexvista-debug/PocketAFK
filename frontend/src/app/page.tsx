@@ -13,6 +13,7 @@ import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
 import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { RankModal } from '../components/RankModal';
+import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import { syncAllToSupabase, deleteAccountFromSupabase } from '../lib/supabaseSync';
@@ -143,6 +144,7 @@ export default function Dashboard() {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerProfile | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDangerousSettingsOpen, setIsDangerousSettingsOpen] = useState(false);
   const [isContainerOpen, setIsContainerOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
 
@@ -1396,6 +1398,15 @@ export default function Dashboard() {
           showToast('Termux daemon bridge settings saved.', 'success');
         }}
         termuxCommand={termuxCommand}
+      />
+
+      {/* Dangerous Settings Modal */}
+      <DangerousSettingsModal
+        isOpen={isDangerousSettingsOpen}
+        onClose={() => setIsDangerousSettingsOpen(false)}
+        server={activeServer}
+        onToggleSetting={handleToggleServerSetting}
+        onDeleteServer={handleDeleteServer}
       />
 
       {/* Auth / Login Modal */}
@@ -2959,144 +2970,137 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Engine & Automation Settings */}
+                      {/* Extra Settings */}
                       <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <ShieldAlert className="w-4 h-4 text-emerald-600" />
-                            <h3 className="font-bold text-sm text-slate-900">Engine & Automation Settings</h3>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Configure survival features, anticheat physics, and reconnection rules for this server profile.
-                          </p>
-                        </div>
+                        <h3 className="font-bold text-sm text-slate-900">Extra settings</h3>
 
-                        <div className="space-y-1 divide-y divide-slate-100">
-                          {/* Physics */}
-                          <div className="flex items-center justify-between pt-2 pb-2 first:pt-0">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Physics Engine</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Be affected by gravity, water and block collisions. (Recommended ON to avoid anticheat flags).
+                        <div className="space-y-4 divide-y divide-slate-100">
+                          {/* Join delay */}
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex-1 pr-4">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span>Join delay</span>
+                              </label>
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                Delay before the bot connects to the server after launching.
                               </span>
                             </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.physics ?? true}
-                              onChange={(e) => handleToggleServerSetting('physics', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={300}
+                                  value={activeServer.settings?.joinDelay ?? 0}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10) || 0;
+                                    handleSaveServer({
+                                      ...activeServer,
+                                      settings: { ...activeServer.settings, joinDelay: val },
+                                    });
+                                    updateSettings(activeServer.id, { joinDelay: val } as any);
+                                  }}
+                                  className="w-12 bg-transparent text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
+                                />
+                                <span className="text-[11px] font-bold text-slate-400 select-none ml-1">sec</span>
+                              </div>
+
+                              {/* Toggle Switch */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentVal = (activeServer.settings?.joinDelay ?? 0) > 0;
+                                  const newVal = currentVal ? 0 : 5;
+                                  handleSaveServer({
+                                    ...activeServer,
+                                    settings: { ...activeServer.settings, joinDelay: newVal },
+                                  });
+                                  updateSettings(activeServer.id, { joinDelay: newVal } as any);
+                                }}
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  (activeServer.settings?.joinDelay ?? 0) > 0 ? 'bg-emerald-600' : 'bg-slate-200'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                    (activeServer.settings?.joinDelay ?? 0) > 0 ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </div>
 
-                          {/* Auto-Accept Resource Packs */}
-                          <div className="flex items-center justify-between py-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Auto-Accept Resource Packs</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Automatically accept server resource pack prompts on join to prevent kick or freeze.
+                          {/* Auto reconnect delay */}
+                          <div className="flex items-center justify-between pt-3">
+                            <div className="flex-1 pr-4">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span>Auto reconnect delay</span>
+                              </label>
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                Wait duration before attempting to reconnect after being disconnected or kicked.
                               </span>
                             </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.acceptResourcePacks ?? true}
-                              onChange={(e) => handleToggleServerSetting('acceptResourcePacks', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
-                          </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={300}
+                                  value={Math.round((activeServer.settings?.autoReconnectDelay || 5000) / 1000)}
+                                  onChange={(e) => {
+                                    const sec = parseInt(e.target.value, 10) || 5;
+                                    const ms = sec * 1000;
+                                    handleSaveServer({
+                                      ...activeServer,
+                                      settings: { ...activeServer.settings, autoReconnectDelay: ms },
+                                    });
+                                    updateSettings(activeServer.id, { autoReconnectDelay: ms });
+                                  }}
+                                  className="w-12 bg-transparent text-xs font-mono font-bold text-slate-900 text-center focus:outline-none"
+                                />
+                                <span className="text-[11px] font-bold text-slate-400 select-none ml-1">sec</span>
+                              </div>
 
-                          {/* Mob Farm / Entity Attack */}
-                          <div className="flex items-center justify-between py-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Mob Farm / Entity Attack</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Targets nearby mobs, looks at them, and strikes with weapon cooldown (fixes swinging in the air).
-                              </span>
+                              {/* Toggle Switch */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const isEnabled = activeServer.autoReconnect ?? activeServer.settings?.autoReconnect ?? true;
+                                  handleToggleServerSetting('autoReconnect', !isEnabled);
+                                }}
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  (activeServer.autoReconnect ?? activeServer.settings?.autoReconnect ?? true)
+                                    ? 'bg-emerald-600'
+                                    : 'bg-slate-200'
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                    (activeServer.autoReconnect ?? activeServer.settings?.autoReconnect ?? true)
+                                      ? 'translate-x-5'
+                                      : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
                             </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.mobFarm ?? false}
-                              onChange={(e) => handleToggleServerSetting('mobFarm', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
-                          </div>
-
-                          {/* Auto Eat */}
-                          <div className="flex items-center justify-between py-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Auto-Eat (Off by default)</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Automatically equips food from inventory and consumes when hunger is low.
-                              </span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.autoEat ?? false}
-                              onChange={(e) => handleToggleServerSetting('autoEat', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
-                          </div>
-
-                          {/* Auto Totem */}
-                          <div className="flex items-center justify-between py-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Auto-Totem (Off by default)</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Keeps a Totem of Undying equipped in the off-hand.
-                              </span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.autoTotem ?? false}
-                              onChange={(e) => handleToggleServerSetting('autoTotem', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
-                          </div>
-
-                          {/* Subtle Anti-AFK */}
-                          <div className="flex items-center justify-between py-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Subtle Anti-AFK</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Random subtle head yaw/pitch, sneaks, and arm movements to avoid idle kicks.
-                              </span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.settings?.antiAfk ?? true}
-                              onChange={(e) => handleToggleServerSetting('antiAfk', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
-                          </div>
-
-                          {/* Auto-Reconnect */}
-                          <div className="flex items-center justify-between pt-2">
-                            <div className="pr-4">
-                              <span className="text-xs font-bold text-slate-900 block">Auto-Reconnect</span>
-                              <span className="text-[11px] text-slate-500 leading-relaxed block">
-                                Automatically reconnects with randomized jitter when kicked or disconnected.
-                              </span>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={activeServer.autoReconnect ?? activeServer.settings?.autoReconnect ?? true}
-                              onChange={(e) => handleToggleServerSetting('autoReconnect', e.target.checked)}
-                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
-                            />
                           </div>
                         </div>
                       </div>
 
-                      {/* Dangerous Settings */}
-                      <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between shadow-2xs">
+                      {/* Dangerous settings Card */}
+                      <div className="p-5 rounded-2xl bg-white border border-slate-200 flex items-center justify-between shadow-xs">
                         <div>
-                          <span className="text-xs font-bold text-rose-800 block">Delete Server Profile</span>
-                          <span className="text-[11px] text-rose-600">Permanently remove this server configuration</span>
+                          <h3 className="font-bold text-sm text-slate-900">Dangerous settings</h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Settings for this server profile that are easy to get wrong and hard to undo.
+                          </p>
                         </div>
                         <button
-                          onClick={() => handleDeleteServer(activeServer.id)}
-                          className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                          type="button"
+                          onClick={() => setIsDangerousSettingsOpen(true)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 transition cursor-pointer shadow-2xs shrink-0"
                         >
-                          Delete Profile
+                          Manage dangerous settings
                         </button>
                       </div>
                     </div>

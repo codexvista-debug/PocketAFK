@@ -10,6 +10,7 @@ export interface BotSettings {
   mobFarmIntervalMs: number;      // Attack cooldown in ms (Default: 650)
   autoReconnect: boolean;         // Auto reconnect on kick/disconnect (Default: true)
   autoReconnectDelay: number;     // Delay before reconnecting in ms (Default: 5000)
+  joinDelay?: number;             // Delay before joining in seconds (Default: 0)
 }
 
 export type UserRank = 'iron' | 'gold' | 'diamond' | 'emerald';
