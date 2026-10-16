@@ -290,7 +290,11 @@ export default function Dashboard() {
         );
         if (byName) return byName;
       }
-      return accounts[0] || null;
+      if (Array.isArray(srv.assignedAccountIds) && srv.assignedAccountIds.length > 0) {
+        const byAssigned = accounts.find((a) => srv.assignedAccountIds?.includes(a.id));
+        if (byAssigned) return byAssigned;
+      }
+      return null;
     },
     [accounts]
   );
@@ -482,41 +486,39 @@ export default function Dashboard() {
         setActiveServerId(loadedServers[0].id);
       }
 
-      // 3. Supabase Sync: pull missing database records & push verified accounts
+      // 3. Supabase Sync: ONLY pull if storedAcc was null (first time login on new device/browser)
       if (supabase && currentUser) {
         try {
-          const { data, error } = await supabase.from('accounts').select('*').ilike('username', currentUser);
-          if (data && data.length > 0 && !error) {
-            const dbAccountMap = new Map<string, MinecraftAccount>();
-            loadedAccounts.forEach((acc) => {
-              const key = (acc.ign || acc.username || '').trim().toLowerCase();
-              if (key) dbAccountMap.set(key, acc);
-            });
-
-            data.forEach((row) => {
-              const cleanName = (row.bot_name && !row.bot_name.includes('@')) ? row.bot_name.trim() : null;
-              if (cleanName) {
-                const lower = cleanName.toLowerCase();
-                if (!dbAccountMap.has(lower)) {
-                  dbAccountMap.set(lower, {
-                    id: `acc_${row.id}`,
-                    username: cleanName,
-                    ign: cleanName,
-                    auth_type: 'microsoft',
-                    verified: true,
-                    addedAt: Date.now(),
-                  });
+          if (storedAcc === null) {
+            // First time login on this device: populate initial accounts from Supabase
+            const { data, error } = await supabase.from('accounts').select('*').ilike('username', currentUser);
+            if (data && data.length > 0 && !error) {
+              const dbAccountMap = new Map<string, MinecraftAccount>();
+              data.forEach((row) => {
+                const cleanName = (row.bot_name && !row.bot_name.includes('@')) ? row.bot_name.trim() : null;
+                if (cleanName) {
+                  const lower = cleanName.toLowerCase();
+                  if (!dbAccountMap.has(lower)) {
+                    dbAccountMap.set(lower, {
+                      id: `acc_${row.id}`,
+                      username: cleanName,
+                      ign: cleanName,
+                      auth_type: 'microsoft',
+                      verified: true,
+                      addedAt: Date.now(),
+                    });
+                  }
                 }
-              }
-            });
+              });
 
-            const finalAccounts = Array.from(dbAccountMap.values());
-            setAccounts(finalAccounts);
-            localStorage.setItem(accKey, JSON.stringify(finalAccounts));
+              const finalAccounts = Array.from(dbAccountMap.values());
+              setAccounts(finalAccounts);
+              localStorage.setItem(accKey, JSON.stringify(finalAccounts));
+            }
+          } else {
+            // User already has local accounts state: sync state to Supabase so deleted accounts stay deleted
+            await syncAllToSupabase(currentUser, loadedAccounts, loadedServers);
           }
-
-          // Push local accounts & servers back to Supabase to guarantee Termux summary accuracy
-          await syncAllToSupabase(currentUser, loadedAccounts, loadedServers);
         } catch (e) {
           // ignore
         }
@@ -688,14 +690,42 @@ export default function Dashboard() {
     if (!currentUser) return;
     const target = accounts.find((a) => a.id === id);
     const accKey = `pocketafk_accounts_${currentUser}`;
-    const updated = accounts.filter((a) => a.id !== id);
-    setAccounts(updated);
-    localStorage.setItem(accKey, JSON.stringify(updated));
+    const srvKey = `pocketafk_servers_${currentUser}`;
 
+    const updatedAccounts = accounts.filter((a) => a.id !== id);
+    setAccounts(updatedAccounts);
+    localStorage.setItem(accKey, JSON.stringify(updatedAccounts));
+
+    // Remove from selectedAccountIds
+    setSelectedAccountIds((prev) => prev.filter((accId) => accId !== id));
+
+    // Remove deleted account from all server profiles immediately
+    const targetNames = [id, target?.ign, target?.username, target?.expectedIgn].filter(Boolean);
+    const updatedServers = servers.map((srv) => {
+      const cleanAssigned = (srv.assignedAccountIds || []).filter(
+        (accId) => !targetNames.some((n) => n?.toLowerCase() === accId?.toLowerCase())
+      );
+      const isAccountMatch = targetNames.some((n) => n?.toLowerCase() === srv.accountId?.toLowerCase());
+      const newAccountId = isAccountMatch ? cleanAssigned[0] || '' : srv.accountId;
+      return {
+        ...srv,
+        assignedAccountIds: cleanAssigned,
+        accountId: newAccountId,
+      };
+    });
+    setServers(updatedServers);
+    localStorage.setItem(srvKey, JSON.stringify(updatedServers));
+
+    // Delete from Supabase and sync cleanly so it never resurrects
     if (target) {
-      deleteAccountFromSupabase(currentUser, target.ign || target.username);
+      if (target.ign) await deleteAccountFromSupabase(currentUser, target.ign);
+      if (target.username && target.username !== target.ign) {
+        await deleteAccountFromSupabase(currentUser, target.username);
+      }
     }
-    showToast('Minecraft account unlinked.', 'info');
+    await syncAllToSupabase(currentUser, updatedAccounts, updatedServers);
+
+    showToast('Minecraft account unlinked and removed from server profiles.', 'info');
   };
 
   // Server Profile Management
@@ -790,14 +820,16 @@ export default function Dashboard() {
     handleStopServer(activeServer.id);
   };
 
-  // Accounts assigned to current Server Profile
+  // Accounts assigned to current Server Profile (strictly filtered to existing accounts)
   const profileAccountIds = useMemo(() => {
     if (!activeServer) return [];
+    const validAccountIds = new Set(accounts.map((a) => a.id));
     if (Array.isArray(activeServer.assignedAccountIds)) {
-      return activeServer.assignedAccountIds;
+      return activeServer.assignedAccountIds.filter((id) => validAccountIds.has(id));
     }
-    // Default fallback: if accountId is set, assign it, otherwise all linked accounts
-    return activeServer.accountId ? [activeServer.accountId] : accounts.map((a) => a.id);
+    return activeServer.accountId && validAccountIds.has(activeServer.accountId)
+      ? [activeServer.accountId]
+      : [];
   }, [activeServer, accounts]);
 
   const assignedAccounts = useMemo(() => {
@@ -1118,6 +1150,11 @@ export default function Dashboard() {
                 const isSelected = srv.id === activeServerId;
                 const srvState = botStates[srv.id] || 'DISCONNECTED';
                 const isRunning = srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
+                const srvAssignedCount = (
+                  Array.isArray(srv.assignedAccountIds)
+                    ? srv.assignedAccountIds
+                    : srv.accountId ? [srv.accountId] : []
+                ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
 
                 return (
                   <div key={srv.id} className="space-y-1 pt-1">
@@ -1141,7 +1178,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 shrink-0">
                         <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600' : 'text-slate-400'}`} />
-                        <span>{isRunning ? '1' : '0'}/1</span>
+                        <span>{isRunning ? '1' : '0'}/{srvAssignedCount}</span>
                       </div>
                     </button>
 
@@ -1322,7 +1359,7 @@ export default function Dashboard() {
                             <Globe className="w-3.5 h-3.5 text-slate-400" />
                             <span>{srv.serverHost}:{srv.serverPort}</span>
                           </div>
-                          {assigned && (
+                          {assigned ? (
                             <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
                               <div className="w-5 h-5 rounded-xs overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
                                 <img
@@ -1332,6 +1369,10 @@ export default function Dashboard() {
                                 />
                               </div>
                               <span className="text-xs text-slate-800 font-bold">{assigned.ign || assigned.username}</span>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 font-medium">
+                              No accounts assigned
                             </div>
                           )}
                         </div>

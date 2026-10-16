@@ -4,6 +4,7 @@ import { MinecraftAccount, ServerProfile } from '@/types';
 /**
  * Ensures all verified accounts and configured servers are persisted in Supabase
  * under the current user's profile, so Termux user-summary always has accurate counts.
+ * Also removes any deleted accounts from Supabase so they never resurrect.
  */
 export async function syncAllToSupabase(currentUser: string, accounts: MinecraftAccount[], servers: ServerProfile[]) {
   if (!supabase || !currentUser) return;
@@ -17,12 +18,31 @@ export async function syncAllToSupabase(currentUser: string, accounts: Minecraft
       .select('id, bot_name, server_host')
       .ilike('username', cleanUser);
 
-    const existingBotNames = new Set(
-      (existingRows || []).map((r) => (r.bot_name || '').trim().toLowerCase()).filter(Boolean)
+    // Active verified Minecraft IGNs
+    const currentActiveIgns = new Set(
+      accounts
+        .filter((a) => a.verified)
+        .map((a) => (a.ign || a.username || '').trim().toLowerCase())
+        .filter((name) => name && !name.includes('@'))
     );
 
-    // 2. Sync all verified accounts
+    // Clean up any rows in Supabase that are no longer in accounts
+    for (const row of existingRows || []) {
+      const botName = (row.bot_name || '').trim().toLowerCase();
+      if (botName && !currentActiveIgns.has(botName)) {
+        await supabase.from('accounts').delete().eq('id', row.id);
+      }
+    }
+
+    // 2. Insert any accounts present in state that aren't yet in Supabase
+    const existingBotNames = new Set(
+      (existingRows || [])
+        .map((r) => (r.bot_name || '').trim().toLowerCase())
+        .filter((n) => currentActiveIgns.has(n))
+    );
+
     for (const acc of accounts) {
+      if (!acc.verified) continue; // Only sync verified accounts!
       const ign = (acc.ign || acc.username || '').trim();
       if (!ign || ign.includes('@')) continue;
 
@@ -68,11 +88,13 @@ export async function syncAllToSupabase(currentUser: string, accounts: Minecraft
 export async function deleteAccountFromSupabase(currentUser: string, ign: string) {
   if (!supabase || !currentUser || !ign) return;
   try {
+    const cleanUser = currentUser.trim();
+    const cleanIgn = ign.trim();
     await supabase
       .from('accounts')
       .delete()
-      .ilike('username', currentUser.trim())
-      .ilike('bot_name', ign.trim());
+      .ilike('username', cleanUser)
+      .ilike('bot_name', cleanIgn);
   } catch (err) {
     console.warn('Failed to delete account from Supabase:', err);
   }
