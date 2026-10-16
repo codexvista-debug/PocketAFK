@@ -1266,7 +1266,7 @@ export default function Dashboard() {
     botState === 'SPAWNED' || botState === 'LOGGED_IN' || botState === 'CONNECTING';
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-100/50 via-slate-50 to-sky-100/40 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20">
+    <div className="min-h-screen bg-[#f1f5f9] bg-grid-slate text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20">
       {/* Toast Notification Container */}
       <ModernToast toast={toast} onDismiss={handleDismissToast} />
 
@@ -1382,48 +1382,55 @@ export default function Dashboard() {
           {/* LEFT SIDEBAR */}
           <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs">
             {/* Logo Bar */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center font-black text-sm shadow-2xs">
-                  P
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20">
+                  ⛏
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
-                    <span className={`w-2 h-2 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    <span className={`w-2 h-2 rounded-full ring-2 ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 ring-emerald-500/30 animate-pulse' : 'bg-rose-500 ring-rose-500/30'}`} />
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono">24/7 Java Core</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500 font-mono font-medium">v2.4 Java Core</span>
+                    <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">PRO</span>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Top Navigation Items */}
-            <div className="p-3 space-y-1">
+            <div className="p-3 space-y-1.5">
               <button
                 onClick={() => setActiveMainView('servers')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'servers'
-                    ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                 }`}
               >
-                <Server className="w-4 h-4 text-emerald-600" />
-                Servers
+                <div className={`p-1 rounded-lg ${activeMainView === 'servers' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <Server className="w-3.5 h-3.5" />
+                </div>
+                <span>Servers</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView('accounts')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'accounts'
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-sky-50 text-sky-900 border border-sky-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4 text-emerald-600" />
-                  Accounts
+                  <div className={`p-1 rounded-lg ${activeMainView === 'accounts' ? 'bg-sky-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Accounts</span>
                 </div>
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-mono font-bold">
+                <span className="text-[10px] bg-white text-sky-700 border border-sky-200 px-2 py-0.5 rounded-full font-mono font-bold shadow-2xs">
                   {accounts.length}/{currentRankConfig.maxAccounts}
                 </span>
               </button>
@@ -1485,94 +1492,96 @@ export default function Dashboard() {
                           setActiveServerId(srv.id);
                           setActiveMainView('profile');
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                           isSelected && activeMainView === 'profile'
-                            ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
-                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
+                            ? 'bg-emerald-50/70 text-slate-900 border border-emerald-300/80 shadow-xs'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100/70'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 truncate">
                           <ServerLogo host={srv.serverHost} name={srv.name} size="w-5 h-5" />
                           <span className="truncate">{srv.name}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 shrink-0">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono shrink-0">
                           <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600' : 'text-slate-400'}`} />
-                          <span>{isRunning ? '1' : '0'}/{srvAssignedCount}</span>
+                          <span className={`px-1.5 py-0.2 rounded-md ${isRunning ? 'bg-emerald-100 text-emerald-800 font-bold' : 'text-slate-500'}`}>
+                            {isRunning ? '1' : '0'}/{srvAssignedCount}
+                          </span>
                         </div>
                       </button>
 
                     {/* Sub-Feature Tabs */}
                     {isSelected && activeMainView === 'profile' && (
-                      <div className="ml-3 pl-3 border-l border-slate-200 space-y-0.5 pt-0.5">
+                      <div className="ml-3 pl-3 border-l-2 border-slate-200 space-y-1 pt-1">
                         <button
                           onClick={() => setActiveSubTab('connect')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'connect'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <Home className="w-3.5 h-3.5" />
+                          <Home className={`w-3.5 h-3.5 ${activeSubTab === 'connect' ? 'text-emerald-600' : 'text-slate-400'}`} />
                           Connect
                         </button>
 
                         <button
                           onClick={() => setActiveSubTab('chat')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'chat'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-sky-50 text-sky-800 border border-sky-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
+                          <MessageSquare className={`w-3.5 h-3.5 ${activeSubTab === 'chat' ? 'text-sky-600' : 'text-slate-400'}`} />
                           Chat
                         </button>
 
                         <button
                           onClick={() => setActiveSubTab('movement')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'movement'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <Compass className="w-3.5 h-3.5" />
+                          <Compass className={`w-3.5 h-3.5 ${activeSubTab === 'movement' ? 'text-amber-600' : 'text-slate-400'}`} />
                           Movement
                         </button>
 
                         <button
                           onClick={() => setActiveSubTab('inventory')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'inventory'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-purple-50 text-purple-800 border border-purple-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <Box className="w-3.5 h-3.5" />
+                          <Box className={`w-3.5 h-3.5 ${activeSubTab === 'inventory' ? 'text-purple-600' : 'text-slate-400'}`} />
                           Inventory
                         </button>
 
                         <button
                           onClick={() => setActiveSubTab('pov')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'pov'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className={`w-3.5 h-3.5 ${activeSubTab === 'pov' ? 'text-rose-600' : 'text-slate-400'}`} />
                           POV
                         </button>
 
                         <button
                           onClick={() => setActiveSubTab('settings')}
-                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'settings'
-                              ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                              ? 'bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                           }`}
                         >
-                          <Sliders className="w-3.5 h-3.5" />
+                          <Sliders className={`w-3.5 h-3.5 ${activeSubTab === 'settings' ? 'text-slate-600' : 'text-slate-400'}`} />
                           Settings
                         </button>
                       </div>
@@ -1613,16 +1622,30 @@ export default function Dashboard() {
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
             {/* Top Navigation & Status Bar */}
-            <header className="h-14 border-b border-slate-200 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0 shadow-2xs">
-              <div className="flex items-center gap-2 text-xs font-bold">
-                {activeMainView === 'profile' ? (
+            <header className="h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-6 flex items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-2.5 text-xs font-bold">
+                {activeMainView === 'profile' && activeServer ? (
                   <>
-                    <span className="text-slate-500">{activeServer?.name || 'Server'}</span>
-                    <span className="text-slate-300">/</span>
-                    <span className="text-emerald-700 uppercase tracking-wider">{activeSubTab}</span>
+                    <div className="flex items-center gap-2">
+                      <ServerLogo host={activeServer.serverHost} name={activeServer.name} size="w-5 h-5" />
+                      <span className="text-slate-800 font-extrabold">{activeServer.name}</span>
+                    </div>
+                    <span className="text-slate-300 font-normal">/</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border shadow-2xs ${
+                      activeSubTab === 'connect' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
+                      activeSubTab === 'chat' ? 'bg-sky-50 text-sky-800 border-sky-300' :
+                      activeSubTab === 'movement' ? 'bg-amber-50 text-amber-800 border-amber-300' :
+                      activeSubTab === 'inventory' ? 'bg-purple-50 text-purple-800 border-purple-300' :
+                      activeSubTab === 'pov' ? 'bg-rose-50 text-rose-800 border-rose-300' :
+                      'bg-slate-100 text-slate-800 border-slate-300'
+                    }`}>
+                      {activeSubTab}
+                    </span>
                   </>
                 ) : (
-                  <span className="text-emerald-700 uppercase tracking-wider">{activeMainView}</span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-200">
+                    {activeMainView}
+                  </span>
                 )}
               </div>
 
@@ -1630,13 +1653,20 @@ export default function Dashboard() {
                 {/* Termux Tunnel Status */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-slate-50 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-bold border border-slate-200 bg-white hover:bg-slate-50 transition cursor-pointer shadow-xs"
                 >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                    }`}
-                  />
+                  <span className="relative flex h-2 w-2">
+                    <span
+                      className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                        socketStatus === 'AUTHENTICATED' ? 'bg-emerald-400' : 'bg-rose-400'
+                      }`}
+                    />
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500' : 'bg-rose-500'
+                      }`}
+                    />
+                  </span>
                   <span className="text-slate-700">
                     {socketStatus === 'AUTHENTICATED' ? 'Daemon Online' : 'Daemon Offline'}
                   </span>
@@ -1645,7 +1675,7 @@ export default function Dashboard() {
             </header>
 
             {/* TAB CONTENT PANELS */}
-            <div className="p-4 sm:p-6 flex-1 max-w-6xl w-full">
+            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto">
               {/* VIEW: SERVERS OVERVIEW */}
               {activeMainView === 'servers' && (
                 <div className="space-y-4">
@@ -2437,18 +2467,35 @@ export default function Dashboard() {
 
                   {/* SUB-TAB 2: CHAT */}
                   {activeSubTab === 'chat' && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col h-[calc(100vh-140px)] min-h-[580px] space-y-3">
+                      <div className="flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2.5">
                           <span className="text-xs font-bold text-slate-600">Chat receivers:</span>
-                          <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-emerald-700 shadow-2xs">
-                            {activeAccount?.ign || activeAccount?.username || 'All accounts'}
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
+                            {activeAccount?.ign ? (
+                              <img
+                                src={`https://minotar.net/helm/${encodeURIComponent(activeAccount.ign)}/20.png`}
+                                alt={activeAccount.ign}
+                                className="w-5 h-5 rounded-md shadow-2xs border border-slate-200"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-md bg-emerald-100 border border-emerald-300 flex items-center justify-center text-[10px] font-bold text-emerald-800">
+                                ⛏
+                              </div>
+                            )}
+                            <span className="text-xs font-black text-slate-800 tracking-tight">
+                              {activeAccount?.ign || activeAccount?.username || 'All accounts'}
+                            </span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          </div>
                         </div>
                       </div>
 
                       {/* In-Game Minecraft Styled Console */}
-                      <div className="h-[540px]">
+                      <div className="flex-1 min-h-0">
                         <Terminal
                           messages={messages}
                           onSendMessage={(msg) => sendChat(activeServer.id, msg)}
