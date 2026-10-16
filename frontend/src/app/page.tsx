@@ -70,7 +70,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'profile' | 'servers' | 'accounts' | 'proxies';
+type MainView = 'profile' | 'servers' | 'accounts';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 export default function Dashboard() {
@@ -276,7 +276,6 @@ export default function Dashboard() {
               console.log('[PocketAFK] Auto-syncing discovered daemon tunnel:', targetUrl);
               saveSettings(targetUrl, authToken);
               setAutoSynced(true);
-              showToast('Discovered Termux daemon tunnel! Connecting...', 'success');
             }
           }
         }
@@ -949,18 +948,6 @@ export default function Dashboard() {
                   {accounts.length}/5
                 </span>
               </button>
-
-              <button
-                onClick={() => setActiveMainView('proxies')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  activeMainView === 'proxies'
-                    ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Radio className="w-4 h-4 text-emerald-600" />
-                Proxies & Termux
-              </button>
             </div>
 
             <div className="border-t border-slate-200 my-1" />
@@ -1403,42 +1390,6 @@ export default function Dashboard() {
                         )}
                       </tbody>
                     </table>
-                  </div>
-                </div>
-              )}
-
-              {/* VIEW: PROXIES & TERMUX */}
-              {activeMainView === 'proxies' && (
-                <div className="max-w-2xl space-y-4">
-                  <div>
-                    <h2 className="text-lg font-black text-slate-900">Proxies & Termux Bridge</h2>
-                    <p className="text-xs text-slate-500">Connect your Android Termux daemon to run 24/7 bots headless.</p>
-                  </div>
-
-                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-5 h-5 text-emerald-600" />
-                        <span className="text-sm font-bold text-slate-900">Termux 1-Click Command</span>
-                      </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
-                        {socketStatus === 'AUTHENTICATED' ? 'Connected' : 'Waiting for connection'}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-emerald-700 break-all select-all">
-                      {termuxCommand}
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(termuxCommand);
-                        showToast('Copied Termux 1-click command!', 'success');
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition cursor-pointer"
-                    >
-                      📋 Copy Termux Command
-                    </button>
                   </div>
                 </div>
               )}

@@ -104,6 +104,10 @@ export function useDaemonSocket(
 
       ws.onopen = () => {
         setStatus('CONNECTED');
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
         ws.send(JSON.stringify({
           type: 'AUTH',
           payload: { token: authToken }
@@ -187,10 +191,19 @@ export function useDaemonSocket(
       ws.onclose = () => {
         setStatus('DISCONNECTED');
         socketRef.current = null;
+        if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
+          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, 2500);
+        }
       };
 
       ws.onerror = () => {
         setStatus('DISCONNECTED');
+        try {
+          ws.close();
+        } catch (e) {}
       };
     } catch (e) {
       setStatus('DISCONNECTED');
