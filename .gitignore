@@ -37,3 +37,5 @@ Thumbs.db
 # Mineflayer auth cache (contains sensitive session tokens on device)
 daemon/profiles/
 daemon/nconf.json
+tokens/
+daemon/tokens/

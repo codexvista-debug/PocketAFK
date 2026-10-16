@@ -44,19 +44,26 @@ export class PocketBotInstance {
         ? this.config.username.split('@')[0]
         : this.config.username;
 
-      // Central tokens directory: share tokens with VistaAFK/Termux profiles
+      // Central tokens directory: share tokens across Termux, VistaAFK, and home directory
       const tokenFolder = path.resolve(process.cwd(), 'tokens');
-      const profilesFolder = path.resolve(process.cwd(), 'profiles');
-      const vistaTokensFolder = path.resolve(process.cwd(), '..', 'VistaAFK', 'tokens');
-      const homeTokensFolder = path.resolve(process.env.HOME || '', 'tokens');
-
       if (!fs.existsSync(tokenFolder)) {
         try { fs.mkdirSync(tokenFolder, { recursive: true }); } catch (e) {}
       }
 
-      // Automatically copy any cached Microsoft tokens from VistaAFK or profiles
-      for (const srcDir of [vistaTokensFolder, homeTokensFolder, profilesFolder]) {
-        if (fs.existsSync(srcDir)) {
+      const possibleTokenDirs = [
+        path.resolve(process.cwd(), '..', 'tokens'),
+        path.resolve(process.cwd(), 'profiles'),
+        path.resolve(process.cwd(), '..', 'VistaAFK', 'tokens'),
+        path.resolve(process.cwd(), '..', 'VistaAFK', 'daemon', 'tokens'),
+        path.resolve(process.env.HOME || '', 'tokens'),
+        path.resolve(process.env.HOME || '', 'VistaAFK', 'tokens'),
+        path.resolve(process.env.HOME || '', 'VistaAFK', 'daemon', 'tokens'),
+        path.resolve(process.env.HOME || '', 'PocketAFK', 'tokens'),
+        path.resolve(process.env.HOME || '', 'PocketAFK', 'daemon', 'tokens'),
+      ];
+
+      for (const srcDir of possibleTokenDirs) {
+        if (fs.existsSync(srcDir) && srcDir !== tokenFolder) {
           try {
             const files = fs.readdirSync(srcDir);
             for (const f of files) {
@@ -71,7 +78,8 @@ export class PocketBotInstance {
         }
       }
 
-      const authMode = this.config.authType === 'offline' ? 'offline' : 'microsoft';
+      // Always official Microsoft Java mode (100% compatible with real public Minecraft servers)
+      const authMode: 'microsoft' = 'microsoft';
 
       this.bot = mineflayer.createBot({
         host: this.config.host,
@@ -88,6 +96,13 @@ export class PocketBotInstance {
           const directUri = userCode
             ? `https://www.microsoft.com/link?otc=${encodeURIComponent(userCode)}&prompt=select_account`
             : baseUri;
+
+          console.log('\n======================================================');
+          console.log(`🔑 [MICROSOFT AUTHENTICATION REQUIRED]`);
+          console.log(`👉 Link: ${directUri}`);
+          console.log(`👉 Code: ${userCode}`);
+          console.log(`Open the link in your browser to authorize Java account: ${cleanUsername}`);
+          console.log('======================================================\n');
 
           this.broadcast({
             type: 'MS_AUTH_CODE',

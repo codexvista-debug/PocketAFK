@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ServerProfile, MinecraftAccount, BotSettings } from '../types';
-import { X, Server, Globe, Cpu, Shield, Zap, Sparkles, Swords, Trash2, UserPlus, Check, Key } from 'lucide-react';
+import { X, Server, Globe, Cpu, Shield, Sparkles, Swords, Trash2, UserPlus, Check } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
 interface ServerProfileModalProps {
@@ -59,7 +59,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState(25565);
   const [serverVersion, setServerVersion] = useState('auto');
-  const [authType, setAuthType] = useState<'offline' | 'microsoft'>('microsoft');
   const [autoReconnect, setAutoReconnect] = useState(true);
   const [settings, setSettings] = useState<BotSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
@@ -77,7 +76,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
       setServerHost(initialProfile.serverHost);
       setServerPort(initialProfile.serverPort || 25565);
       setServerVersion(initialProfile.serverVersion || 'auto');
-      setAuthType(initialProfile.authType || 'microsoft');
       setAutoReconnect(initialProfile.autoReconnect ?? true);
       setSettings(initialProfile.settings || DEFAULT_SETTINGS);
     } else {
@@ -86,7 +84,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
       setServerHost('');
       setServerPort(25565);
       setServerVersion('auto');
-      setAuthType('microsoft');
       setAutoReconnect(true);
       setSettings(DEFAULT_SETTINGS);
     }
@@ -113,7 +110,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
         serverHost: serverHost.trim(),
         serverPort: Number(serverPort) || 25565,
         serverVersion: serverVersion.trim() || 'auto',
-        authType,
+        authType: 'microsoft',
         autoReconnect,
         settings,
       };
@@ -155,16 +152,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
 
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-          {/* Linked PocketAFK User */}
-          {currentUser && (
-            <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
-              <span className="text-slate-600 font-semibold">Linked PocketAFK User:</span>
-              <span className="font-extrabold text-emerald-800 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg font-mono shadow-2xs">
-                @{currentUser}
-              </span>
-            </div>
-          )}
-
           {/* Server Profile Name */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -277,49 +264,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
             <p className="text-[11px] text-slate-500 mt-1">
               PocketAFK automatically negotiates server version handshake by default.
             </p>
-          </div>
-
-          {/* Authentication Mode */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5 text-slate-500" />
-              Connection Authentication Mode
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAuthType('microsoft')}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  authType === 'microsoft'
-                    ? 'bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500/20 text-emerald-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <div className="font-bold text-xs flex items-center gap-1.5 text-emerald-800">
-                  <Shield className="w-3.5 h-3.5 text-emerald-600" /> Microsoft Online Mode (Premium)
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Official Mojang session verification. Required for public networks like FreshSMP and Hypixel.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAuthType('offline')}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  authType === 'offline'
-                    ? 'bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500/20 text-emerald-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <div className="font-bold text-xs flex items-center gap-1.5 text-slate-800">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" /> Direct Java Handshake (Cracked)
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Only for unofficial / offline-mode cracked servers. Public networks will kick cracked players.
-                </div>
-              </button>
-            </div>
           </div>
 
           {/* Toggles & Behavior */}

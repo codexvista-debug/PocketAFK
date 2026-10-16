@@ -319,11 +319,12 @@ export default function Dashboard() {
         }
       }
 
-      // Self-heal account IDs and link pocketUser
+      // Self-heal account IDs, enforce microsoft auth, and link pocketUser
       loadedServers = loadedServers.map((srv) => {
         const matched = resolveServerAccount(srv);
         return {
           ...srv,
+          authType: 'microsoft',
           pocketUser: srv.pocketUser || currentUser,
           accountId: matched ? matched.id : srv.accountId,
         };
@@ -377,7 +378,7 @@ export default function Dashboard() {
                   serverHost: row.server_host || 'donutsmp.net',
                   serverPort: row.server_port || 25565,
                   serverVersion: row.server_version || 'auto',
-                  authType: row.auth_type || 'offline',
+                  authType: 'microsoft',
                   autoReconnect: row.auto_reconnect ?? true,
                   settings: row.settings || DEFAULT_BOT_SETTINGS,
                 });
@@ -574,7 +575,7 @@ export default function Dashboard() {
             server_port: profile.serverPort,
             server_version: profile.serverVersion,
             bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
-            auth_type: profile.authType || 'offline',
+            auth_type: 'microsoft',
             auto_reconnect: profile.autoReconnect,
             settings: profile.settings,
           }).eq('id', dbId).eq('username', currentUser);
@@ -582,7 +583,7 @@ export default function Dashboard() {
           const { data } = await supabase.from('accounts').insert([{
             username: currentUser,
             bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
-            auth_type: profile.authType || 'offline',
+            auth_type: 'microsoft',
             server_host: profile.serverHost,
             server_port: profile.serverPort,
             server_version: profile.serverVersion,
@@ -642,14 +643,13 @@ export default function Dashboard() {
       return;
     }
 
-    const cleanPlayerName = (acc.ign && !acc.ign.includes('@'))
-      ? acc.ign
-      : (!acc.username.includes('@') ? acc.username : 'V3locitz');
+    const cleanPlayerName = acc.ign?.trim()
+      || (!acc.username.includes('@') ? acc.username.trim() : acc.username.split('@')[0].trim());
 
     startBot({
       id: profile.id,
       username: cleanPlayerName,
-      authType: profile.authType || 'microsoft',
+      authType: 'microsoft',
       host: profile.serverHost,
       port: profile.serverPort,
       version: profile.serverVersion === 'auto' ? false : profile.serverVersion,
@@ -931,9 +931,6 @@ export default function Dashboard() {
                                   <span className="font-extrabold text-xs text-slate-900 truncate">
                                     {srv.name}
                                   </span>
-                                  <span className="text-[10px] text-emerald-800 font-bold font-mono bg-emerald-100/70 border border-emerald-300/80 px-1.5 py-0.5 rounded-md">
-                                    @{srv.pocketUser || currentUser}
-                                  </span>
                                   {getStatusBadge(srvState)}
                                 </div>
                                 <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1">
@@ -1028,9 +1025,6 @@ export default function Dashboard() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h2 className="font-black text-slate-900 text-sm">{activeServer.name}</h2>
-                            <span className="text-[10px] text-emerald-800 font-bold font-mono bg-emerald-100/70 border border-emerald-300/80 px-1.5 py-0.5 rounded-md">
-                              @{activeServer.pocketUser || currentUser}
-                            </span>
                             {getStatusBadge(botState)}
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5 flex-wrap">
