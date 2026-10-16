@@ -38,10 +38,14 @@ export class PocketBotInstance {
     });
 
     try {
+      const cleanUsername = this.config.username.includes('@')
+        ? this.config.username.split('@')[0]
+        : this.config.username;
+
       this.bot = mineflayer.createBot({
         host: this.config.host,
         port: this.config.port,
-        username: this.config.username,
+        username: cleanUsername,
         auth: this.config.authType === 'microsoft' ? 'microsoft' : 'offline',
         version: this.config.version && this.config.version !== 'auto' ? this.config.version : undefined,
         profilesFolder: './profiles', // Caches OAuth tokens locally on device

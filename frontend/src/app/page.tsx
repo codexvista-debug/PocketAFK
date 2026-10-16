@@ -13,6 +13,7 @@ import { AccountModal } from '../components/AccountModal';
 import { ServerProfileModal } from '../components/ServerProfileModal';
 import { AuthModal } from '../components/AuthModal';
 import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
+import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { supabase } from '../lib/supabaseClient';
 import { 
   Play, 
@@ -100,7 +101,12 @@ export default function Dashboard() {
   const [isPollingMs, setIsPollingMs] = useState(false);
   const [msAuthError, setMsAuthError] = useState<string | null>(null);
   const [pendingEmail, setPendingEmail] = useState<string>('');
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const pollingTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ id: Math.random().toString(), message, type });
+  }, []);
 
   // Clean up polling timer on unmount
   useEffect(() => {
@@ -248,13 +254,26 @@ export default function Dashboard() {
       const accKey = `pocketafk_accounts_${currentUser}`;
       const srvKey = `pocketafk_servers_${currentUser}`;
 
-      // 1. Load accounts from storage (ONLY verified accounts!)
+      // 1. Load accounts from storage (strictly in-game IGNs, no emails!)
       const storedAcc = localStorage.getItem(accKey);
       let loadedAccounts: MinecraftAccount[] = [];
       if (storedAcc) {
         try {
           const parsed = JSON.parse(storedAcc);
-          loadedAccounts = parsed.filter((a: any) => !a.id.startsWith('starter-') && a.verified === true);
+          loadedAccounts = parsed
+            .filter((a: any) => !a.id.startsWith('starter-') && a.verified === true)
+            .map((a: any) => {
+              const cleanIgn = (a.ign && !a.ign.includes('@'))
+                ? a.ign
+                : (!a.username.includes('@') ? a.username : 'V3locitz');
+              return {
+                ...a,
+                username: cleanIgn,
+                ign: cleanIgn,
+              };
+            });
+          // Scrub legacy emails from storage
+          localStorage.setItem(accKey, JSON.stringify(loadedAccounts));
         } catch (e) {
           // ignore
         }
@@ -286,13 +305,15 @@ export default function Dashboard() {
 
             data.forEach((row) => {
               const accId = `acc_${row.id}`;
-              const isVerified = Boolean(row.bot_name && !row.bot_name.includes('@'));
-              if (isVerified) {
+              const cleanName = (row.bot_name && !row.bot_name.includes('@'))
+                ? row.bot_name
+                : null;
+              if (cleanName) {
                 dbAccounts.push({
                   id: accId,
-                  username: row.bot_name,
+                  username: cleanName,
                   auth_type: 'microsoft',
-                  ign: row.bot_name,
+                  ign: cleanName,
                   verified: true,
                   addedAt: Date.now(),
                 });
@@ -335,14 +356,14 @@ export default function Dashboard() {
     }
 
     if (accounts.filter((a) => a.verified).length >= 5) {
-      alert('Maximum limit of 5 accounts reached. Please delete an existing account to add another.');
+      showToast('Maximum limit of 5 accounts reached. Please delete an existing account to add another.', 'error');
       return;
     }
 
     try {
       const res = await fetch(`/api/minecraft-profile?username=${encodeURIComponent(username)}`);
       const data = await res.json();
-      const finalIgn = data.ign || username.trim();
+      const finalIgn = (data.ign && !data.ign.includes('@')) ? data.ign : username.trim().split('@')[0];
       const finalUuid = data.uuid || '';
 
       const newAccount: MinecraftAccount = {
@@ -380,9 +401,9 @@ export default function Dashboard() {
           .then(null, (e: any) => console.warn('Supabase account save error:', e));
       }
 
-      alert(`✅ Minecraft Java account @${finalIgn} linked successfully!`);
+      showToast(`Minecraft Java account @${finalIgn} linked successfully!`, 'success');
     } catch (e: any) {
-      alert(`Could not add account: ${e.message}`);
+      showToast(`Could not add account: ${e.message}`, 'error');
     }
   };
 
@@ -403,6 +424,7 @@ export default function Dashboard() {
         .eq('bot_name', ign)
         .then(null, () => {});
     }
+    showToast('Minecraft account unlinked.', 'info');
   };
 
   // Server Management
@@ -412,7 +434,7 @@ export default function Dashboard() {
     const existingIndex = servers.findIndex((s) => s.id === profile.id);
 
     if (existingIndex < 0 && servers.length >= 3) {
-      alert('Maximum limit of 3 servers reached. Please delete or edit an existing server.');
+      showToast('Maximum limit of 3 servers reached. Please delete or edit an existing server.', 'error');
       return;
     }
 
@@ -431,10 +453,11 @@ export default function Dashboard() {
     if (supabase && currentUser) {
       try {
         const assignedAcc = accounts.find((a) => a.id === profile.accountId);
+        const playerIgn = assignedAcc?.ign || assignedAcc?.username || profile.name;
         await supabase.from('accounts').upsert([{
           username: currentUser,
-          bot_name: assignedAcc?.ign || assignedAcc?.username || profile.name,
-          auth_type: 'microsoft',
+          bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
+          auth_type: profile.authType || 'offline',
           server_host: profile.serverHost,
           server_port: profile.serverPort,
           server_version: profile.serverVersion,
@@ -445,6 +468,7 @@ export default function Dashboard() {
         // ignore
       }
     }
+    showToast(`Server "${profile.name}" saved.`, 'success');
   };
 
   const handleDeleteServer = async (profileId: string) => {
@@ -458,25 +482,31 @@ export default function Dashboard() {
     if (activeServerId === profileId) {
       setActiveServerId(updated[0]?.id || null);
     }
+    showToast('Server instance deleted.', 'info');
   };
 
   // Start / Stop active server
   const handleStartServer = (profile: ServerProfile) => {
     const acc = accounts.find((a) => a.id === profile.accountId);
     if (!acc) {
-      alert('Please assign a Minecraft Java account to this server first!');
+      showToast('Please assign a Minecraft Java account to this server first!', 'error');
       return;
     }
 
+    const cleanPlayerName = (acc.ign && !acc.ign.includes('@'))
+      ? acc.ign
+      : (!acc.username.includes('@') ? acc.username : 'V3locitz');
+
     startBot({
       id: profile.id,
-      username: acc.username,
-      authType: 'microsoft',
+      username: cleanPlayerName,
+      authType: profile.authType || 'offline',
       host: profile.serverHost,
       port: profile.serverPort,
       version: profile.serverVersion === 'auto' ? false : profile.serverVersion,
       settings: profile.settings || DEFAULT_BOT_SETTINGS,
     });
+    showToast(`Connecting to ${profile.serverHost} as @${cleanPlayerName}...`, 'info');
   };
 
   const handleStopServer = (profileId: string) => {
@@ -669,7 +699,7 @@ export default function Dashboard() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(termuxCommand);
-                      alert(`Copied 1-click Termux command for user @${effectiveUser}!`);
+                      showToast(`Copied 1-click Termux command for user @${effectiveUser}!`, 'success');
                     }}
                     className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
                   >
@@ -702,7 +732,7 @@ export default function Dashboard() {
                       disabled={servers.length >= 3}
                       onClick={() => {
                         if (servers.length >= 3) {
-                          alert('Maximum of 3 servers reached.');
+                          showToast('Maximum of 3 servers reached.', 'error');
                           return;
                         }
                         setEditingServer(null);
@@ -1100,6 +1130,9 @@ export default function Dashboard() {
           clearMsAuth();
         }}
       />
+
+      {/* Modern In-App Toast Notifications */}
+      <ModernToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

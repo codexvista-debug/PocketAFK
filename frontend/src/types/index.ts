@@ -32,6 +32,7 @@ export interface ServerProfile {
   serverHost: string;             // Hostname / IP (e.g. "donutsmp.net", "mc.hypixel.net")
   serverPort: number;             // Port (default: 25565)
   serverVersion: string;          // Minecraft version (default: "auto", or "1.20.4", etc.)
+  authType?: 'offline' | 'microsoft'; // Direct / Instant vs Microsoft Online
   autoReconnect: boolean;         // Auto reconnect on kick
   settings: BotSettings;          // Instance-specific AFK & physics settings
 }
