@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { BotSettings } from '../types';
-import { X, Sliders, ShieldAlert, Network, CheckCircle2 } from 'lucide-react';
+import { X, Network, CheckCircle2, Terminal } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,8 +9,6 @@ interface SettingsModalProps {
   daemonUrl: string;
   authToken: string;
   onSaveDaemonSettings: (url: string, token: string) => void;
-  botSettings: BotSettings;
-  onUpdateBotSettings: (settings: Partial<BotSettings>) => void;
   termuxCommand?: string;
 }
 
@@ -21,8 +18,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   daemonUrl,
   authToken,
   onSaveDaemonSettings,
-  botSettings,
-  onUpdateBotSettings,
   termuxCommand = "curl -sL https://pocketafk.vercel.app/install | bash"
 }) => {
   const [urlInput, setUrlInput] = useState(daemonUrl);
@@ -62,8 +57,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
-            <Sliders className="w-5 h-5 text-emerald-600" />
-            <h2 className="font-bold text-sm text-slate-900">PocketAFK Settings</h2>
+            <Network className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-bold text-sm text-slate-900">Termux Daemon Bridge</h2>
           </div>
           <button
             onClick={onClose}
@@ -146,128 +141,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
             </form>
-          </div>
-
-          {/* Section 2: Engine & Dangerous Settings */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
-              <ShieldAlert className="w-4 h-4 text-amber-600" />
-              Engine & Dangerous Settings
-            </div>
-
-            <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 divide-y divide-slate-200">
-              {/* Physics */}
-              <div className="flex items-center justify-between pt-2 pb-2 first:pt-0">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Physics Engine</div>
-                  <div className="text-[11px] text-slate-600">
-                    Be affected by gravity, water and block collisions. (Recommended ON to avoid anticheat flags).
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.physics}
-                  onChange={(e) => onUpdateBotSettings({ physics: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Resource Packs */}
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Auto-Accept Resource Packs</div>
-                  <div className="text-[11px] text-slate-600">
-                    Automatically accept server resource pack prompts on join to prevent kick or freeze.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.acceptResourcePacks}
-                  onChange={(e) => onUpdateBotSettings({ acceptResourcePacks: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Mob Farming / Auto Attack */}
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Mob Farm / Entity Attack</div>
-                  <div className="text-[11px] text-slate-600">
-                    Targets nearby mobs, looks at them, and strikes with weapon cooldown (fixes swinging in the air).
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.mobFarm}
-                  onChange={(e) => onUpdateBotSettings({ mobFarm: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Auto Eat (Default: OFF) */}
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Auto-Eat (Off by default)</div>
-                  <div className="text-[11px] text-slate-600">
-                    Automatically equips food from inventory and consumes when hunger is low.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.autoEat}
-                  onChange={(e) => onUpdateBotSettings({ autoEat: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Auto Totem (Default: OFF) */}
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Auto-Totem (Off by default)</div>
-                  <div className="text-[11px] text-slate-600">
-                    Keeps a Totem of Undying equipped in the off-hand.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.autoTotem}
-                  onChange={(e) => onUpdateBotSettings({ autoTotem: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Anti-AFK */}
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Subtle Anti-AFK</div>
-                  <div className="text-[11px] text-slate-600">
-                    Random subtle head yaw/pitch, sneaks, and arm movements to avoid idle kicks.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.antiAfk}
-                  onChange={(e) => onUpdateBotSettings({ antiAfk: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-
-              {/* Auto-Reconnect */}
-              <div className="flex items-center justify-between pt-2">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">Auto-Reconnect</div>
-                  <div className="text-[11px] text-slate-600">
-                    Automatically reconnects with randomized jitter when kicked or disconnected.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={botSettings.autoReconnect}
-                  onChange={(e) => onUpdateBotSettings({ autoReconnect: e.target.checked })}
-                  className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
-                />
-              </div>
-            </div>
           </div>
         </div>
 

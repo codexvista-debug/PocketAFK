@@ -24,6 +24,7 @@ import {
   Server, 
   Globe, 
   ShieldCheck, 
+  ShieldAlert,
   AlertCircle, 
   AlertTriangle,
   ArrowRight, 
@@ -879,6 +880,19 @@ export default function Dashboard() {
     showToast('Server profile removed.', 'info');
   };
 
+  const handleToggleServerSetting = (key: keyof BotSettings, value: boolean) => {
+    if (!activeServer) return;
+    const currentSettings = activeServer.settings || DEFAULT_BOT_SETTINGS;
+    const updatedSettings = { ...currentSettings, [key]: value };
+    const updatedServer: ServerProfile = {
+      ...activeServer,
+      settings: updatedSettings,
+      ...(key === 'autoReconnect' ? { autoReconnect: value } : {}),
+    };
+    handleSaveServer(updatedServer);
+    updateSettings(activeServer.id, { [key]: value });
+  };
+
   // Bot Lifecycle Controls
   const handleStartServer = (profile: ServerProfile, targetAcc?: MinecraftAccount | null) => {
     if (!currentUser) return;
@@ -1112,15 +1126,6 @@ export default function Dashboard() {
         onSaveDaemonSettings={(url, token) => {
           saveSettings(url, token);
           showToast('Termux daemon bridge settings saved.', 'success');
-        }}
-        botSettings={activeServer?.settings || DEFAULT_BOT_SETTINGS}
-        onUpdateBotSettings={(newSettings) => {
-          if (activeServer) {
-            handleSaveServer({
-              ...activeServer,
-              settings: { ...activeServer.settings, ...newSettings },
-            });
-          }
         }}
         termuxCommand={termuxCommand}
       />
@@ -2269,79 +2274,130 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Extra Settings */}
+                      {/* Engine & Automation Settings */}
                       <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
-                        <h3 className="font-bold text-sm text-slate-900">Extra settings</h3>
-
-                        {/* Auto Reconnect */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block">Auto reconnect</span>
-                            <span className="text-[11px] text-slate-500">Reconnect bot if kicked or server restarts</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <ShieldAlert className="w-4 h-4 text-emerald-600" />
+                            <h3 className="font-bold text-sm text-slate-900">Engine & Automation Settings</h3>
                           </div>
-                          <input
-                            type="checkbox"
-                            checked={activeServer.autoReconnect}
-                            onChange={(e) => handleSaveServer({ ...activeServer, autoReconnect: e.target.checked })}
-                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                          />
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Configure survival features, anticheat physics, and reconnection rules for this server profile.
+                          </p>
                         </div>
 
-                        {/* Anti-AFK */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block">Anti-AFK Actions</span>
-                            <span className="text-[11px] text-slate-500">Random pitch, yaw shifts, arm swings and sneaks</span>
+                        <div className="space-y-1 divide-y divide-slate-100">
+                          {/* Physics */}
+                          <div className="flex items-center justify-between pt-2 pb-2 first:pt-0">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Physics Engine</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Be affected by gravity, water and block collisions. (Recommended ON to avoid anticheat flags).
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.physics ?? true}
+                              onChange={(e) => handleToggleServerSetting('physics', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
                           </div>
-                          <input
-                            type="checkbox"
-                            checked={activeServer.settings.antiAfk}
-                            onChange={(e) =>
-                              handleSaveServer({
-                                ...activeServer,
-                                settings: { ...activeServer.settings, antiAfk: e.target.checked },
-                              })
-                            }
-                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                          />
-                        </div>
 
-                        {/* Physics */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block">Physics Engine</span>
-                            <span className="text-[11px] text-slate-500">Keep enabled for servers that require gravity & velocity sync</span>
+                          {/* Auto-Accept Resource Packs */}
+                          <div className="flex items-center justify-between py-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Auto-Accept Resource Packs</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Automatically accept server resource pack prompts on join to prevent kick or freeze.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.acceptResourcePacks ?? true}
+                              onChange={(e) => handleToggleServerSetting('acceptResourcePacks', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
                           </div>
-                          <input
-                            type="checkbox"
-                            checked={activeServer.settings.physics}
-                            onChange={(e) =>
-                              handleSaveServer({
-                                ...activeServer,
-                                settings: { ...activeServer.settings, physics: e.target.checked },
-                              })
-                            }
-                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                          />
-                        </div>
 
-                        {/* Mob Farm Combat */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-slate-800 block">Mob Farm Attack</span>
-                            <span className="text-[11px] text-slate-500">Auto attack hostile mobs within 3.5 blocks</span>
+                          {/* Mob Farm / Entity Attack */}
+                          <div className="flex items-center justify-between py-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Mob Farm / Entity Attack</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Targets nearby mobs, looks at them, and strikes with weapon cooldown (fixes swinging in the air).
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.mobFarm ?? false}
+                              onChange={(e) => handleToggleServerSetting('mobFarm', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
                           </div>
-                          <input
-                            type="checkbox"
-                            checked={activeServer.settings.mobFarm}
-                            onChange={(e) =>
-                              handleSaveServer({
-                                ...activeServer,
-                                settings: { ...activeServer.settings, mobFarm: e.target.checked },
-                              })
-                            }
-                            className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                          />
+
+                          {/* Auto Eat */}
+                          <div className="flex items-center justify-between py-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Auto-Eat (Off by default)</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Automatically equips food from inventory and consumes when hunger is low.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.autoEat ?? false}
+                              onChange={(e) => handleToggleServerSetting('autoEat', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
+                          </div>
+
+                          {/* Auto Totem */}
+                          <div className="flex items-center justify-between py-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Auto-Totem (Off by default)</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Keeps a Totem of Undying equipped in the off-hand.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.autoTotem ?? false}
+                              onChange={(e) => handleToggleServerSetting('autoTotem', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
+                          </div>
+
+                          {/* Subtle Anti-AFK */}
+                          <div className="flex items-center justify-between py-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Subtle Anti-AFK</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Random subtle head yaw/pitch, sneaks, and arm movements to avoid idle kicks.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.settings?.antiAfk ?? true}
+                              onChange={(e) => handleToggleServerSetting('antiAfk', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
+                          </div>
+
+                          {/* Auto-Reconnect */}
+                          <div className="flex items-center justify-between pt-2">
+                            <div className="pr-4">
+                              <span className="text-xs font-bold text-slate-900 block">Auto-Reconnect</span>
+                              <span className="text-[11px] text-slate-500 leading-relaxed block">
+                                Automatically reconnects with randomized jitter when kicked or disconnected.
+                              </span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={activeServer.autoReconnect ?? activeServer.settings?.autoReconnect ?? true}
+                              onChange={(e) => handleToggleServerSetting('autoReconnect', e.target.checked)}
+                              className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                            />
+                          </div>
                         </div>
                       </div>
 
