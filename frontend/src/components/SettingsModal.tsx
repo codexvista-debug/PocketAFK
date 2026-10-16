@@ -12,6 +12,7 @@ interface SettingsModalProps {
   onSaveDaemonSettings: (url: string, token: string) => void;
   botSettings: BotSettings;
   onUpdateBotSettings: (settings: Partial<BotSettings>) => void;
+  termuxCommand?: string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -21,7 +22,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   authToken,
   onSaveDaemonSettings,
   botSettings,
-  onUpdateBotSettings
+  onUpdateBotSettings,
+  termuxCommand = "curl -sL https://pocketafk.vercel.app/install | bash"
 }) => {
   const [urlInput, setUrlInput] = useState(daemonUrl);
   const [tokenInput, setTokenInput] = useState(authToken);
@@ -30,7 +32,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const [copiedCommand, setCopiedCommand] = useState(false);
-  const termuxCommand = "curl -sL https://pocketafk.vercel.app/install | bash";
 
   const handleCopyCommand = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {

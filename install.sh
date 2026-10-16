@@ -57,4 +57,4 @@ fi
 
 # 4. Launch daemon & tunnel
 chmod +x start.sh 2>/dev/null || true
-bash start.sh
+bash start.sh "$1"

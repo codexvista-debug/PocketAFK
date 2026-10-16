@@ -16,6 +16,9 @@ interface HeaderProps {
   socketStatus: SocketStatus;
   botState: BotLifecycleState;
   activeAccount: Account | null;
+  currentUser: string | null;
+  onOpenAuth: () => void;
+  onLogout: () => void;
   onOpenSettings: () => void;
   onOpenAccounts: () => void;
   onStartBot: () => void;
@@ -27,6 +30,9 @@ export const Header: React.FC<HeaderProps> = ({
   socketStatus,
   botState,
   activeAccount,
+  currentUser,
+  onOpenAuth,
+  onLogout,
   onOpenSettings,
   onOpenAccounts,
   onStartBot,
@@ -201,6 +207,29 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <SettingsIcon className="w-4 h-4" />
           </button>
+
+          {/* User Profile / Auth Button */}
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 pl-1 border-l border-slate-200 ml-1">
+              <span className="text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                @{currentUser}
+              </span>
+              <button
+                onClick={onLogout}
+                title="Log out"
+                className="text-[11px] text-slate-500 hover:text-red-600 font-semibold px-1.5 py-1 transition cursor-pointer"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-bold transition shadow-xs cursor-pointer ml-1"
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </div>
     </header>

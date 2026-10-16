@@ -10,6 +10,7 @@ import { Terminal } from '../components/Terminal';
 import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { AccountModal } from '../components/AccountModal';
+import { AuthModal } from '../components/AuthModal';
 import { supabase } from '../lib/supabaseClient';
 import { Swords, Shield, Zap, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
 
@@ -52,9 +53,21 @@ export default function Dashboard() {
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [botSettings, setBotSettings] = useState<BotSettings>(DEFAULT_BOT_SETTINGS);
 
+  const [currentUser, setCurrentUser] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pocketafk_user') || null;
+    }
+    return null;
+  });
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
+
+  // Termux command tailored to the current logged-in username
+  const effectiveUser = currentUser || 'default';
+  const termuxCommand = `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser}`;
 
   // Auto-sync tunnel URL from Termux API or URL search params
   useEffect(() => {
@@ -67,14 +80,13 @@ export default function Dashboard() {
       if (queryTunnel && queryTunnel.startsWith('wss://')) {
         saveSettings(queryTunnel, authToken);
         setAutoSynced(true);
-        // Clean query param from URL bar
         window.history.replaceState({}, document.title, window.location.pathname);
         return;
       }
 
-      // 2. Automatically poll /api/tunnel for active Termux session
+      // 2. Automatically poll /api/tunnel for this specific username
       try {
-        const res = await fetch('/api/tunnel', { cache: 'no-store' });
+        const res = await fetch(`/api/tunnel?username=${encodeURIComponent(effectiveUser)}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.url && data.url.startsWith('wss://') && data.url !== daemonUrl) {
@@ -88,17 +100,32 @@ export default function Dashboard() {
     }
 
     syncTunnel();
-  }, [daemonUrl, authToken, saveSettings]);
+  }, [daemonUrl, authToken, saveSettings, effectiveUser]);
 
-  // Load accounts from Supabase or localStorage fallback
+  // Load accounts from Supabase or localStorage fallback scoped to current user
   useEffect(() => {
     async function loadAccounts() {
-      if (supabase) {
+      const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+
+      if (supabase && currentUser) {
         try {
-          const { data, error } = await supabase.from('accounts').select('*');
+          const { data, error } = await supabase.from('accounts').select('*').eq('username', currentUser);
           if (data && data.length > 0 && !error) {
-            setAccounts(data);
-            setActiveAccount(data[0]);
+            const mapped = data.map((d) => ({
+              id: d.id,
+              username: d.bot_name || d.username,
+              auth_type: d.auth_type,
+              server_host: d.server_host,
+              server_port: d.server_port,
+              server_version: d.server_version,
+              auto_reconnect: d.auto_reconnect,
+              anti_afk: d.anti_afk || { enabled: true, interval: 10 },
+              survival: d.survival || { autoEat: false, autoTotem: false },
+              mob_farm: d.mob_farm || { enabled: false, targetRange: 3.5, attackCooldownMs: 650 },
+              settings: d.settings || { physics: true, acceptResourcePacks: true },
+            }));
+            setAccounts(mapped);
+            setActiveAccount(mapped[0]);
             return;
           }
         } catch (e) {
@@ -106,8 +133,8 @@ export default function Dashboard() {
         }
       }
 
-      // Local storage fallback
-      const stored = localStorage.getItem('pocketafk_local_accounts');
+      // Local storage fallback for this user
+      const stored = localStorage.getItem(userKey);
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
@@ -119,10 +146,10 @@ export default function Dashboard() {
         }
       }
 
-      // Default initial starter account if completely empty
+      // Default initial starter account for this user
       const defaultAcc: Account = {
-        id: 'starter-1',
-        username: 'MyPlayer',
+        id: `starter-${effectiveUser}`,
+        username: currentUser ? `${currentUser}_Bot` : 'MyPlayer',
         auth_type: 'microsoft',
         server_host: 'play.example.com',
         server_port: 25565,
@@ -143,20 +170,47 @@ export default function Dashboard() {
     }
 
     loadAccounts();
-  }, []);
+  }, [currentUser, effectiveUser]);
 
   const handleAddAccount = async (newAccData: Omit<Account, 'id'>) => {
+    const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
     const newAccount: Account = {
       ...newAccData,
       id: Math.random().toString(36).substring(2, 10),
     };
 
-    if (supabase) {
+    if (supabase && currentUser) {
       try {
-        const { data, error } = await supabase.from('accounts').insert([newAccount]).select().single();
+        const { data, error } = await supabase.from('accounts').insert([{
+          username: currentUser,
+          bot_name: newAccount.username,
+          auth_type: newAccount.auth_type,
+          server_host: newAccount.server_host,
+          server_port: newAccount.server_port,
+          server_version: newAccount.server_version,
+          auto_reconnect: newAccount.auto_reconnect,
+          anti_afk: newAccount.anti_afk,
+          survival: newAccount.survival,
+          mob_farm: newAccount.mob_farm,
+          settings: newAccount.settings,
+        }]).select().single();
+
         if (data && !error) {
-          setAccounts((prev) => [...prev, data]);
-          setActiveAccount(data);
+          const mapped: Account = {
+            id: data.id,
+            username: data.bot_name || data.username,
+            auth_type: data.auth_type,
+            server_host: data.server_host,
+            server_port: data.server_port,
+            server_version: data.server_version,
+            auto_reconnect: data.auto_reconnect,
+            anti_afk: data.anti_afk,
+            survival: data.survival,
+            mob_farm: data.mob_farm,
+            settings: data.settings,
+          };
+          setAccounts((prev) => [...prev, mapped]);
+          setActiveAccount(mapped);
           return;
         }
       } catch (e) {
@@ -167,13 +221,14 @@ export default function Dashboard() {
     const updated = [...accounts, newAccount];
     setAccounts(updated);
     setActiveAccount(newAccount);
-    localStorage.setItem('pocketafk_local_accounts', JSON.stringify(updated));
+    localStorage.setItem(userKey, JSON.stringify(updated));
   };
 
   const handleDeleteAccount = async (id: string) => {
-    if (supabase) {
+    const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+    if (supabase && currentUser) {
       try {
-        await supabase.from('accounts').delete().eq('id', id);
+        await supabase.from('accounts').delete().eq('id', id).eq('username', currentUser);
       } catch (e) {
         // ignore
       }
@@ -181,7 +236,7 @@ export default function Dashboard() {
 
     const updated = accounts.filter((a) => a.id !== id);
     setAccounts(updated);
-    localStorage.setItem('pocketafk_local_accounts', JSON.stringify(updated));
+    localStorage.setItem(userKey, JSON.stringify(updated));
     if (activeAccount?.id === id) {
       setActiveAccount(updated[0] || null);
     }
@@ -223,6 +278,16 @@ export default function Dashboard() {
     sendChat(activeAccount.id, msg);
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('pocketafk_user');
+  };
+
+  const handleLoginSuccess = (user: string) => {
+    setCurrentUser(user);
+    localStorage.setItem('pocketafk_user', user);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       {/* Navigation Header */}
@@ -230,6 +295,9 @@ export default function Dashboard() {
         socketStatus={socketStatus}
         botState={botState}
         activeAccount={activeAccount}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAccounts={() => setIsAccountsOpen(true)}
         onStartBot={handleStartBot}
@@ -261,8 +329,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText("curl -sL https://pocketafk.vercel.app/install | bash");
-                  alert("Copied Termux 1-click command to clipboard!");
+                  navigator.clipboard.writeText(termuxCommand);
+                  alert(`Copied 1-click Termux command for user @${effectiveUser}!`);
                 }}
                 className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
               >
@@ -393,6 +461,7 @@ export default function Dashboard() {
         onSaveDaemonSettings={saveSettings}
         botSettings={botSettings}
         onUpdateBotSettings={handleUpdateBotSettings}
+        termuxCommand={termuxCommand}
       />
 
       {/* Accounts & Server Profiles Modal */}
@@ -404,6 +473,13 @@ export default function Dashboard() {
         onSelectAccount={(acc) => setActiveAccount(acc)}
         onAddAccount={handleAddAccount}
         onDeleteAccount={handleDeleteAccount}
+      />
+
+      {/* User Login & Register Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={handleLoginSuccess}
       />
     </div>
   );

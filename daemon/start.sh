@@ -25,7 +25,24 @@ cat << "EOF"
   ██║     ╚██████╔╝╚██████╗██║  ██╗███████╗   ██║   ██║  ██║██║     ██║  ██╗
   ╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝
 EOF
-echo -e "${WHITE}      📱 Pure Java Mineflayer Engine running 24/7 on Android Termux${NC}"
+# Identify user
+APP_USER="$1"
+USER_FILE="$HOME/.pocketafk_user"
+
+if [ -n "$APP_USER" ]; then
+  echo "$APP_USER" > "$USER_FILE"
+elif [ -f "$USER_FILE" ]; then
+  APP_USER=$(cat "$USER_FILE")
+fi
+
+if [ -z "$APP_USER" ]; then
+  echo -ne "${YELLOW}👤 Enter your PocketAFK username (default: guest): ${NC}"
+  read -r INPUT_USER
+  APP_USER="${INPUT_USER:-guest}"
+  echo "$APP_USER" > "$USER_FILE"
+fi
+
+echo -e "  ${WHITE}👤 User Account     :${NC} ${GREEN}@${APP_USER}${NC}"
 echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}\n"
 
 # 1. Acquire Android Wake Lock
@@ -78,10 +95,10 @@ DASHBOARD_SYNC_URL="https://pocketafk.vercel.app/api/tunnel"
 AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}"
 
 # 4. Auto-sync to Vercel Website
-echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to live website...${NC}"
+echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
 SYNC_RESP=$(curl -s -X POST "$DASHBOARD_SYNC_URL" \
   -H "Content-Type: application/json" \
-  -d "{\"url\":\"$WSS_URL\",\"token\":\"\"}" 2>/dev/null)
+  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"\"}" 2>/dev/null)
 
 if echo "$SYNC_RESP" | grep -q "success"; then
   echo -e "      ${GREEN}✓ AUTO-SYNC SUCCESSFUL! No copy-pasting required.${NC}"

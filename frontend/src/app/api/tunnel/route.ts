@@ -1,28 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabaseClient';
 
-// In-memory tunnel store for instant automatic pairing
-let globalTunnel = {
-  url: '',
-  token: '',
-  updatedAt: 0,
-};
+// In-memory cache: username -> { url, token, updatedAt }
+const userTunnels = new Map<string, { url: string; token: string; updatedAt: number }>();
 
-export async function GET() {
-  return NextResponse.json(globalTunnel, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  });
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const username = searchParams.get('username')?.trim().toLowerCase() || 'default';
+
+  // 1. Check in-memory cache first
+  const cached = userTunnels.get(username);
+  if (cached && Date.now() - cached.updatedAt < 1000 * 60 * 60 * 12) { // 12 hours valid
+    return NextResponse.json(cached);
+  }
+
+  // 2. Fallback to Supabase if connected
+  if (supabase) {
+    try {
+      const { data } = await supabase.from('tunnels').select('*').eq('username', username).maybeSingle();
+      if (data) {
+        const tunnelObj = {
+          url: data.daemon_url,
+          token: data.daemon_token || '',
+          updatedAt: new Date(data.updated_at).getTime(),
+        };
+        userTunnels.set(username, tunnelObj);
+        return NextResponse.json(tunnelObj);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (cached) {
+    return NextResponse.json(cached);
+  }
+
+  return NextResponse.json({ url: '', token: '', updatedAt: 0 });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { url, token } = body;
+    const { username, url, token } = body;
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: 'Valid URL is required' }, { status: 400 });
     }
+
+    const cleanUsername = (typeof username === 'string' && username.trim()) 
+      ? username.trim().toLowerCase() 
+      : 'default';
 
     // Ensure format is wss://
     let cleanUrl = url.trim();
@@ -30,16 +60,32 @@ export async function POST(req: NextRequest) {
       cleanUrl = cleanUrl.replace('https://', 'wss://');
     }
 
-    globalTunnel = {
+    const record = {
       url: cleanUrl,
       token: typeof token === 'string' ? token.trim() : '',
       updatedAt: Date.now(),
     };
 
+    userTunnels.set(cleanUsername, record);
+
+    // Persist to Supabase if available
+    if (supabase) {
+      try {
+        await supabase.from('tunnels').upsert({
+          username: cleanUsername,
+          daemon_url: cleanUrl,
+          daemon_token: record.token,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('Supabase tunnel upsert error:', e);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Tunnel paired successfully',
-      data: globalTunnel,
+      message: `Tunnel paired for user @${cleanUsername}`,
+      data: record,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
