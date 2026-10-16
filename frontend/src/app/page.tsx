@@ -87,9 +87,9 @@ export default function Dashboard() {
       // Default initial starter account if completely empty
       const defaultAcc: Account = {
         id: 'starter-1',
-        username: 'PocketAFK_Player',
-        auth_type: 'offline',
-        server_host: 'localhost',
+        username: 'MyPlayer',
+        auth_type: 'microsoft',
+        server_host: 'play.example.com',
         server_port: 25565,
         server_version: 'auto',
         auto_reconnect: true,
