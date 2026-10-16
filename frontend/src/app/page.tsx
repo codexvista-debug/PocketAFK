@@ -255,15 +255,26 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
-                <b>Termux Bridge Not Connected:</b> Start the daemon & Cloudflare Tunnel on your phone, then paste your tunnel URL in Settings.
+                <b>Termux Bridge Not Connected:</b> Run the 1-click command in Termux to connect automatically.
               </span>
             </div>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1 font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
-            >
-              Open Settings <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText("pkg update -y && pkg install git nodejs-lts cloudflared -y && rm -rf PocketAFK && git clone https://github.com/codexvista-debug/PocketAFK.git && cd PocketAFK/daemon && npm install && bash start.sh");
+                  alert("Copied Termux 1-click command to clipboard!");
+                }}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
+              >
+                📋 Copy Termux Command
+              </button>
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center gap-1 font-bold text-amber-800 hover:text-amber-900 underline cursor-pointer"
+              >
+                Settings <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
 

@@ -29,6 +29,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const [copiedCommand, setCopiedCommand] = useState(false);
+  const termuxCommand = "pkg update -y && pkg install git nodejs-lts cloudflared -y && rm -rf PocketAFK && git clone https://github.com/codexvista-debug/PocketAFK.git && cd PocketAFK/daemon && npm install && bash start.sh";
+
+  const handleCopyCommand = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(termuxCommand);
+      setCopiedCommand(true);
+      setTimeout(() => setCopiedCommand(false), 2500);
+    }
+  };
+
   const handleSaveConnection = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveDaemonSettings(urlInput.trim(), tokenInput.trim());
@@ -59,10 +70,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
               <Network className="w-4 h-4 text-emerald-600" />
-              Cloudflare Tunnel Bridge (Android Termux)
+              Android Termux 1-Click Launcher
             </div>
-            
+
+            {/* Quick Copy Command Card */}
+            <div className="bg-slate-900 text-slate-100 p-4 rounded-xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  📱 Run this command in Termux:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyCommand}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  {copiedCommand ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : null}
+                  {copiedCommand ? 'Copied to Clipboard!' : 'Copy Command'}
+                </button>
+              </div>
+              <div className="p-2.5 rounded-lg bg-black/60 font-mono text-[11px] text-slate-300 break-all select-all border border-slate-800">
+                {termuxCommand}
+              </div>
+              <span className="text-[11px] text-slate-400 block">
+                ✨ Once run, Termux will <b>automatically sync</b> your tunnel to this dashboard with zero copy-pasting.
+              </span>
+            </div>
+
             <form onSubmit={handleSaveConnection} className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="text-xs font-bold text-slate-700">Manual Tunnel URL (Optional Fallback)</div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   WebSocket Tunnel URL (from `cloudflared`)
