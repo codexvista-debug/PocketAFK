@@ -21,7 +21,8 @@ export interface AccountVerifiedData {
 
 export function useDaemonSocket(
   activeBotId?: string | null,
-  onAccountVerified?: (data: AccountVerifiedData) => void
+  onAccountVerified?: (data: AccountVerifiedData) => void,
+  enabled: boolean = true
 ) {
   const [daemonUrl, setDaemonUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -72,6 +73,17 @@ export function useDaemonSocket(
   }, []);
 
   const connect = useCallback(() => {
+    if (!enabled) {
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch (e) {}
+        socketRef.current = null;
+      }
+      setStatus('DISCONNECTED');
+      return;
+    }
+
     if (socketRef.current) {
       try {
         socketRef.current.close();
@@ -183,11 +195,17 @@ export function useDaemonSocket(
     } catch (e) {
       setStatus('DISCONNECTED');
     }
-  }, [daemonUrl, authToken]);
+  }, [daemonUrl, authToken, enabled]);
 
   useEffect(() => {
-    if (daemonUrl && !daemonUrl.includes('localhost')) {
+    if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
       connect();
+    } else if (!enabled && socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch (e) {}
+      socketRef.current = null;
+      setStatus('DISCONNECTED');
     }
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
@@ -195,22 +213,22 @@ export function useDaemonSocket(
         socketRef.current.close();
       }
     };
-  }, [connect, daemonUrl]);
+  }, [connect, daemonUrl, enabled]);
 
   const sendJson = useCallback((msg: any) => {
+    if (!enabled) return false;
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(msg));
       return true;
     }
     return false;
-  }, []);
+  }, [enabled]);
 
   const startBot = useCallback((config: any) => {
     return sendJson({ type: 'START_BOT', payload: config });
   }, [sendJson]);
 
   const stopBot = useCallback((botId: string) => {
-    // Optimistically set to DISCONNECTED
     setBotStates((prev) => ({ ...prev, [botId]: 'DISCONNECTED' }));
     return sendJson({ type: 'STOP_BOT', payload: { botId } });
   }, [sendJson]);
@@ -253,24 +271,20 @@ export function useDaemonSocket(
   const currentWindow: ContainerWindow | null = (currentBotId && containerWindows[currentBotId]) || null;
 
   return {
-    status,
-    // Active instance state
+    status: enabled ? status : 'DISCONNECTED',
     botState: currentBotState,
     botStateReason: currentBotReason,
     telemetry: currentTelemetry,
     messages: currentMessages,
     containerWindow: currentWindow,
-    // All instance states (for server list cards)
     botStates,
     botStateReasons,
     telemetries,
     messagesByBot,
-    // Connection & Settings
     daemonUrl,
     authToken,
     saveSettings,
     reconnect: connect,
-    // Actions
     startBot,
     stopBot,
     restartBot,
@@ -279,7 +293,6 @@ export function useDaemonSocket(
     closeWindow,
     updateSettings,
     clearMessages,
-    // Microsoft Auth
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),
   };

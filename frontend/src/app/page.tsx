@@ -30,7 +30,11 @@ import {
   Swords, 
   Shield, 
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  LogIn,
+  Lock,
+  Cpu,
+  Smartphone
 } from 'lucide-react';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
@@ -110,7 +114,7 @@ export default function Dashboard() {
     });
   }, [currentUser]);
 
-  // WebSocket Connection Hook
+  // WebSocket Connection Hook - ONLY enabled if currentUser is logged in!
   const {
     status: socketStatus,
     botState,
@@ -133,7 +137,7 @@ export default function Dashboard() {
     clearMessages,
     msAuthData,
     clearMsAuth,
-  } = useDaemonSocket(activeServerId, handleAccountVerified);
+  } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser));
 
   // Active Server Profile
   const activeServer = useMemo(() => {
@@ -156,8 +160,10 @@ export default function Dashboard() {
   const effectiveUser = currentUser || 'default';
   const termuxCommand = `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser}`;
 
-  // Auto-sync tunnel from API or URL
+  // Auto-sync tunnel from API or URL (only if user is logged in)
   useEffect(() => {
+    if (!currentUser) return;
+
     async function syncTunnel() {
       if (typeof window === 'undefined') return;
 
@@ -185,15 +191,22 @@ export default function Dashboard() {
     }
 
     syncTunnel();
-  }, [daemonUrl, authToken, saveSettings, effectiveUser]);
+  }, [daemonUrl, authToken, saveSettings, effectiveUser, currentUser]);
 
   // Load accounts & servers from localStorage & Supabase
   useEffect(() => {
-    async function loadData() {
-      const accKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
-      const srvKey = currentUser ? `pocketafk_servers_${currentUser}` : 'pocketafk_servers_guest';
+    if (!currentUser) {
+      setAccounts([]);
+      setServers([]);
+      setActiveServerId(null);
+      return;
+    }
 
-      // 1. Load accounts
+    async function loadData() {
+      const accKey = `pocketafk_accounts_${currentUser}`;
+      const srvKey = `pocketafk_servers_${currentUser}`;
+
+      // 1. Load accounts from storage
       const storedAcc = localStorage.getItem(accKey);
       let loadedAccounts: MinecraftAccount[] = [];
       if (storedAcc) {
@@ -206,7 +219,7 @@ export default function Dashboard() {
       }
       setAccounts(loadedAccounts);
 
-      // 2. Load servers
+      // 2. Load servers from storage
       const storedSrv = localStorage.getItem(srvKey);
       let loadedServers: ServerProfile[] = [];
       if (storedSrv) {
@@ -221,12 +234,11 @@ export default function Dashboard() {
         setActiveServerId(loadedServers[0].id);
       }
 
-      // 3. Supabase sync if logged in
+      // 3. Supabase sync
       if (supabase && currentUser) {
         try {
           const { data, error } = await supabase.from('accounts').select('*').eq('username', currentUser);
           if (data && data.length > 0 && !error) {
-            // Build accounts from Supabase
             const dbAccounts: MinecraftAccount[] = [];
             const dbServers: ServerProfile[] = [];
 
@@ -272,7 +284,8 @@ export default function Dashboard() {
 
   // Account Management
   const handleAddAccount = async (email: string) => {
-    const accKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+    if (!currentUser) return;
+    const accKey = `pocketafk_accounts_${currentUser}`;
     const newAccount: MinecraftAccount = {
       id: `acc_${Math.random().toString(36).substring(2, 9)}`,
       username: email.trim(),
@@ -287,7 +300,8 @@ export default function Dashboard() {
   };
 
   const handleDeleteAccount = async (id: string) => {
-    const accKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+    if (!currentUser) return;
+    const accKey = `pocketafk_accounts_${currentUser}`;
     const updated = accounts.filter((a) => a.id !== id);
     setAccounts(updated);
     localStorage.setItem(accKey, JSON.stringify(updated));
@@ -295,7 +309,8 @@ export default function Dashboard() {
 
   // Server Management
   const handleSaveServer = async (profile: ServerProfile) => {
-    const srvKey = currentUser ? `pocketafk_servers_${currentUser}` : 'pocketafk_servers_guest';
+    if (!currentUser) return;
+    const srvKey = `pocketafk_servers_${currentUser}`;
     const existingIndex = servers.findIndex((s) => s.id === profile.id);
     let updated: ServerProfile[];
     if (existingIndex >= 0) {
@@ -309,7 +324,6 @@ export default function Dashboard() {
     setActiveServerId(profile.id);
     localStorage.setItem(srvKey, JSON.stringify(updated));
 
-    // Also sync to Supabase if user logged in
     if (supabase && currentUser) {
       try {
         const assignedAcc = accounts.find((a) => a.id === profile.accountId);
@@ -330,8 +344,8 @@ export default function Dashboard() {
   };
 
   const handleDeleteServer = async (profileId: string) => {
-    const srvKey = currentUser ? `pocketafk_servers_${currentUser}` : 'pocketafk_servers_guest';
-    // Stop running bot if active
+    if (!currentUser) return;
+    const srvKey = `pocketafk_servers_${currentUser}`;
     stopBot(profileId);
 
     const updated = servers.filter((s) => s.id !== profileId);
@@ -352,7 +366,7 @@ export default function Dashboard() {
 
     startBot({
       id: profile.id,
-      username: acc.username, // Microsoft email
+      username: acc.username,
       authType: 'microsoft',
       host: profile.serverHost,
       port: profile.serverPort,
@@ -453,401 +467,440 @@ export default function Dashboard() {
         onLogout={handleLogout}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenAccounts={() => setIsAccountsOpen(true)}
-        onOpenAddServer={() => {
-          setEditingServer(null);
-          setIsServerModalOpen(true);
-        }}
       />
 
-      {/* Main Workspace */}
+      {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 space-y-4">
-        {/* Auto-Sync Confirmation Banner */}
-        {autoSynced && socketStatus === 'AUTHENTICATED' && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs text-emerald-800 shadow-2xs">
-            <span className="flex items-center gap-2 font-bold">
-              ✨ Auto-Synced with Termux! WebSocket tunnel paired automatically.
-            </span>
-            <span className="text-[11px] font-mono text-emerald-600 truncate max-w-xs">{daemonUrl}</span>
-          </div>
-        )}
-
-        {/* Connection Banner if no tunnel URL configured */}
-        {!daemonUrl && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <b>Termux Bridge Not Connected:</b> Run the 1-click command on your Android phone to link automatically.
-              </span>
+        {/* LOGGED OUT GATEWAY SCREEN */}
+        {!currentUser ? (
+          <div className="max-w-2xl mx-auto my-8 sm:my-16 bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-3xl p-6 sm:p-10 shadow-xl text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 flex items-center justify-center font-black text-white text-3xl shadow-lg shadow-emerald-500/30 mx-auto ring-4 ring-emerald-500/10">
+              P
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(termuxCommand);
-                  alert(`Copied 1-click Termux command for user @${effectiveUser}!`);
-                }}
-                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
-              >
-                📋 Copy Termux Command
-              </button>
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 font-bold text-amber-800 hover:text-amber-900 underline cursor-pointer"
-              >
-                Settings <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
 
-        {/* 2-Column Responsive Layout: Left Server Manager & Right Active Dashboard */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left Column: Server Instances Manager (4 Cols) */}
-          <div className="lg:col-span-4 space-y-3">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Server className="w-4 h-4 text-emerald-600" />
-                  <h2 className="font-extrabold text-xs uppercase tracking-wider text-slate-800">
-                    Servers & Instances
-                  </h2>
+            <div className="space-y-2">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Welcome to PocketAFK
+              </h2>
+              <p className="text-slate-600 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
+                Pure Java 24/7 AFK bot system powered by Android Termux. Sign in or create an account to start managing your Minecraft bots.
+              </p>
+            </div>
+
+            {/* Feature Pills */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                  <Smartphone className="w-4 h-4 text-emerald-600" />
+                  Termux Engine
                 </div>
-                <button
-                  onClick={() => {
-                    setEditingServer(null);
-                    setIsServerModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition shadow-2xs cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" /> Add Server
-                </button>
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  Runs 24/7 headless Mineflayer on your phone.
+                </p>
               </div>
 
-              {servers.length === 0 ? (
-                <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-4 space-y-2">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                    <Server className="w-4 h-4" />
-                  </div>
-                  <div className="text-xs font-bold text-slate-700">No servers configured</div>
-                  <p className="text-[11px] text-slate-500">
-                    Create a server instance to connect your Minecraft account.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setEditingServer(null);
-                      setIsServerModalOpen(true);
-                    }}
-                    className="mt-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer"
-                  >
-                    + Add First Server
-                  </button>
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Official Java
                 </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {servers.map((srv) => {
-                    const isSelected = srv.id === activeServerId;
-                    const srvState: BotLifecycleState = botStates[srv.id] || 'DISCONNECTED';
-                    const isRunning =
-                      srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
-                    const assignedAcc = accounts.find((a) => a.id === srv.accountId);
-                    const avatarName = assignedAcc?.ign || 'MHF_Steve';
-                    const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/28`;
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  Verified Microsoft auth with real in-game IGN & skin avatar.
+                </p>
+              </div>
 
-                    return (
-                      <div
-                        key={srv.id}
-                        className={`p-3 rounded-xl border transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-gradient-to-r from-emerald-50/80 to-slate-50 border-emerald-400 shadow-xs ring-1 ring-emerald-400/20'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                        onClick={() => setActiveServerId(srv.id)}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-extrabold text-xs text-slate-900 truncate">
-                                {srv.name}
-                              </span>
-                              {getStatusBadge(srvState)}
-                            </div>
-                            <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1">
-                              <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span>{srv.serverHost}:{srv.serverPort}</span>
-                              <span className="text-[10px] text-slate-400">({srv.serverVersion})</span>
-                            </div>
-                          </div>
-
-                          {/* Quick Start / Stop button on card */}
-                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!isRunning ? (
-                              <button
-                                onClick={() => handleStartServer(srv)}
-                                disabled={socketStatus !== 'AUTHENTICATED' || !assignedAcc}
-                                title="Start this bot"
-                                className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white transition shadow-2xs cursor-pointer"
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleStopServer(srv.id)}
-                                title="Stop this bot"
-                                className="p-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition shadow-2xs cursor-pointer"
-                              >
-                                <Square className="w-3.5 h-3.5 fill-current" />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => {
-                                setEditingServer(srv);
-                                setIsServerModalOpen(true);
-                              }}
-                              title="Edit server settings"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                            >
-                              <Settings2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Assigned Account Info */}
-                        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <img
-                              src={avatarUrl}
-                              alt={avatarName}
-                              className="w-4 h-4 rounded-xs shrink-0 rendering-pixelated"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/28';
-                              }}
-                            />
-                            <span className="font-semibold text-slate-700 truncate">
-                              {assignedAcc ? (assignedAcc.ign || assignedAcc.username) : 'No Account'}
-                            </span>
-                          </div>
-                          {assignedAcc?.verified && (
-                            <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Verified
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                  <Server className="w-4 h-4 text-emerald-600" />
+                  Multi-Server
                 </div>
-              )}
+                <p className="text-[11px] text-slate-500 leading-normal">
+                  Connect the same Java account to multiple servers at once.
+                </p>
+              </div>
             </div>
 
-            {/* Quick Helper Note */}
-            <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-slate-600 text-[11px] leading-relaxed shadow-xs">
-              <span className="font-bold text-slate-800 block mb-1">💡 Multi-Server AFK:</span>
-              You can connect one Java account to multiple servers at once, or link different accounts to different servers. Each server runs independently on Termux.
+            {/* Authentication Action Button */}
+            <div className="pt-2">
+              <button
+                onClick={() => setIsAuthOpen(true)}
+                className="w-full sm:w-auto px-8 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-md shadow-emerald-600/25 transition cursor-pointer inline-flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Sign In / Register (1-6 letters)
+              </button>
+              <p className="text-[11px] text-slate-400 mt-2 font-mono">
+                🔒 Daemon connection, accounts, and server profiles are password-protected.
+              </p>
             </div>
           </div>
+        ) : (
+          /* LOGGED IN WORKSPACE */
+          <>
+            {/* Auto-Sync Confirmation Banner */}
+            {autoSynced && socketStatus === 'AUTHENTICATED' && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between text-xs text-emerald-800 shadow-2xs">
+                <span className="flex items-center gap-2 font-bold">
+                  ✨ Auto-Synced with Termux! WebSocket tunnel paired automatically.
+                </span>
+                <span className="text-[11px] font-mono text-emerald-600 truncate max-w-xs">{daemonUrl}</span>
+              </div>
+            )}
 
-          {/* Right Column: Active Server Dashboard (8 Cols) */}
-          <div className="lg:col-span-8 space-y-4">
-            {activeServer ? (
-              <>
-                {/* Active Server Header Bar */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center font-bold shadow-2xs">
-                      <Server className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-black text-slate-900 text-sm">{activeServer.name}</h2>
-                        {getStatusBadge(botState)}
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
-                        <span>{activeServer.serverHost}:{activeServer.serverPort}</span>
-                        <span>&bull;</span>
-                        <span>Ver: {activeServer.serverVersion}</span>
-                        {activeAccount && (
-                          <>
-                            <span>&bull;</span>
-                            <span className="font-bold text-slate-700 flex items-center gap-1">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              {activeAccount.ign || activeAccount.username}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions for this Server */}
-                  <div className="flex items-center gap-2">
-                    {!isActiveServerRunning ? (
-                      <button
-                        onClick={() => handleStartServer(activeServer)}
-                        disabled={socketStatus !== 'AUTHENTICATED' || !activeAccount}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-40 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        Start Bot
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleStopServer(activeServer.id)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                        >
-                          <Square className="w-3.5 h-3.5 fill-current" />
-                          Stop
-                        </button>
-                        <button
-                          onClick={() => handleRestartServer(activeServer)}
-                          title="Restart Bot"
-                          className="p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 transition shadow-2xs cursor-pointer"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        setEditingServer(activeServer);
-                        setIsServerModalOpen(true);
-                      }}
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
-                      title="Edit server configuration"
-                    >
-                      <Settings2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Telemetry HUD */}
-                <TelemetryHUD telemetry={telemetry} />
-
-                {/* Instance Quick Feature Toggles Bar */}
-                <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Physics */}
-                    <button
-                      onClick={() => handleUpdateActiveSettings({ physics: !activeServer.settings.physics })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                        activeServer.settings.physics
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-2xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                      Physics: {activeServer.settings.physics ? 'ON' : 'OFF'}
-                    </button>
-
-                    {/* Resource Packs */}
-                    <button
-                      onClick={() => handleUpdateActiveSettings({ acceptResourcePacks: !activeServer.settings.acceptResourcePacks })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                        activeServer.settings.acceptResourcePacks
-                          ? 'bg-sky-50 border-sky-300 text-sky-700 shadow-2xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Resource Packs: {activeServer.settings.acceptResourcePacks ? 'Auto' : 'Off'}
-                    </button>
-
-                    {/* Mob Farm */}
-                    <button
-                      onClick={() => handleUpdateActiveSettings({ mobFarm: !activeServer.settings.mobFarm })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                        activeServer.settings.mobFarm
-                          ? 'bg-red-50 border-red-300 text-red-700 shadow-2xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <Swords className="w-3.5 h-3.5" />
-                      Mob Farm: {activeServer.settings.mobFarm ? 'ACTIVE' : 'OFF'}
-                    </button>
-
-                    {/* Auto Eat */}
-                    <button
-                      onClick={() => handleUpdateActiveSettings({ autoEat: !activeServer.settings.autoEat })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                        activeServer.settings.autoEat
-                          ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-2xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      Auto-Eat: {activeServer.settings.autoEat ? 'ON' : 'OFF'}
-                    </button>
-
-                    {/* Auto Totem */}
-                    <button
-                      onClick={() => handleUpdateActiveSettings({ autoTotem: !activeServer.settings.autoTotem })}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                        activeServer.settings.autoTotem
-                          ? 'bg-yellow-50 border-yellow-300 text-yellow-800 shadow-2xs'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}
-                    >
-                      <Shield className="w-3.5 h-3.5" />
-                      Auto-Totem: {activeServer.settings.autoTotem ? 'ON' : 'OFF'}
-                    </button>
-                  </div>
-
-                  <span className="text-slate-500 text-[11px] font-mono">
-                    {botStateReason || (botState === 'SPAWNED' ? 'Operational' : 'Standby')}
+            {/* Connection Banner if no tunnel URL configured */}
+            {!daemonUrl && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    <b>Termux Bridge Not Connected:</b> Run the 1-click command on your Android phone to link automatically.
                   </span>
                 </div>
-
-                {/* Quick Commands Bar */}
-                <QuickCommands
-                  onSendCommand={handleSendMessage}
-                  disabled={!isActiveServerRunning}
-                />
-
-                {/* Live Terminal Console for this Server */}
-                <Terminal
-                  messages={messages}
-                  onSendMessage={handleSendMessage}
-                  onClear={() => clearMessages(activeServer.id)}
-                  disabled={!isActiveServerRunning}
-                />
-              </>
-            ) : (
-              /* Empty State when no server is selected */
-              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-4 shadow-xs">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-xs">
-                  <Server className="w-7 h-7" />
-                </div>
-                <div className="max-w-md mx-auto space-y-2">
-                  <h3 className="font-extrabold text-slate-900 text-base">
-                    No Server Instance Selected
-                  </h3>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Create a server instance to connect your Minecraft account. You can configure custom IP, port, version, and survival features per server.
-                  </p>
-                </div>
-                <div className="flex justify-center gap-3 pt-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setEditingServer(null);
-                      setIsServerModalOpen(true);
+                      navigator.clipboard.writeText(termuxCommand);
+                      alert(`Copied 1-click Termux command for user @${effectiveUser}!`);
                     }}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" /> Add Server Instance
+                    📋 Copy Termux Command
                   </button>
                   <button
-                    onClick={() => setIsAccountsOpen(true)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center gap-1 font-bold text-amber-800 hover:text-amber-900 underline cursor-pointer"
                   >
-                    Manage Minecraft Accounts
+                    Settings <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             )}
-          </div>
-        </div>
+
+            {/* 2-Column Multi-Instance Manager */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left Column: Server Instances Manager (4 Cols) */}
+              <div className="lg:col-span-4 space-y-3">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                  {/* Card Header with the SINGLE, primary "+ Add Server" button */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Server className="w-4 h-4 text-emerald-600" />
+                      <h2 className="font-extrabold text-xs uppercase tracking-wider text-slate-800">
+                        Servers & Instances
+                      </h2>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditingServer(null);
+                        setIsServerModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" /> Add Server
+                    </button>
+                  </div>
+
+                  {servers.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-4 space-y-1.5">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                        <Server className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs font-bold text-slate-700">No servers configured</div>
+                      <p className="text-[11px] text-slate-500">
+                        Click <b>"+ Add Server"</b> above to connect your Minecraft account.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {servers.map((srv) => {
+                        const isSelected = srv.id === activeServerId;
+                        const srvState: BotLifecycleState = botStates[srv.id] || 'DISCONNECTED';
+                        const isRunning =
+                          srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
+                        const assignedAcc = accounts.find((a) => a.id === srv.accountId);
+                        const avatarName = assignedAcc?.ign || 'MHF_Steve';
+                        const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/28`;
+
+                        return (
+                          <div
+                            key={srv.id}
+                            className={`p-3 rounded-xl border transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-emerald-50/80 to-slate-50 border-emerald-400 shadow-xs ring-1 ring-emerald-400/20'
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                            onClick={() => setActiveServerId(srv.id)}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-extrabold text-xs text-slate-900 truncate">
+                                    {srv.name}
+                                  </span>
+                                  {getStatusBadge(srvState)}
+                                </div>
+                                <div className="text-[11px] text-slate-500 font-mono truncate mt-0.5 flex items-center gap-1">
+                                  <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{srv.serverHost}:{srv.serverPort}</span>
+                                  <span className="text-[10px] text-slate-400">({srv.serverVersion})</span>
+                                </div>
+                              </div>
+
+                              {/* Quick Start / Stop button on card */}
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                {!isRunning ? (
+                                  <button
+                                    onClick={() => handleStartServer(srv)}
+                                    disabled={socketStatus !== 'AUTHENTICATED' || !assignedAcc}
+                                    title="Start this bot"
+                                    className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white transition shadow-2xs cursor-pointer"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleStopServer(srv.id)}
+                                    title="Stop this bot"
+                                    className="p-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition shadow-2xs cursor-pointer"
+                                  >
+                                    <Square className="w-3.5 h-3.5 fill-current" />
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => {
+                                    setEditingServer(srv);
+                                    setIsServerModalOpen(true);
+                                  }}
+                                  title="Edit server settings"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                >
+                                  <Settings2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Assigned Account Info */}
+                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <img
+                                  src={avatarUrl}
+                                  alt={avatarName}
+                                  className="w-4 h-4 rounded-xs shrink-0 rendering-pixelated"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/28';
+                                  }}
+                                />
+                                <span className="font-semibold text-slate-700 truncate">
+                                  {assignedAcc ? (assignedAcc.ign || assignedAcc.username) : 'No Account'}
+                                </span>
+                              </div>
+                              {assignedAcc?.verified && (
+                                <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  Verified
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Helper Note */}
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-slate-600 text-[11px] leading-relaxed shadow-xs">
+                  <span className="font-bold text-slate-800 block mb-1">💡 Multi-Server AFK:</span>
+                  You can connect one Java account to multiple servers at once, or link different accounts to different servers. Each server runs independently on Termux.
+                </div>
+              </div>
+
+              {/* Right Column: Active Server Dashboard (8 Cols) */}
+              <div className="lg:col-span-8 space-y-4">
+                {activeServer ? (
+                  <>
+                    {/* Active Server Header Bar */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center font-bold shadow-2xs">
+                          <Server className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="font-black text-slate-900 text-sm">{activeServer.name}</h2>
+                            {getStatusBadge(botState)}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono mt-0.5">
+                            <span>{activeServer.serverHost}:{activeServer.serverPort}</span>
+                            <span>&bull;</span>
+                            <span>Ver: {activeServer.serverVersion}</span>
+                            {activeAccount && (
+                              <>
+                                <span>&bull;</span>
+                                <span className="font-bold text-slate-700 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                  {activeAccount.ign || activeAccount.username}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions for this Server */}
+                      <div className="flex items-center gap-2">
+                        {!isActiveServerRunning ? (
+                          <button
+                            onClick={() => handleStartServer(activeServer)}
+                            disabled={socketStatus !== 'AUTHENTICATED' || !activeAccount}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-40 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            Start Bot
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleStopServer(activeServer.id)}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                            >
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                              Stop
+                            </button>
+                            <button
+                              onClick={() => handleRestartServer(activeServer)}
+                              title="Restart Bot"
+                              className="p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 transition shadow-2xs cursor-pointer"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            setEditingServer(activeServer);
+                            setIsServerModalOpen(true);
+                          }}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                          title="Edit server configuration"
+                        >
+                          <Settings2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Telemetry HUD */}
+                    <TelemetryHUD telemetry={telemetry} />
+
+                    {/* Instance Quick Feature Toggles Bar */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Physics */}
+                        <button
+                          onClick={() => handleUpdateActiveSettings({ physics: !activeServer.settings.physics })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                            activeServer.settings.physics
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-2xs'
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Physics: {activeServer.settings.physics ? 'ON' : 'OFF'}
+                        </button>
+
+                        {/* Resource Packs */}
+                        <button
+                          onClick={() => handleUpdateActiveSettings({ acceptResourcePacks: !activeServer.settings.acceptResourcePacks })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                            activeServer.settings.acceptResourcePacks
+                              ? 'bg-sky-50 border-sky-300 text-sky-700 shadow-2xs'
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Resource Packs: {activeServer.settings.acceptResourcePacks ? 'Auto' : 'Off'}
+                        </button>
+
+                        {/* Mob Farm */}
+                        <button
+                          onClick={() => handleUpdateActiveSettings({ mobFarm: !activeServer.settings.mobFarm })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            activeServer.settings.mobFarm
+                              ? 'bg-red-50 border-red-300 text-red-700 shadow-2xs'
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <Swords className="w-3.5 h-3.5" />
+                          Mob Farm: {activeServer.settings.mobFarm ? 'ACTIVE' : 'OFF'}
+                        </button>
+
+                        {/* Auto Eat */}
+                        <button
+                          onClick={() => handleUpdateActiveSettings({ autoEat: !activeServer.settings.autoEat })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                            activeServer.settings.autoEat
+                              ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-2xs'
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          Auto-Eat: {activeServer.settings.autoEat ? 'ON' : 'OFF'}
+                        </button>
+
+                        {/* Auto Totem */}
+                        <button
+                          onClick={() => handleUpdateActiveSettings({ autoTotem: !activeServer.settings.autoTotem })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                            activeServer.settings.autoTotem
+                              ? 'bg-yellow-50 border-yellow-300 text-yellow-800 shadow-2xs'
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                          Auto-Totem: {activeServer.settings.autoTotem ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+
+                      <span className="text-slate-500 text-[11px] font-mono">
+                        {botStateReason || (botState === 'SPAWNED' ? 'Operational' : 'Standby')}
+                      </span>
+                    </div>
+
+                    {/* Quick Commands Bar */}
+                    <QuickCommands
+                      onSendCommand={handleSendMessage}
+                      disabled={!isActiveServerRunning}
+                    />
+
+                    {/* Live Terminal Console for this Server */}
+                    <Terminal
+                      messages={messages}
+                      onSendMessage={handleSendMessage}
+                      onClear={() => clearMessages(activeServer.id)}
+                      disabled={!isActiveServerRunning}
+                    />
+                  </>
+                ) : (
+                  /* Empty State when no server is selected (NO duplicate add server button!) */
+                  <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-4 shadow-xs">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-xs">
+                      <Server className="w-7 h-7" />
+                    </div>
+                    <div className="max-w-md mx-auto space-y-2">
+                      <h3 className="font-extrabold text-slate-900 text-base">
+                        Select a Server Instance
+                      </h3>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Choose a server from the left sidebar to view live telemetry, terminal chat, and bot controls.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       {/* Interactive Chest / Menu Modal */}
@@ -886,7 +939,6 @@ export default function Dashboard() {
         accounts={accounts}
         activeAccountId={activeAccount?.id || null}
         onSelectAccount={(acc) => {
-          // If we have an active server, link this account to it
           if (activeServer) {
             handleSaveServer({ ...activeServer, accountId: acc.id });
           }
