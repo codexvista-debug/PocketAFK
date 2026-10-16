@@ -50,9 +50,44 @@ if [ -z "$APP_USER" ]; then
   echo "$APP_USER" > "$USER_FILE"
 fi
 
-echo -e "  ${WHITE}👤 User Account     :${NC} ${GREEN}@${APP_USER}${NC}"
+UPPER_USER=$(echo "$APP_USER" | tr '[:lower:]' '[:upper:]')
+
+# Fetch real-time accounts and servers from dashboard API
+USER_SUMMARY=$(curl -s "https://pocketafk.vercel.app/api/user-summary?username=$APP_USER" 2>/dev/null)
+ACC_COUNT=0
+SRV_COUNT=0
+ACC_LIST="None linked yet"
+SRV_LIST="None configured yet"
+
+if [ -n "$USER_SUMMARY" ]; then
+  PARSED_DATA=$(node -e "
+    try {
+      const d = JSON.parse(process.argv[1]);
+      const accs = d.accounts || [];
+      const srvs = d.servers || [];
+      console.log(accs.length + ';;' + srvs.length + ';;' + (accs.join(', ') || 'None linked yet') + ';;' + (srvs.join(', ') || 'None configured yet'));
+    } catch(e) {
+      console.log('0;;0;;None linked yet;;None configured yet');
+    }
+  " "$USER_SUMMARY" 2>/dev/null)
+
+  if [ -n "$PARSED_DATA" ]; then
+    ACC_COUNT=$(echo "$PARSED_DATA" | awk -F';;' '{print $1}')
+    SRV_COUNT=$(echo "$PARSED_DATA" | awk -F';;' '{print $2}')
+    ACC_LIST=$(echo "$PARSED_DATA" | awk -F';;' '{print $3}')
+    SRV_LIST=$(echo "$PARSED_DATA" | awk -F';;' '{print $4}')
+  fi
+fi
+
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                                                                           ║${NC}"
+echo -e "${CYAN}║                   ${BOLD}${YELLOW}👤  POCKETAFK USER: [ ${WHITE}@${UPPER_USER}${YELLOW} ]${NC}${CYAN}                   ║${NC}"
+echo -e "${CYAN}║                                                                           ║${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "  ${WHITE}🎮 Linked Java Accounts :${NC} ${GREEN}${ACC_COUNT}/5 active${NC} (${CYAN}${ACC_LIST}${NC})"
+echo -e "  ${WHITE}🌐 Configured Servers   :${NC} ${GREEN}${SRV_COUNT}/3 active${NC} (${YELLOW}${SRV_LIST}${NC})"
 if [ -n "$APP_SECRET" ]; then
-  echo -e "  ${WHITE}🔑 Secret Launcher  :${NC} ${YELLOW}Protected (Validated)${NC}"
+  echo -e "  ${WHITE}🔑 Secret Launcher Token:${NC} ${GREEN}Protected (Validated)${NC}"
 fi
 echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}\n"
 
@@ -127,6 +162,9 @@ fi
 echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║${NC}   ${BOLD}🎉 POCKETAFK IS OFFICIALLY LIVE & PROTECTED 24/7${NC}                      ${GREEN}║${NC}"
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "  ${WHITE}👤 User Account     :${NC} ${BOLD}${YELLOW}@${UPPER_USER}${NC}"
+echo -e "  ${WHITE}🎮 Linked Java      :${NC} ${GREEN}${ACC_COUNT}/5 active${NC} (${CYAN}${ACC_LIST}${NC})"
+echo -e "  ${WHITE}🌐 Added Servers    :${NC} ${GREEN}${SRV_COUNT}/3 active${NC} (${YELLOW}${SRV_LIST}${NC})"
 echo -e "  ${WHITE}🌐 WebSocket Tunnel :${NC} ${CYAN}${WSS_URL}${NC}"
 echo -e "  ${WHITE}📱 Web Dashboard    :${NC} ${GREEN}https://pocketafk.vercel.app${NC}"
 echo -e "  ${WHITE}⚡ Instant Link     :${NC} ${YELLOW}${AUTO_OPEN_URL}${NC}"

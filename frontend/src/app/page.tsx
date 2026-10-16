@@ -329,6 +329,11 @@ export default function Dashboard() {
 
   // Account Management - Direct verification via Next.js API route!
   const handleStartVerification = async (email: string) => {
+    if (accounts.filter((a) => a.verified).length >= 5) {
+      alert('Maximum limit of 5 accounts reached. Please delete an existing account to add another.');
+      return;
+    }
+
     setMsAuthError(null);
     setPendingEmail(email);
     setIsPollingMs(false);
@@ -346,19 +351,19 @@ export default function Dashboard() {
         botId: 'pending',
         userCode: data.userCode,
         url: data.verificationUri || 'https://www.microsoft.com/link',
-        deviceCode: data.sessionId,
+        deviceCode: data.deviceCode,
       });
       setIsPollingMs(true);
 
-      const sessionId = data.sessionId;
-      const intervalSec = 3;
+      const deviceCode = data.deviceCode;
+      const intervalSec = data.interval || 4;
 
       pollingTimerRef.current = setInterval(async () => {
         try {
           const pollRes = await fetch('/api/minecraft-auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId }),
+            body: JSON.stringify({ deviceCode }),
           });
           const pollData = await pollRes.json();
 
@@ -431,6 +436,12 @@ export default function Dashboard() {
     if (!currentUser) return;
     const srvKey = `pocketafk_servers_${currentUser}`;
     const existingIndex = servers.findIndex((s) => s.id === profile.id);
+
+    if (existingIndex < 0 && servers.length >= 3) {
+      alert('Maximum limit of 3 servers reached. Please delete or edit an existing server.');
+      return;
+    }
+
     let updated: ServerProfile[];
     if (existingIndex >= 0) {
       updated = [...servers];
@@ -710,17 +721,23 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <Server className="w-4 h-4 text-emerald-600" />
                       <h2 className="font-extrabold text-xs uppercase tracking-wider text-slate-800">
-                        Servers & Instances
+                        Servers ({servers.length}/3)
                       </h2>
                     </div>
                     <button
+                      disabled={servers.length >= 3}
                       onClick={() => {
+                        if (servers.length >= 3) {
+                          alert('Maximum of 3 servers reached.');
+                          return;
+                        }
                         setEditingServer(null);
                         setIsServerModalOpen(true);
                       }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                      title={servers.length >= 3 ? 'Maximum of 3 servers allowed' : 'Add Server'}
                     >
-                      <Plus className="w-3 h-3" /> Add Server
+                      <Plus className="w-3 h-3" /> {servers.length >= 3 ? '3/3 Limit' : 'Add Server'}
                     </button>
                   </div>
 

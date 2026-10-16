@@ -28,11 +28,8 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
   if (!authData) return null;
 
-  // Construct login URL with prompt=select_account and login_hint so Microsoft doesn't silently use already logged-in accounts
-  const baseLink = authData.url || 'https://www.microsoft.com/link';
-  const forceAccountUrl = accountEmail
-    ? `https://login.live.com/oauth20_remoteconnect.srf?prompt=select_account&login_hint=${encodeURIComponent(accountEmail)}`
-    : baseLink;
+  // authData.url already contains pre-filled otc code, login_hint, and select_account prompt
+  const forceAccountUrl = authData.url || 'https://www.microsoft.com/link';
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(authData.userCode);

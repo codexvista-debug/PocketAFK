@@ -29,12 +29,19 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   if (!isOpen) return null;
 
+  const MAX_ACCOUNTS = 5;
   // STRICT REQUIREMENT: Only verified accounts are shown in the linked list!
   const verifiedAccounts = accounts.filter((a) => a.verified);
+  const isLimitReached = verifiedAccounts.length >= MAX_ACCOUNTS;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!minecraftEmail.trim()) return;
+
+    if (isLimitReached) {
+      alert('Maximum of 5 Minecraft accounts allowed. Please remove an account first.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -74,14 +81,16 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             <>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-600 font-semibold">
-                  {verifiedAccounts.length} verified account{verifiedAccounts.length === 1 ? '' : 's'}
+                  {verifiedAccounts.length}/5 accounts {isLimitReached ? '(Limit Reached)' : 'verified'}
                 </span>
                 <button
+                  disabled={isLimitReached}
                   onClick={() => setShowAddForm(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  title={isLimitReached ? 'Maximum of 5 accounts reached' : 'Add Account'}
                 >
                   <UserPlus className="w-3.5 h-3.5" />
-                  + Add Account
+                  {isLimitReached ? '5/5 Limit' : '+ Add Account'}
                 </button>
               </div>
 
