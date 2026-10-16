@@ -2,52 +2,162 @@ import { supabase } from './supabaseClient';
 import { MinecraftAccount, ServerProfile } from '@/types';
 
 /**
- * Ensures all verified accounts and configured servers are persisted in Supabase
- * under the current user's profile, so Termux user-summary always has accurate counts.
- * Also removes any deleted accounts from Supabase so they never resurrect.
+ * Universal Server Profiles Sync:
+ * Saves server profiles centrally in Supabase under a metadata row '__meta_servers__',
+ * ensuring all devices (mobile, PC, tablet) always see the exact same server profiles.
  */
-export async function syncAllToSupabase(currentUser: string, accounts: MinecraftAccount[], servers: ServerProfile[]) {
+export async function saveServersToSupabase(currentUser: string, servers: ServerProfile[]) {
+  if (!supabase || !currentUser) return;
+  try {
+    const cleanUser = currentUser.trim();
+
+    const { data: existing } = await supabase
+      .from('accounts')
+      .select('id')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_servers__')
+      .limit(1);
+
+    const payload = {
+      servers,
+      updatedAt: Date.now(),
+    };
+
+    if (existing && existing.length > 0) {
+      await supabase
+        .from('accounts')
+        .update({
+          settings: payload,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('accounts').insert([
+        {
+          username: cleanUser,
+          bot_name: '__meta_servers__',
+          server_host: 'pocketafk.internal',
+          server_port: 25565,
+          settings: payload,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.warn('Failed to save servers to Supabase:', err);
+  }
+}
+
+/**
+ * Universal Server Profiles Loader:
+ * Fetches centrally configured server profiles for the user from Supabase.
+ */
+export async function loadServersFromSupabase(currentUser: string): Promise<ServerProfile[] | null> {
+  if (!supabase || !currentUser) return null;
+  try {
+    const cleanUser = currentUser.trim();
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_servers__')
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const servers = data[0]?.settings?.servers;
+    if (Array.isArray(servers) && servers.length > 0) {
+      return servers;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to load servers from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Universal Minecraft Accounts Loader:
+ * Fetches all verified Minecraft accounts stored in Supabase for this user.
+ */
+export async function loadAccountsFromSupabase(currentUser: string): Promise<MinecraftAccount[]> {
+  if (!supabase || !currentUser) return [];
+  try {
+    const cleanUser = currentUser.trim();
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .ilike('username', cleanUser)
+      .order('created_at', { ascending: true });
+
+    if (error || !data) return [];
+
+    const accounts: MinecraftAccount[] = [];
+    const seen = new Set<string>();
+
+    data.forEach((row) => {
+      const botName = (row.bot_name || '').trim();
+      // Skip metadata rows
+      if (!botName || botName.startsWith('__')) return;
+
+      const key = botName.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        accounts.push({
+          id: `acc_${row.id}`,
+          username: botName,
+          ign: botName,
+          auth_type: 'microsoft',
+          verified: true,
+          addedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          settings: row.settings || {},
+        });
+      }
+    });
+
+    return accounts;
+  } catch (err) {
+    console.warn('Failed to load accounts from Supabase:', err);
+    return [];
+  }
+}
+
+/**
+ * Ensures all verified accounts and configured servers are persisted in Supabase
+ * under the current user's profile.
+ */
+export async function syncAllToSupabase(
+  currentUser: string,
+  accounts: MinecraftAccount[],
+  servers: ServerProfile[]
+) {
   if (!supabase || !currentUser) return;
 
   try {
     const cleanUser = currentUser.trim();
 
-    // 1. Fetch current rows for this user in Supabase
+    // 1. Universally persist servers in __meta_servers__
+    if (servers && servers.length > 0) {
+      await saveServersToSupabase(cleanUser, servers);
+    }
+
+    // 2. Fetch current real account rows for this user in Supabase
     const { data: existingRows } = await supabase
       .from('accounts')
       .select('id, bot_name, server_host')
       .ilike('username', cleanUser);
 
-    // Active verified Minecraft IGNs
-    const currentActiveIgns = new Set(
-      accounts
-        .filter((a) => a.verified)
-        .map((a) => (a.ign || a.username || '').trim().toLowerCase())
-        .filter((name) => name && !name.includes('@'))
-    );
-
-    // Clean up any rows in Supabase that are no longer in accounts (excluding metadata rows)
-    for (const row of existingRows || []) {
-      const botName = (row.bot_name || '').trim().toLowerCase();
-      if (botName && !botName.startsWith('__') && !currentActiveIgns.has(botName)) {
-        await supabase.from('accounts').delete().eq('id', row.id);
-      }
-    }
-
-    // 2. Insert any accounts present in state that aren't yet in Supabase
     const existingBotNames = new Set(
       (existingRows || [])
         .map((r) => (r.bot_name || '').trim().toLowerCase())
-        .filter((n) => currentActiveIgns.has(n))
+        .filter((n) => n && !n.startsWith('__'))
     );
 
+    // 3. Upsert verified accounts into Supabase
     for (const acc of accounts) {
-      if (!acc.verified) continue; // Only sync verified accounts!
+      if (!acc.verified) continue;
       const ign = (acc.ign || acc.username || '').trim();
       if (!ign || ign.includes('@')) continue;
 
       if (!existingBotNames.has(ign.toLowerCase())) {
-        // Insert missing account row
         const firstServer = servers[0];
         await supabase.from('accounts').insert([
           {
@@ -57,27 +167,10 @@ export async function syncAllToSupabase(currentUser: string, accounts: Minecraft
             server_host: firstServer?.serverHost || 'donutsmp.net',
             server_port: firstServer?.serverPort || 25565,
             server_version: firstServer?.serverVersion || 'auto',
+            settings: acc.settings || {},
           },
         ]);
         existingBotNames.add(ign.toLowerCase());
-      }
-    }
-
-    // 3. Update existing server configurations if present
-    for (const srv of servers) {
-      const dbId = srv.id.startsWith('srv_') ? srv.id.replace('srv_', '') : null;
-      if (dbId) {
-        await supabase
-          .from('accounts')
-          .update({
-            server_host: srv.serverHost,
-            server_port: srv.serverPort,
-            server_version: srv.serverVersion,
-            auto_reconnect: srv.autoReconnect,
-            settings: srv.settings,
-          })
-          .eq('id', dbId)
-          .eq('username', cleanUser);
       }
     }
   } catch (err) {
@@ -85,6 +178,9 @@ export async function syncAllToSupabase(currentUser: string, accounts: Minecraft
   }
 }
 
+/**
+ * Explicitly removes an unlinked account from Supabase so it never resurrects.
+ */
 export async function deleteAccountFromSupabase(currentUser: string, ign: string) {
   if (!supabase || !currentUser || !ign) return;
   try {
@@ -211,4 +307,3 @@ export async function loadAccountSessionsFromSupabase(currentUser: string): Prom
     return {};
   }
 }
-

@@ -22,6 +22,9 @@ import {
   recordAccountConnectionStart,
   recordAccountConnectionStop,
   loadAccountSessionsFromSupabase,
+  saveServersToSupabase,
+  loadServersFromSupabase,
+  loadAccountsFromSupabase,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -701,7 +704,7 @@ export default function Dashboard() {
     setIsRankModalOpen(false);
   };
 
-  // Load Accounts & Servers
+  // Load Accounts & Servers with Universal Supabase Sync
   useEffect(() => {
     if (!currentUser) {
       setAccounts([]);
@@ -713,128 +716,95 @@ export default function Dashboard() {
       const accKey = `pocketafk_accounts_${currentUser}`;
       const srvKey = `pocketafk_servers_${currentUser}`;
 
-      // 1. Load accounts from storage
-      const storedAcc = localStorage.getItem(accKey);
-      let loadedAccounts: MinecraftAccount[] = [];
-      const seenIgns = new Set<string>();
+      // 1. Instant local render from device cache
+      let localAccs: MinecraftAccount[] = [];
+      let localSrvs: ServerProfile[] = [];
 
-      if (storedAcc) {
-        try {
-          const parsed = JSON.parse(storedAcc);
-          loadedAccounts = parsed
-            .filter((a: any) => !a.id.startsWith('starter-') && (a.verified === true || Boolean(a.authError)))
-            .map((a: any) => {
-              const cleanIgn = (a.ign && !a.ign.includes('@'))
-                ? a.ign
-                : (!a.username.includes('@') ? a.username : 'Player');
-              const key = cleanIgn.trim().toLowerCase();
-              if (key && seenIgns.has(key)) {
-                return {
-                  ...a,
-                  username: cleanIgn,
-                  ign: cleanIgn,
-                  verified: false,
-                  authError: `Duplicate of @${cleanIgn}. Click Re-link to authenticate with your intended Microsoft account (e.g. V3locitz).`,
-                };
-              }
-              if (key) seenIgns.add(key);
-              return {
-                ...a,
-                username: cleanIgn,
-                ign: cleanIgn,
-              };
-            });
-          localStorage.setItem(accKey, JSON.stringify(loadedAccounts));
-        } catch (e) {
-          // ignore
-        }
-      }
-      setAccounts(loadedAccounts);
+      try {
+        const storedAcc = localStorage.getItem(accKey);
+        if (storedAcc) localAccs = JSON.parse(storedAcc);
+        const storedSrv = localStorage.getItem(srvKey);
+        if (storedSrv) localSrvs = JSON.parse(storedSrv);
+      } catch (e) {}
 
-      // 2. Load servers from storage
-      const storedSrv = localStorage.getItem(srvKey);
-      let loadedServers: ServerProfile[] = [];
-      if (storedSrv) {
-        try {
-          loadedServers = JSON.parse(storedSrv);
-        } catch (e) {
-          // ignore
-        }
+      if (localAccs.length > 0) setAccounts(localAccs);
+      if (localSrvs.length > 0) {
+        setServers(localSrvs);
+        setActiveServerId(localSrvs[0].id);
       }
 
-      // Default starter server if none exist
-      if (loadedServers.length === 0) {
-        loadedServers = [
-          {
-            id: 'srv_freshsmp',
-            name: 'FreshSMP',
-            pocketUser: currentUser,
-            accountId: loadedAccounts[0]?.id || '',
-            serverHost: 'play.freshsmp.fun',
-            serverPort: 25565,
-            serverVersion: 'auto',
-            authType: 'microsoft',
-            autoReconnect: true,
-            settings: DEFAULT_BOT_SETTINGS,
-            createdAt: Date.now() - 86400000 * 5,
-            connectionsCount: 0,
-          },
-        ];
-        localStorage.setItem(srvKey, JSON.stringify(loadedServers));
-      } else {
-        let needsUpdate = false;
-        loadedServers = loadedServers.map((s, idx) => {
-          if (!s.createdAt) {
-            needsUpdate = true;
-            return { ...s, createdAt: Date.now() - (idx + 1) * 86400000 * 3 };
-          }
-          return s;
-        });
-        if (needsUpdate) {
-          localStorage.setItem(srvKey, JSON.stringify(loadedServers));
-        }
-      }
-
-      setServers(loadedServers);
-      if (loadedServers.length > 0) {
-        setActiveServerId(loadedServers[0].id);
-      }
-
-      // 3. Supabase Sync: ONLY pull if storedAcc was null (first time login on new device/browser)
+      // 2. Fetch authoritative universal state from Supabase
       if (supabase && currentUser) {
         try {
-          if (storedAcc === null) {
-            // First time login on this device: populate initial accounts from Supabase
-            const { data, error } = await supabase.from('accounts').select('*').ilike('username', currentUser);
-            if (data && data.length > 0 && !error) {
-              const dbAccountMap = new Map<string, MinecraftAccount>();
-              data.forEach((row) => {
-                const cleanName = (row.bot_name && !row.bot_name.includes('@')) ? row.bot_name.trim() : null;
-                if (cleanName) {
-                  const lower = cleanName.toLowerCase();
-                  if (!dbAccountMap.has(lower)) {
-                    dbAccountMap.set(lower, {
-                      id: `acc_${row.id}`,
-                      username: cleanName,
-                      ign: cleanName,
-                      auth_type: 'microsoft',
-                      verified: true,
-                      addedAt: Date.now(),
-                    });
-                  }
-                }
-              });
+          const [remoteServers, remoteAccounts] = await Promise.all([
+            loadServersFromSupabase(currentUser),
+            loadAccountsFromSupabase(currentUser),
+          ]);
 
-              const finalAccounts = Array.from(dbAccountMap.values());
-              setAccounts(finalAccounts);
-              localStorage.setItem(accKey, JSON.stringify(finalAccounts));
-            }
+          // Handle Universal Servers:
+          let finalServers: ServerProfile[] = [];
+          if (remoteServers && remoteServers.length > 0) {
+            // Supabase is the central universal source of truth!
+            finalServers = remoteServers;
+          } else if (localSrvs.length > 0) {
+            finalServers = localSrvs;
+            await saveServersToSupabase(currentUser, finalServers);
           } else {
-            // User already has local accounts state: sync state to Supabase so deleted accounts stay deleted
-            await syncAllToSupabase(currentUser, loadedAccounts, loadedServers);
+            // Default starter server profiles
+            finalServers = [
+              {
+                id: 'srv_freshsmp',
+                name: 'FreshSMP',
+                pocketUser: currentUser,
+                accountId: '',
+                serverHost: 'play.freshsmp.fun',
+                serverPort: 25565,
+                serverVersion: 'auto',
+                authType: 'microsoft',
+                autoReconnect: true,
+                settings: DEFAULT_BOT_SETTINGS,
+                createdAt: Date.now() - 86400000 * 5,
+                connectionsCount: 0,
+              },
+              {
+                id: 'srv_donutsmp',
+                name: 'DonutSMP',
+                pocketUser: currentUser,
+                accountId: '',
+                serverHost: 'donutsmp.net',
+                serverPort: 25565,
+                serverVersion: 'auto',
+                authType: 'microsoft',
+                autoReconnect: true,
+                settings: DEFAULT_BOT_SETTINGS,
+                createdAt: Date.now() - 86400000 * 2,
+                connectionsCount: 0,
+              },
+            ];
+            await saveServersToSupabase(currentUser, finalServers);
           }
-        } catch (e) {
-          // ignore
+
+          setServers(finalServers);
+          localStorage.setItem(srvKey, JSON.stringify(finalServers));
+          if (finalServers.length > 0) {
+            setActiveServerId((prev) => (finalServers.some((s) => s.id === prev) ? prev : finalServers[0].id));
+          }
+
+          // Handle Universal Accounts:
+          if (remoteAccounts && remoteAccounts.length > 0) {
+            // Authoritative accounts from Supabase!
+            setAccounts(remoteAccounts);
+            localStorage.setItem(accKey, JSON.stringify(remoteAccounts));
+          } else if (localAccs.length > 0) {
+            const verified = localAccs.filter((a) => a.verified && !a.username.includes('@'));
+            if (verified.length > 0) {
+              await syncAllToSupabase(currentUser, verified, finalServers);
+              setAccounts(verified);
+              localStorage.setItem(accKey, JSON.stringify(verified));
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load universal data from Supabase:', err);
         }
       }
     }
@@ -1109,6 +1079,7 @@ export default function Dashboard() {
     setActiveServerId(profile.id);
     localStorage.setItem(srvKey, JSON.stringify(updated));
 
+    saveServersToSupabase(currentUser, updated).catch(() => {});
     syncAllToSupabase(currentUser, accounts, updated);
     showToast(`Saved server profile "${profile.name}"`, 'success');
   };
@@ -1126,6 +1097,7 @@ export default function Dashboard() {
       setActiveServerId(updated[0]?.id || '');
     }
     localStorage.setItem(srvKey, JSON.stringify(updated));
+    saveServersToSupabase(currentUser, updated).catch(() => {});
     showToast('Server profile removed.', 'info');
   };
 
