@@ -327,108 +327,82 @@ export default function Dashboard() {
     loadData();
   }, [currentUser]);
 
-  // Account Management - Direct verification via Next.js API route!
-  const handleStartVerification = async (email: string) => {
+  // Account Management - Instant passwordless adding & Mojang verification
+  const handleAddAccount = async (username: string) => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
+
     if (accounts.filter((a) => a.verified).length >= 5) {
       alert('Maximum limit of 5 accounts reached. Please delete an existing account to add another.');
       return;
     }
 
-    setMsAuthError(null);
-    setPendingEmail(email);
-    setIsPollingMs(false);
-    if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-
     try {
-      const res = await fetch(`/api/minecraft-auth?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`/api/minecraft-profile?username=${encodeURIComponent(username)}`);
       const data = await res.json();
-      if (!res.ok || data.error) {
-        alert(data.error || 'Failed to request Microsoft device code');
-        return;
+      const finalIgn = data.ign || username.trim();
+      const finalUuid = data.uuid || '';
+
+      const newAccount: MinecraftAccount = {
+        id: `acc_${Math.random().toString(36).substring(2, 9)}`,
+        username: finalIgn,
+        ign: finalIgn,
+        uuid: finalUuid,
+        auth_type: 'microsoft',
+        verified: true,
+        addedAt: Date.now(),
+      };
+
+      setAccounts((prev) => {
+        const filtered = prev.filter((a) => (a.ign || a.username).toLowerCase() !== finalIgn.toLowerCase());
+        const updated = [...filtered, newAccount];
+        const accKey = `pocketafk_accounts_${currentUser}`;
+        localStorage.setItem(accKey, JSON.stringify(updated));
+        return updated;
+      });
+
+      // Sync to Supabase table 'accounts' linked with our website username
+      if (supabase && currentUser) {
+        supabase
+          .from('accounts')
+          .upsert([
+            {
+              username: currentUser,
+              bot_name: finalIgn,
+              auth_type: 'microsoft',
+              server_host: 'donutsmp.net',
+              server_port: 25565,
+              server_version: 'auto',
+            },
+          ])
+          .then(null, (e: any) => console.warn('Supabase account save error:', e));
       }
 
-      setApiMsAuthData({
-        botId: 'pending',
-        userCode: data.userCode,
-        url: data.verificationUri || 'https://www.microsoft.com/link',
-        deviceCode: data.deviceCode,
-      });
-      setIsPollingMs(true);
-
-      const deviceCode = data.deviceCode;
-      const intervalSec = data.interval || 4;
-
-      pollingTimerRef.current = setInterval(async () => {
-        try {
-          const pollRes = await fetch('/api/minecraft-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceCode }),
-          });
-          const pollData = await pollRes.json();
-
-          if (pollData.status === 'success') {
-            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-            setIsPollingMs(false);
-            setApiMsAuthData(null);
-            setMsAuthError(null);
-
-            // Successfully verified! Add to linked accounts list
-            const newAccount: MinecraftAccount = {
-              id: `acc_${Math.random().toString(36).substring(2, 9)}`,
-              username: email,
-              ign: pollData.ign,
-              uuid: pollData.uuid,
-              auth_type: 'microsoft',
-              verified: true,
-              addedAt: Date.now(),
-            };
-
-            setAccounts((prev) => {
-              const updated = [...prev.filter((a) => a.username.toLowerCase() !== email.toLowerCase()), newAccount];
-              const accKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
-              localStorage.setItem(accKey, JSON.stringify(updated));
-              return updated;
-            });
-
-            // Sync to Supabase
-            if (supabase && currentUser) {
-              supabase
-                .from('accounts')
-                .upsert([
-                  {
-                    username: currentUser,
-                    bot_name: pollData.ign,
-                    auth_type: 'microsoft',
-                    server_host: 'donutsmp.net',
-                    server_port: 25565,
-                    server_version: 'auto',
-                  },
-                ])
-                .then(null, () => {});
-            }
-
-            alert(`🎉 Account successfully verified as Java player: ${pollData.ign}!`);
-          } else if (pollData.status === 'error') {
-            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-            setIsPollingMs(false);
-            setMsAuthError(pollData.error || 'Verification failed');
-          }
-        } catch (e: any) {
-          // continue polling
-        }
-      }, intervalSec * 1000);
-    } catch (err: any) {
-      alert(err.message || 'Failed to initiate verification');
+      alert(`✅ Minecraft Java account @${finalIgn} linked successfully!`);
+    } catch (e: any) {
+      alert(`Could not add account: ${e.message}`);
     }
   };
 
   const handleDeleteAccount = async (id: string) => {
     if (!currentUser) return;
+    const target = accounts.find((a) => a.id === id);
     const accKey = `pocketafk_accounts_${currentUser}`;
     const updated = accounts.filter((a) => a.id !== id);
     setAccounts(updated);
     localStorage.setItem(accKey, JSON.stringify(updated));
+
+    if (supabase && currentUser && target) {
+      const ign = target.ign || target.username;
+      supabase
+        .from('accounts')
+        .delete()
+        .eq('username', currentUser)
+        .eq('bot_name', ign)
+        .then(null, () => {});
+    }
   };
 
   // Server Management
@@ -1085,7 +1059,7 @@ export default function Dashboard() {
           }
           setIsAccountsOpen(false);
         }}
-        onStartVerification={handleStartVerification}
+        onAddAccount={handleAddAccount}
         onDeleteAccount={handleDeleteAccount}
       />
 

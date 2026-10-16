@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
       if (data && !error) {
         data.forEach((row) => {
-          if (row.bot_name && !row.bot_name.includes('@') && !accounts.includes(row.bot_name)) {
-            accounts.push(row.bot_name);
+          if (row.bot_name && row.bot_name.trim() && !accounts.includes(row.bot_name.trim())) {
+            accounts.push(row.bot_name.trim());
           }
           if (row.server_host) {
             const srvStr = `${row.server_host}:${row.server_port || 25565}`;

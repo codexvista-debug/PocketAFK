@@ -54,6 +54,14 @@ UPPER_USER=$(echo "$APP_USER" | tr '[:lower:]' '[:upper:]')
 
 # Fetch real-time accounts and servers from dashboard API
 USER_SUMMARY=$(curl -s "https://pocketafk.vercel.app/api/user-summary?username=$APP_USER" 2>/dev/null)
+ACCOUNTS_CACHE_FILE="$HOME/.pocketafk_accounts.json"
+
+if [ -n "$USER_SUMMARY" ] && echo "$USER_SUMMARY" | grep -q "accounts"; then
+  echo "$USER_SUMMARY" > "$ACCOUNTS_CACHE_FILE"
+elif [ -f "$ACCOUNTS_CACHE_FILE" ]; then
+  USER_SUMMARY=$(cat "$ACCOUNTS_CACHE_FILE")
+fi
+
 ACC_COUNT=0
 SRV_COUNT=0
 ACC_LIST="None linked yet"
