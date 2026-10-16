@@ -76,6 +76,7 @@ export interface Telemetry {
   dimension: string;
   gamemode: string;
   ping: number;
+  uptime?: number;
 }
 
 export interface ContainerSlot {

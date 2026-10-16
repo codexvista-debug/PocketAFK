@@ -20,6 +20,7 @@ import {
   Settings2, 
   Plus, 
   Minus,
+  Clock,
   Server, 
   Globe, 
   ShieldCheck, 
@@ -315,6 +316,85 @@ export default function Dashboard() {
       setSelectedAccountIds([activeAccount.id]);
     }
   }, [activeAccount?.id]);
+
+  // Format seconds into clean human-readable uptime (e.g. "4m 12s", "1h 05m 20s", "15s")
+  const formatUptime = (seconds: number): string => {
+    if (!seconds || seconds <= 0) return '0s';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) {
+      return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    }
+    if (m > 0) {
+      return `${m}m ${String(s).padStart(2, '0')}s`;
+    }
+    return `${s}s`;
+  };
+
+  // Uptime state & live 1-second ticker
+  const [sessionStartTimes, setSessionStartTimes] = useState<Record<string, number>>({});
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTick(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Update session start times when bot states change
+  useEffect(() => {
+    setSessionStartTimes((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      Object.entries(botStates).forEach(([bId, st]) => {
+        if (st === 'SPAWNED' || st === 'LOGGED_IN') {
+          if (!next[bId]) {
+            next[bId] = Date.now();
+            changed = true;
+          }
+        } else if (st === 'DISCONNECTED' || st === 'ERROR' || st === 'KICKED') {
+          if (next[bId]) {
+            delete next[bId];
+            changed = true;
+          }
+        }
+      });
+
+      if (activeServerId) {
+        if (botState === 'SPAWNED' || botState === 'LOGGED_IN') {
+          if (!next[activeServerId]) {
+            next[activeServerId] = Date.now();
+            changed = true;
+          }
+        } else if (botState === 'DISCONNECTED' || botState === 'ERROR' || botState === 'KICKED') {
+          if (next[activeServerId]) {
+            delete next[activeServerId];
+            changed = true;
+          }
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [botStates, botState, activeServerId]);
+
+  // Automatically close Microsoft Authentication popup once a bot is connected / logged in
+  useEffect(() => {
+    const isAnyConnected =
+      botState === 'SPAWNED' ||
+      botState === 'LOGGED_IN' ||
+      Object.values(botStates).some((st) => st === 'SPAWNED' || st === 'LOGGED_IN');
+
+    if (isAnyConnected && (msAuthData || apiMsAuthData)) {
+      clearMsAuth();
+      setApiMsAuthData(null);
+      setIsPollingMs(false);
+      if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+    }
+  }, [botState, botStates, msAuthData, apiMsAuthData, clearMsAuth]);
 
   const effectiveUser = currentUser || 'default';
   const termuxCommand = secretCode
@@ -1683,6 +1763,7 @@ export default function Dashboard() {
                               </th>
                               <th className="p-3">Account Name</th>
                               <th className="p-3">Status</th>
+                              <th className="p-3">Uptime</th>
                               <th className="p-3">Note</th>
                               <th className="p-3 text-right">Actions</th>
                             </tr>
@@ -1690,7 +1771,7 @@ export default function Dashboard() {
                           <tbody className="divide-y divide-slate-100">
                             {assignedAccounts.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="p-8 text-center text-slate-500">
+                                <td colSpan={6} className="p-8 text-center text-slate-500">
                                   <div className="space-y-2">
                                     <p className="text-xs">No accounts assigned to this server profile yet.</p>
                                     {availableAccounts.length > 0 && (
@@ -1713,6 +1794,10 @@ export default function Dashboard() {
                                 const isAssignedActive = activeAccount?.id === acc.id;
                                 const currentBotState = isAssignedActive ? botState : 'DISCONNECTED';
                                 const isPinned = pinnedAccountIds.includes(acc.id);
+                                const isBotOnline = isAssignedActive && (currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN');
+                                const srvStart = sessionStartTimes[activeServer.id];
+                                const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
+                                const accountUptime = isBotOnline ? (telemetry?.uptime ?? localSec) : 0;
 
                                 return (
                                   <tr
@@ -1771,6 +1856,16 @@ export default function Dashboard() {
                                         </span>
                                       ) : (
                                         getStatusBadge(currentBotState)
+                                      )}
+                                    </td>
+                                    <td className="p-3">
+                                      {isBotOnline ? (
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-mono text-xs font-bold shadow-2xs">
+                                          <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                          <span>{formatUptime(accountUptime)}</span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs font-mono text-slate-400 font-medium px-2">—</span>
                                       )}
                                     </td>
                                     <td className="p-3">

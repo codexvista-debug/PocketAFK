@@ -133,6 +133,10 @@ export function useDaemonSocket(
                 if (reason !== undefined) {
                   setBotStateReasons((prev) => ({ ...prev, [botId]: reason }));
                 }
+                // Automatically dismiss Microsoft Auth modal once the bot connects or logs in!
+                if (state === 'LOGGED_IN' || state === 'SPAWNED') {
+                  setMsAuthData((prev) => (prev?.botId === botId || !prev?.botId ? null : prev));
+                }
               }
               break;
             }
@@ -177,6 +181,7 @@ export function useDaemonSocket(
             }
 
             case 'ACCOUNT_VERIFIED': {
+              setMsAuthData(null);
               if (onAccountVerifiedRef.current) {
                 onAccountVerifiedRef.current(data.payload);
               }

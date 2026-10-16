@@ -19,6 +19,7 @@ export class PocketBotInstance {
   private lastAttackTime: number = 0;
   private isDestroyed: boolean = false;
   private currentWindow: any = null;
+  public connectedAt: number = 0;
 
   constructor(config: BotConfig, broadcast: MessageBroadcastFn) {
     this.config = config;
@@ -161,6 +162,7 @@ export class PocketBotInstance {
     // Login event
     this.bot.once('login', () => {
       this.setState('LOGGED_IN');
+      if (!this.connectedAt) this.connectedAt = Date.now();
       const realIgn = this.bot?.username || (this.bot?.player as any)?.username || this.config.username;
       const playerUuid = (this.bot as any)?._client?.uuid;
 
@@ -189,6 +191,7 @@ export class PocketBotInstance {
     // Spawn event (Bot appears in world)
     this.bot.once('spawn', () => {
       this.setState('SPAWNED');
+      if (!this.connectedAt) this.connectedAt = Date.now();
       this.logConsole({
         type: 'session_divider',
         raw: `[PocketAFK] Spawned in world! Dimension: ${this.bot?.game.dimension || 'overworld'}`,
@@ -500,7 +503,8 @@ export class PocketBotInstance {
       },
       dimension: this.bot.game.dimension || 'overworld',
       gamemode: this.bot.game.gameMode || 'survival',
-      ping: (this.bot.player as any)?.ping || 0
+      ping: (this.bot.player as any)?.ping || 0,
+      uptime: this.connectedAt ? Math.floor((Date.now() - this.connectedAt) / 1000) : 0
     };
 
     this.broadcast({
@@ -650,6 +654,7 @@ export class PocketBotInstance {
   }
 
   private cleanup() {
+    this.connectedAt = 0;
     if (this.antiAfkInterval) clearInterval(this.antiAfkInterval);
     if (this.mobFarmInterval) clearInterval(this.mobFarmInterval);
     if (this.telemetryInterval) clearInterval(this.telemetryInterval);

@@ -57,6 +57,7 @@ export interface TelemetryPayload {
   dimension: string;
   gamemode: string;
   ping: number;
+  uptime: number;
 }
 
 export interface ContainerSlot {
