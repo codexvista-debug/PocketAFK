@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { MinecraftAccount } from '../types';
-import { X, UserPlus, Trash2, CheckCircle2, ShieldCheck, Mail, AlertTriangle, KeyRound } from 'lucide-react';
+import { X, UserPlus, Trash2, CheckCircle2, ShieldCheck, Mail, KeyRound, AlertCircle } from 'lucide-react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -11,7 +11,10 @@ interface AccountModalProps {
   activeAccountId: string | null;
   onSelectAccount: (account: MinecraftAccount) => void;
   onAddAccount: (email: string) => Promise<void>;
+  onVerifyAccount: (accountId: string, email: string) => void;
   onDeleteAccount: (id: string) => Promise<void>;
+  isDaemonConnected: boolean;
+  isVerifyingId?: string | null;
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({
@@ -21,7 +24,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   activeAccountId,
   onSelectAccount,
   onAddAccount,
-  onDeleteAccount
+  onVerifyAccount,
+  onDeleteAccount,
+  isDaemonConnected,
+  isVerifyingId
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [minecraftEmail, setMinecraftEmail] = useState('');
@@ -45,9 +51,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-50/90 to-slate-50">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-50/90 via-teal-50/60 to-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
               <ShieldCheck className="w-4 h-4" />
@@ -82,6 +88,15 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 </button>
               </div>
 
+              {!isDaemonConnected && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    <b>Termux Daemon Standby:</b> Ensure your phone is connected so it can generate the Microsoft device verification code.
+                  </span>
+                </div>
+              )}
+
               {accounts.length === 0 ? (
                 <div className="text-center py-10 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-6 space-y-2">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
@@ -99,16 +114,17 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {accounts.map((acc) => {
                     const isSelected = acc.id === activeAccountId;
                     const avatarName = acc.ign || 'MHF_Steve';
                     const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/36`;
+                    const isVerifying = isVerifyingId === acc.id;
 
                     return (
                       <div
                         key={acc.id}
-                        className={`p-3 rounded-xl border flex items-center justify-between transition ${
+                        className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
                           isSelected
                             ? 'bg-emerald-50/80 border-emerald-400 shadow-2xs ring-1 ring-emerald-400/20'
                             : 'bg-white border-slate-200 hover:border-slate-300'
@@ -119,7 +135,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           className="cursor-pointer flex items-center gap-3 flex-1 min-w-0"
                         >
                           {/* Player Head Skin Avatar */}
-                          <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-300 shrink-0 bg-slate-100 shadow-2xs">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-300 shrink-0 bg-slate-100 shadow-2xs">
                             <img
                               src={avatarUrl}
                               alt={avatarName}
@@ -131,17 +147,17 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-extrabold text-xs text-slate-900 truncate">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs text-slate-900 truncate">
                                 {acc.ign || acc.username}
                               </span>
                               {acc.verified ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
                                   <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                                   Verified Java
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.2 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-200">
                                   <KeyRound className="w-2.5 h-2.5 text-amber-600" />
                                   Needs Verification
                                 </span>
@@ -154,9 +170,26 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 pl-2 shrink-0">
+                        {/* Action buttons on card */}
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          {/* Dedicated Verify Button if not verified! */}
+                          {!acc.verified && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onVerifyAccount(acc.id, acc.username);
+                              }}
+                              disabled={isVerifying || !isDaemonConnected}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                              title={!isDaemonConnected ? 'Daemon must be connected to generate code' : 'Generate Microsoft Device Code'}
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>{isVerifying ? 'Generating Code...' : 'Verify Now'}</span>
+                            </button>
+                          )}
+
                           {isSelected ? (
-                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md">
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2 py-1 rounded-md">
                               Active
                             </span>
                           ) : (
@@ -188,7 +221,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <div>
                 <div className="text-xs font-bold text-slate-900">Link Minecraft Java Account</div>
                 <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                  Enter your Microsoft account email. You will receive a 1-time device code to link securely when connecting to a server.
+                  Enter your official Microsoft account email. You will receive a 1-time Microsoft device code to verify ownership.
                 </div>
               </div>
 
@@ -212,10 +245,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900 space-y-1">
                 <div className="font-bold flex items-center gap-1.5 text-emerald-800">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  Official Java Edition Only
+                  Instant Microsoft Device Verification
                 </div>
                 <p className="text-emerald-700 leading-normal">
-                  Offline/cracked accounts are disabled for anti-ban security. Your verified in-game username and player skin head will appear once linked.
+                  After clicking "Add & Verify", a Microsoft verification popup will appear with an 8-character code to link your Java account.
                 </p>
               </div>
 
@@ -230,9 +263,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || !minecraftEmail.trim()}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  {loading ? 'Adding...' : 'Add Account'}
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {loading ? 'Adding...' : 'Add & Verify'}
                 </button>
               </div>
             </form>

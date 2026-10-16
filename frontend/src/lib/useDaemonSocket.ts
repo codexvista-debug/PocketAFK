@@ -254,6 +254,10 @@ export function useDaemonSocket(
     return sendJson({ type: 'UPDATE_SETTINGS', payload: { botId, settings } });
   }, [sendJson]);
 
+  const verifyAccount = useCallback((accountId: string, email: string) => {
+    return sendJson({ type: 'VERIFY_ACCOUNT', payload: { accountId, email } });
+  }, [sendJson]);
+
   const clearMessages = useCallback((botId?: string) => {
     if (botId) {
       setMessagesByBot((prev) => ({ ...prev, [botId]: [] }));
@@ -292,6 +296,7 @@ export function useDaemonSocket(
     clickSlot,
     closeWindow,
     updateSettings,
+    verifyAccount,
     clearMessages,
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),

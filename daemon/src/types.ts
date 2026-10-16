@@ -87,6 +87,7 @@ export type ClientMessage =
   | { type: 'CLICK_SLOT'; payload: { botId: string; windowId: number; slot: number; mouseButton?: number; mode?: number } }
   | { type: 'CLOSE_WINDOW'; payload: { botId: string; windowId: number } }
   | { type: 'UPDATE_SETTINGS'; payload: { botId: string; settings: Partial<BotSettings> } }
+  | { type: 'VERIFY_ACCOUNT'; payload: { accountId: string; email: string } }
   | { type: 'REQUEST_SYNC'; payload?: { botId?: string } };
 
 // Daemon to Client Messages

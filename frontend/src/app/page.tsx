@@ -69,9 +69,11 @@ export default function Dashboard() {
   const [editingServer, setEditingServer] = useState<ServerProfile | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
+  const [verifyingAccountId, setVerifyingAccountId] = useState<string | null>(null);
 
   // Handle Account Verification callback from daemon
   const handleAccountVerified = useCallback((data: AccountVerifiedData) => {
+    setVerifyingAccountId(null);
     setAccounts((prevAccounts) => {
       const nextAccounts = prevAccounts.map((acc) => {
         if (
@@ -134,6 +136,7 @@ export default function Dashboard() {
     clickSlot,
     closeWindow,
     updateSettings,
+    verifyAccount,
     clearMessages,
     msAuthData,
     clearMsAuth,
@@ -283,6 +286,15 @@ export default function Dashboard() {
   }, [currentUser]);
 
   // Account Management
+  const handleVerifyAccount = (accountId: string, email: string) => {
+    if (socketStatus !== 'AUTHENTICATED') {
+      alert('Your Termux daemon is not connected. Run the 1-click command on your phone first so it can generate the Microsoft device code.');
+      return;
+    }
+    setVerifyingAccountId(accountId);
+    verifyAccount(accountId, email);
+  };
+
   const handleAddAccount = async (email: string) => {
     if (!currentUser) return;
     const accKey = `pocketafk_accounts_${currentUser}`;
@@ -297,6 +309,12 @@ export default function Dashboard() {
     const updated = [...accounts, newAccount];
     setAccounts(updated);
     localStorage.setItem(accKey, JSON.stringify(updated));
+
+    // Immediately trigger Microsoft device code verification if daemon is online!
+    if (socketStatus === 'AUTHENTICATED') {
+      setVerifyingAccountId(newAccount.id);
+      verifyAccount(newAccount.id, newAccount.username);
+    }
   };
 
   const handleDeleteAccount = async (id: string) => {
@@ -945,7 +963,10 @@ export default function Dashboard() {
           setIsAccountsOpen(false);
         }}
         onAddAccount={handleAddAccount}
+        onVerifyAccount={handleVerifyAccount}
         onDeleteAccount={handleDeleteAccount}
+        isDaemonConnected={socketStatus === 'AUTHENTICATED'}
+        isVerifyingId={verifyingAccountId}
       />
 
       {/* Settings Modal (Daemon & Termux Command) */}
@@ -970,7 +991,11 @@ export default function Dashboard() {
       {/* Microsoft 1-Time Device Authentication Modal */}
       <MicrosoftAuthModal
         authData={msAuthData}
-        accountEmail={activeAccount?.username}
+        accountEmail={
+          accounts.find((a) => a.id === msAuthData?.botId)?.username ||
+          accounts.find((a) => a.id === verifyingAccountId)?.username ||
+          activeAccount?.username
+        }
         onClose={clearMsAuth}
       />
     </div>
