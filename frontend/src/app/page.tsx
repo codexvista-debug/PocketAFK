@@ -254,9 +254,11 @@ export default function Dashboard() {
       const accKey = `pocketafk_accounts_${currentUser}`;
       const srvKey = `pocketafk_servers_${currentUser}`;
 
-      // 1. Load accounts from storage (strictly in-game IGNs, no emails!)
+      // 1. Load accounts from storage (strictly in-game IGNs, deduplicated)
       const storedAcc = localStorage.getItem(accKey);
       let loadedAccounts: MinecraftAccount[] = [];
+      const seenIgns = new Set<string>();
+
       if (storedAcc) {
         try {
           const parsed = JSON.parse(storedAcc);
@@ -271,8 +273,13 @@ export default function Dashboard() {
                 username: cleanIgn,
                 ign: cleanIgn,
               };
+            })
+            .filter((a: any) => {
+              const key = (a.ign || a.username || '').trim().toLowerCase();
+              if (!key || seenIgns.has(key)) return false;
+              seenIgns.add(key);
+              return true;
             });
-          // Scrub legacy emails from storage
           localStorage.setItem(accKey, JSON.stringify(loadedAccounts));
         } catch (e) {
           // ignore
@@ -300,42 +307,56 @@ export default function Dashboard() {
         try {
           const { data, error } = await supabase.from('accounts').select('*').eq('username', currentUser);
           if (data && data.length > 0 && !error) {
-            const dbAccounts: MinecraftAccount[] = [];
+            const dbAccountMap = new Map<string, MinecraftAccount>();
+            // Keep loaded accounts first
+            loadedAccounts.forEach((acc) => {
+              const key = (acc.ign || acc.username || '').trim().toLowerCase();
+              if (key) dbAccountMap.set(key, acc);
+            });
+
             const dbServers: ServerProfile[] = [];
 
             data.forEach((row) => {
               const accId = `acc_${row.id}`;
               const cleanName = (row.bot_name && !row.bot_name.includes('@'))
-                ? row.bot_name
+                ? row.bot_name.trim()
                 : null;
               if (cleanName) {
-                dbAccounts.push({
-                  id: accId,
-                  username: cleanName,
-                  auth_type: 'microsoft',
-                  ign: cleanName,
-                  verified: true,
-                  addedAt: Date.now(),
-                });
+                const lower = cleanName.toLowerCase();
+                if (!dbAccountMap.has(lower)) {
+                  dbAccountMap.set(lower, {
+                    id: accId,
+                    username: cleanName,
+                    auth_type: 'microsoft',
+                    ign: cleanName,
+                    verified: true,
+                    addedAt: Date.now(),
+                  });
+                }
               }
 
-              dbServers.push({
-                id: `srv_${row.id}`,
-                name: row.bot_name ? `${row.bot_name}'s Server` : 'Minecraft Server',
-                accountId: accId,
-                serverHost: row.server_host || 'donutsmp.net',
-                serverPort: row.server_port || 25565,
-                serverVersion: row.server_version || 'auto',
-                autoReconnect: row.auto_reconnect ?? true,
-                settings: row.settings || DEFAULT_BOT_SETTINGS,
-              });
+              // Only construct dbServers if storedSrv was NOT in localStorage (i.e. fresh browser login)
+              if (storedSrv === null) {
+                dbServers.push({
+                  id: `srv_${row.id}`,
+                  name: row.bot_name ? `${row.bot_name}'s Server` : 'Minecraft Server',
+                  accountId: accId,
+                  serverHost: row.server_host || 'donutsmp.net',
+                  serverPort: row.server_port || 25565,
+                  serverVersion: row.server_version || 'auto',
+                  autoReconnect: row.auto_reconnect ?? true,
+                  settings: row.settings || DEFAULT_BOT_SETTINGS,
+                });
+              }
             });
 
-            if (dbAccounts.length > 0) {
-              setAccounts(dbAccounts);
+            const finalAccounts = Array.from(dbAccountMap.values());
+            setAccounts(finalAccounts);
+            localStorage.setItem(accKey, JSON.stringify(finalAccounts));
+
+            if (storedSrv === null && dbServers.length > 0) {
               setServers(dbServers);
               setActiveServerId(dbServers[0].id);
-              localStorage.setItem(accKey, JSON.stringify(dbAccounts));
               localStorage.setItem(srvKey, JSON.stringify(dbServers));
             }
           }
@@ -348,8 +369,8 @@ export default function Dashboard() {
     loadData();
   }, [currentUser]);
 
-  // Account Management - Instant passwordless adding & Mojang verification
-  const handleAddAccount = async (username: string) => {
+  // One-Click Microsoft OAuth Device Code Sign-In (VistaAFK style, zero typing!)
+  const handleStartMicrosoftLogin = async () => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
@@ -360,50 +381,101 @@ export default function Dashboard() {
       return;
     }
 
+    setIsAccountsOpen(false); // Close account picker modal
+    setMsAuthError(null);
+    setIsPollingMs(true);
+
     try {
-      const res = await fetch(`/api/minecraft-profile?username=${encodeURIComponent(username)}`);
+      showToast('Requesting Microsoft sign-in code...', 'info');
+      const res = await fetch('/api/minecraft-auth');
       const data = await res.json();
-      const finalIgn = (data.ign && !data.ign.includes('@')) ? data.ign : username.trim().split('@')[0];
-      const finalUuid = data.uuid || '';
 
-      const newAccount: MinecraftAccount = {
-        id: `acc_${Math.random().toString(36).substring(2, 9)}`,
-        username: finalIgn,
-        ign: finalIgn,
-        uuid: finalUuid,
-        auth_type: 'microsoft',
-        verified: true,
-        addedAt: Date.now(),
-      };
-
-      setAccounts((prev) => {
-        const filtered = prev.filter((a) => (a.ign || a.username).toLowerCase() !== finalIgn.toLowerCase());
-        const updated = [...filtered, newAccount];
-        const accKey = `pocketafk_accounts_${currentUser}`;
-        localStorage.setItem(accKey, JSON.stringify(updated));
-        return updated;
-      });
-
-      // Sync to Supabase table 'accounts' linked with our website username
-      if (supabase && currentUser) {
-        supabase
-          .from('accounts')
-          .upsert([
-            {
-              username: currentUser,
-              bot_name: finalIgn,
-              auth_type: 'microsoft',
-              server_host: 'donutsmp.net',
-              server_port: 25565,
-              server_version: 'auto',
-            },
-          ])
-          .then(null, (e: any) => console.warn('Supabase account save error:', e));
+      if (!res.ok || !data.success || !data.deviceCode) {
+        throw new Error(data.error || 'Failed to initiate Microsoft login');
       }
 
-      showToast(`Minecraft Java account @${finalIgn} linked successfully!`, 'success');
-    } catch (e: any) {
-      showToast(`Could not add account: ${e.message}`, 'error');
+      setApiMsAuthData({
+        botId: 'new_account',
+        userCode: data.userCode,
+        url: data.verificationUri,
+        deviceCode: data.deviceCode,
+      });
+
+      // Clear any previous polling timer
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current);
+      }
+
+      // Poll Microsoft every 3.5 seconds for approval
+      pollingTimerRef.current = setInterval(async () => {
+        try {
+          const pollRes = await fetch('/api/minecraft-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceCode: data.deviceCode }),
+          });
+
+          const pollData = await pollRes.json();
+
+          if (pollData.status === 'success' && pollData.ign) {
+            // Success: User approved on Microsoft!
+            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+            setIsPollingMs(false);
+            setApiMsAuthData(null);
+
+            const finalIgn = pollData.ign;
+            const finalUuid = pollData.uuid || '';
+
+            const newAccount: MinecraftAccount = {
+              id: `acc_${Math.random().toString(36).substring(2, 9)}`,
+              username: finalIgn,
+              ign: finalIgn,
+              uuid: finalUuid,
+              auth_type: 'microsoft',
+              verified: true,
+              addedAt: Date.now(),
+            };
+
+            setAccounts((prev) => {
+              const filtered = prev.filter((a) => (a.ign || a.username).toLowerCase() !== finalIgn.toLowerCase());
+              const updated = [...filtered, newAccount];
+              const accKey = `pocketafk_accounts_${currentUser}`;
+              localStorage.setItem(accKey, JSON.stringify(updated));
+              return updated;
+            });
+
+            // Sync to Supabase
+            if (supabase && currentUser) {
+              supabase
+                .from('accounts')
+                .upsert([
+                  {
+                    username: currentUser,
+                    bot_name: finalIgn,
+                    auth_type: 'microsoft',
+                    server_host: 'donutsmp.net',
+                    server_port: 25565,
+                    server_version: 'auto',
+                  },
+                ])
+                .then(null, () => {});
+            }
+
+            showToast(`🎉 Minecraft Java account @${finalIgn} linked successfully!`, 'success');
+          } else if (pollData.status === 'error') {
+            if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
+            setIsPollingMs(false);
+            setMsAuthError(pollData.error || 'Microsoft authentication failed.');
+            showToast(pollData.error || 'Authentication error', 'error');
+          }
+        } catch (err: any) {
+          console.warn('Poll error:', err);
+        }
+      }, 3500);
+    } catch (err: any) {
+      setIsPollingMs(false);
+      setMsAuthError(err.message);
+      showToast(`Microsoft login failed: ${err.message}`, 'error');
     }
   };
 
@@ -454,16 +526,32 @@ export default function Dashboard() {
       try {
         const assignedAcc = accounts.find((a) => a.id === profile.accountId);
         const playerIgn = assignedAcc?.ign || assignedAcc?.username || profile.name;
-        await supabase.from('accounts').upsert([{
-          username: currentUser,
-          bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
-          auth_type: profile.authType || 'offline',
-          server_host: profile.serverHost,
-          server_port: profile.serverPort,
-          server_version: profile.serverVersion,
-          auto_reconnect: profile.autoReconnect,
-          settings: profile.settings,
-        }]);
+        if (profile.id.startsWith('srv_')) {
+          const dbId = profile.id.replace('srv_', '');
+          await supabase.from('accounts').update({
+            server_host: profile.serverHost,
+            server_port: profile.serverPort,
+            server_version: profile.serverVersion,
+            bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
+            auth_type: profile.authType || 'offline',
+            auto_reconnect: profile.autoReconnect,
+            settings: profile.settings,
+          }).eq('id', dbId).eq('username', currentUser);
+        } else {
+          const { data } = await supabase.from('accounts').insert([{
+            username: currentUser,
+            bot_name: playerIgn.includes('@') ? playerIgn.split('@')[0] : playerIgn,
+            auth_type: profile.authType || 'offline',
+            server_host: profile.serverHost,
+            server_port: profile.serverPort,
+            server_version: profile.serverVersion,
+            auto_reconnect: profile.autoReconnect,
+            settings: profile.settings,
+          }]).select();
+          if (data && data[0]?.id) {
+            profile.id = `srv_${data[0].id}`;
+          }
+        }
       } catch (e) {
         // ignore
       }
@@ -476,12 +564,32 @@ export default function Dashboard() {
     const srvKey = `pocketafk_servers_${currentUser}`;
     stopBot(profileId);
 
+    const target = servers.find((s) => s.id === profileId);
     const updated = servers.filter((s) => s.id !== profileId);
     setServers(updated);
     localStorage.setItem(srvKey, JSON.stringify(updated));
     if (activeServerId === profileId) {
       setActiveServerId(updated[0]?.id || null);
     }
+
+    // Actively delete from Supabase so server instance never resurrects!
+    if (supabase && currentUser) {
+      try {
+        if (profileId.startsWith('srv_')) {
+          const dbId = profileId.replace('srv_', '');
+          await supabase.from('accounts').delete().eq('id', dbId).eq('username', currentUser);
+        } else if (target) {
+          await supabase
+            .from('accounts')
+            .delete()
+            .eq('username', currentUser)
+            .eq('server_host', target.serverHost);
+        }
+      } catch (e) {
+        console.warn('Supabase delete server error:', e);
+      }
+    }
+
     showToast('Server instance deleted.', 'info');
   };
 
@@ -1082,14 +1190,7 @@ export default function Dashboard() {
         isOpen={isAccountsOpen}
         onClose={() => setIsAccountsOpen(false)}
         accounts={accounts}
-        activeAccountId={activeAccount?.id || null}
-        onSelectAccount={(acc) => {
-          if (activeServer) {
-            handleSaveServer({ ...activeServer, accountId: acc.id });
-          }
-          setIsAccountsOpen(false);
-        }}
-        onAddAccount={handleAddAccount}
+        onStartMicrosoftLogin={handleStartMicrosoftLogin}
         onDeleteAccount={handleDeleteAccount}
       />
 

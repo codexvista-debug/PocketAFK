@@ -192,7 +192,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
               >
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.ign ? `${acc.ign} (${acc.username})` : acc.username} {acc.verified ? '✓ Verified' : '(Unverified)'}
+                    {acc.ign || acc.username} {acc.verified ? '✓ Verified' : ''}
                   </option>
                 ))}
               </select>
