@@ -59,7 +59,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState(25565);
   const [serverVersion, setServerVersion] = useState('auto');
-  const [authType, setAuthType] = useState<'offline' | 'microsoft'>('offline');
+  const [authType, setAuthType] = useState<'offline' | 'microsoft'>('microsoft');
   const [autoReconnect, setAutoReconnect] = useState(true);
   const [settings, setSettings] = useState<BotSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
@@ -77,7 +77,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
       setServerHost(initialProfile.serverHost);
       setServerPort(initialProfile.serverPort || 25565);
       setServerVersion(initialProfile.serverVersion || 'auto');
-      setAuthType(initialProfile.authType || 'offline');
+      setAuthType(initialProfile.authType || 'microsoft');
       setAutoReconnect(initialProfile.autoReconnect ?? true);
       setSettings(initialProfile.settings || DEFAULT_SETTINGS);
     } else {
@@ -86,7 +86,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
       setServerHost('');
       setServerPort(25565);
       setServerVersion('auto');
-      setAuthType('offline');
+      setAuthType('microsoft');
       setAutoReconnect(true);
       setSettings(DEFAULT_SETTINGS);
     }
@@ -288,23 +288,6 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setAuthType('offline')}
-                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
-                  authType === 'offline'
-                    ? 'bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500/20 text-emerald-900 shadow-2xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <div className="font-bold text-xs flex items-center gap-1.5 text-emerald-800">
-                  <Zap className="w-3.5 h-3.5 text-emerald-600" /> Direct Java Handshake
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Instant connect without extra browser prompts. Recommended for most servers.
-                </div>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setAuthType('microsoft')}
                 className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
                   authType === 'microsoft'
@@ -312,11 +295,28 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                     : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                 }`}
               >
-                <div className="font-bold text-xs flex items-center gap-1.5 text-slate-800">
-                  <Shield className="w-3.5 h-3.5 text-sky-600" /> Microsoft Online Mode
+                <div className="font-bold text-xs flex items-center gap-1.5 text-emerald-800">
+                  <Shield className="w-3.5 h-3.5 text-emerald-600" /> Microsoft Online Mode (Premium)
                 </div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
-                  For servers strictly enforcing Mojang online session verification.
+                  Official Mojang session verification. Required for public networks like FreshSMP and Hypixel.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuthType('offline')}
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                  authType === 'offline'
+                    ? 'bg-emerald-50/90 border-emerald-500 ring-1 ring-emerald-500/20 text-emerald-900 shadow-2xs'
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5 text-slate-800">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" /> Direct Java Handshake (Cracked)
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Only for unofficial / offline-mode cracked servers. Public networks will kick cracked players.
                 </div>
               </button>
             </div>

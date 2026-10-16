@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import mineflayer, { Bot } from 'mineflayer';
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
@@ -42,29 +44,64 @@ export class PocketBotInstance {
         ? this.config.username.split('@')[0]
         : this.config.username;
 
+      // Central tokens directory: share tokens with VistaAFK/Termux profiles
+      const tokenFolder = path.resolve(process.cwd(), 'tokens');
+      const profilesFolder = path.resolve(process.cwd(), 'profiles');
+      const vistaTokensFolder = path.resolve(process.cwd(), '..', 'VistaAFK', 'tokens');
+      const homeTokensFolder = path.resolve(process.env.HOME || '', 'tokens');
+
+      if (!fs.existsSync(tokenFolder)) {
+        try { fs.mkdirSync(tokenFolder, { recursive: true }); } catch (e) {}
+      }
+
+      // Automatically copy any cached Microsoft tokens from VistaAFK or profiles
+      for (const srcDir of [vistaTokensFolder, homeTokensFolder, profilesFolder]) {
+        if (fs.existsSync(srcDir)) {
+          try {
+            const files = fs.readdirSync(srcDir);
+            for (const f of files) {
+              const srcFile = path.join(srcDir, f);
+              const dstFile = path.join(tokenFolder, f);
+              if (!fs.existsSync(dstFile) && fs.statSync(srcFile).isFile()) {
+                fs.copyFileSync(srcFile, dstFile);
+                console.log(`[PocketAFK] Shared existing OAuth token from ${srcDir}: ${f}`);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      const authMode = this.config.authType === 'offline' ? 'offline' : 'microsoft';
+
       this.bot = mineflayer.createBot({
         host: this.config.host,
         port: this.config.port,
         username: cleanUsername,
-        auth: this.config.authType === 'microsoft' ? 'microsoft' : 'offline',
+        auth: authMode,
         version: this.config.version && this.config.version !== 'auto' ? this.config.version : undefined,
-        profilesFolder: './profiles', // Caches OAuth tokens locally on device
-        physicsEnabled: this.config.settings.physics !== false, // Default true
-        viewDistance: 'tiny', // Memory optimization for Android Termux
+        profilesFolder: tokenFolder,
+        physicsEnabled: this.config.settings.physics !== false,
+        viewDistance: 'tiny',
         onMsaCode: (data: any) => {
+          const userCode = data.user_code || data.userCode;
+          const baseUri = data.verification_uri || 'https://www.microsoft.com/link';
+          const directUri = userCode
+            ? `https://www.microsoft.com/link?otc=${encodeURIComponent(userCode)}&prompt=select_account`
+            : baseUri;
+
           this.broadcast({
             type: 'MS_AUTH_CODE',
             payload: {
               botId: this.config.id,
-              userCode: data.user_code,
-              url: data.verification_uri,
+              userCode: userCode,
+              url: directUri,
               message: data.message
             }
           });
           this.logConsole({
             type: 'system',
-            raw: `[Microsoft Auth] Code: ${data.user_code} at ${data.verification_uri}`,
-            formattedText: `<span style="color:#00AAAA;font-weight:bold">[Microsoft Auth] Code: <span style="color:#FFAA00">${data.user_code}</span> &bull; <a href="${data.verification_uri}" target="_blank" style="color:#55FFFF;text-decoration:underline">Click here to authenticate</a></span>`
+            raw: `[Microsoft Auth] Code: ${userCode} at ${directUri}`,
+            formattedText: `<span style="color:#00AAAA;font-weight:bold">[Microsoft Auth] Code: <span style="color:#FFAA00">${userCode}</span> &bull; <a href="${directUri}" target="_blank" style="color:#55FFFF;text-decoration:underline">Click here to authenticate</a></span>`
           });
         }
       });

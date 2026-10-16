@@ -649,7 +649,7 @@ export default function Dashboard() {
     startBot({
       id: profile.id,
       username: cleanPlayerName,
-      authType: profile.authType || 'offline',
+      authType: profile.authType || 'microsoft',
       host: profile.serverHost,
       port: profile.serverPort,
       version: profile.serverVersion === 'auto' ? false : profile.serverVersion,
