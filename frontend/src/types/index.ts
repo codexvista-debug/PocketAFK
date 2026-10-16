@@ -20,6 +20,8 @@ export interface MinecraftAccount {
   uuid?: string;                  // Minecraft Java UUID
   verified: boolean;              // True once authenticated via Microsoft MSA
   addedAt: number;
+  authError?: string;             // Error details if verification failed or mismatched
+  expectedIgn?: string;           // Target Minecraft username expected when verification was started
 }
 
 // Backward compatibility alias

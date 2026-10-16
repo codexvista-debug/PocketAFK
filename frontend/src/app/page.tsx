@@ -24,6 +24,7 @@ import {
   Globe, 
   ShieldCheck, 
   AlertCircle, 
+  AlertTriangle,
   ArrowRight, 
   Zap, 
   Sparkles, 
@@ -155,6 +156,72 @@ export default function Dashboard() {
   // Handle Account Verification callback from daemon
   const handleAccountVerified = useCallback((data: AccountVerifiedData) => {
     setAccounts((prevAccounts) => {
+      // Find the account targeted by botId or username/email
+      const targetAcc = prevAccounts.find(
+        (acc) =>
+          acc.id === data.botId ||
+          acc.username.toLowerCase() === data.email.toLowerCase() ||
+          (acc.expectedIgn && acc.expectedIgn.toLowerCase() === data.email.toLowerCase())
+      );
+
+      // Expected Minecraft IGN
+      const expectedName =
+        targetAcc?.expectedIgn ||
+        (targetAcc && !targetAcc.username.includes('@') ? targetAcc.username : null);
+
+      // ACCOUNT MISMATCH GUARD: Check if targeted account was expecting a different name
+      if (expectedName && expectedName.toLowerCase() !== data.ign.toLowerCase()) {
+        const errorText = `Account mismatch: Authenticated as '${data.ign}', but expected '${expectedName}'. Verification aborted.`;
+        showToast(errorText, 'error');
+
+        const updatedWithMismatch = prevAccounts.map((acc) => {
+          if (acc.id === targetAcc?.id) {
+            return {
+              ...acc,
+              verified: false,
+              authError: `Verification failed: Logged into Microsoft account '${data.ign}', but expected '${expectedName}'. Please log into the correct Microsoft account.`,
+            };
+          }
+          return acc;
+        });
+
+        const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(userKey, JSON.stringify(updatedWithMismatch));
+        }
+        return updatedWithMismatch;
+      }
+
+      // DUPLICATE GUARD: Prevent duplicate linked accounts
+      const alreadyLinked = prevAccounts.find(
+        (acc) =>
+          acc.id !== targetAcc?.id &&
+          ((acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase()) ||
+           (acc.uuid && data.uuid && acc.uuid === data.uuid))
+      );
+
+      if (alreadyLinked) {
+        showToast(`Account '@${data.ign}' is already linked to your profile!`, 'error');
+        if (targetAcc) {
+          const updatedWithDup = prevAccounts.map((acc) => {
+            if (acc.id === targetAcc.id) {
+              return {
+                ...acc,
+                verified: false,
+                authError: `Verification failed: Microsoft account '@${data.ign}' is already linked.`,
+              };
+            }
+            return acc;
+          });
+          const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(userKey, JSON.stringify(updatedWithDup));
+          }
+          return updatedWithDup;
+        }
+        return prevAccounts;
+      }
+
       const nextAccounts = prevAccounts.map((acc) => {
         if (
           acc.username.toLowerCase() === data.email.toLowerCase() ||
@@ -166,6 +233,7 @@ export default function Dashboard() {
             ign: data.ign,
             uuid: data.uuid,
             verified: true,
+            authError: undefined,
           };
         }
         return acc;
@@ -350,22 +418,27 @@ export default function Dashboard() {
         try {
           const parsed = JSON.parse(storedAcc);
           loadedAccounts = parsed
-            .filter((a: any) => !a.id.startsWith('starter-') && a.verified === true)
+            .filter((a: any) => !a.id.startsWith('starter-') && (a.verified === true || Boolean(a.authError)))
             .map((a: any) => {
               const cleanIgn = (a.ign && !a.ign.includes('@'))
                 ? a.ign
                 : (!a.username.includes('@') ? a.username : 'Player');
+              const key = cleanIgn.trim().toLowerCase();
+              if (key && seenIgns.has(key)) {
+                return {
+                  ...a,
+                  username: cleanIgn,
+                  ign: cleanIgn,
+                  verified: false,
+                  authError: `Duplicate of @${cleanIgn}. Click Re-link to authenticate with your intended Microsoft account (e.g. V3locitz).`,
+                };
+              }
+              if (key) seenIgns.add(key);
               return {
                 ...a,
                 username: cleanIgn,
                 ign: cleanIgn,
               };
-            })
-            .filter((a: any) => {
-              const key = (a.ign || a.username || '').trim().toLowerCase();
-              if (!key || seenIgns.has(key)) return false;
-              seenIgns.add(key);
-              return true;
             });
           localStorage.setItem(accKey, JSON.stringify(loadedAccounts));
         } catch (e) {
@@ -453,14 +526,14 @@ export default function Dashboard() {
     loadData();
   }, [currentUser]);
 
-  // Microsoft OAuth Device Code Sign-In
-  const handleStartMicrosoftLogin = async () => {
+  // Microsoft OAuth Device Code Sign-In with Target Identity Verification Guard
+  const handleStartMicrosoftLogin = async (target?: MinecraftAccount | string) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       return;
     }
 
-    if (accounts.filter((a) => a.verified).length >= 5) {
+    if (accounts.filter((a) => a.verified).length >= 5 && !target) {
       showToast('Maximum limit of 5 accounts reached.', 'error');
       return;
     }
@@ -479,7 +552,7 @@ export default function Dashboard() {
       }
 
       setApiMsAuthData({
-        botId: 'new_account',
+        botId: typeof target === 'object' && target ? target.id : 'new_account',
         userCode: data.userCode,
         url: data.verificationUri,
         deviceCode: data.deviceCode,
@@ -505,19 +578,86 @@ export default function Dashboard() {
             const finalIgn = pollData.ign;
             const finalUuid = pollData.uuid || '';
 
-            const newAccount: MinecraftAccount = {
-              id: `acc_${Math.random().toString(36).substring(2, 9)}`,
-              username: finalIgn,
-              ign: finalIgn,
-              uuid: finalUuid,
-              auth_type: 'microsoft',
-              verified: true,
-              addedAt: Date.now(),
-            };
+            // Check if user targeted a specific account or expected IGN
+            const expectedName =
+              typeof target === 'string'
+                ? target
+                : (target?.expectedIgn || target?.ign || (!target?.username?.includes('@') ? target?.username : null));
 
+            // ACCOUNT MISMATCH GUARD: Check if authenticated user matches expected target
+            if (expectedName && expectedName.toLowerCase() !== finalIgn.toLowerCase()) {
+              const mismatchMsg = `Verification failed: Logged into Microsoft account '${finalIgn}', but expected '${expectedName}'. The account name didn't match.`;
+              setMsAuthError(mismatchMsg);
+              showToast(mismatchMsg, 'error');
+
+              // If updating an existing account, record the error on it instead of overwriting
+              setAccounts((prev) => {
+                const updated = prev.map((a) => {
+                  if (typeof target === 'object' && target && a.id === target.id) {
+                    return {
+                      ...a,
+                      verified: false,
+                      authError: `Verification failed: Authenticated as '${finalIgn}', expected '${expectedName}'. Please log into the correct Microsoft account.`,
+                    };
+                  }
+                  return a;
+                });
+                const accKey = `pocketafk_accounts_${currentUser}`;
+                localStorage.setItem(accKey, JSON.stringify(updated));
+                return updated;
+              });
+              return;
+            }
+
+            // DUPLICATE GUARD: Prevent linking an already-linked account
+            const isDuplicate = accounts.some(
+              (a) =>
+                (typeof target === 'object' && target ? a.id !== target.id : true) &&
+                ((a.ign && a.ign.toLowerCase() === finalIgn.toLowerCase()) ||
+                 (a.uuid && finalUuid && a.uuid === finalUuid))
+            );
+
+            if (isDuplicate) {
+              const dupMsg = `Account '@${finalIgn}' is already linked to PocketAFK.`;
+              setMsAuthError(dupMsg);
+              showToast(dupMsg, 'error');
+              return;
+            }
+
+            // Successfully verified!
             setAccounts((prev) => {
-              const filtered = prev.filter((a) => (a.ign || a.username).toLowerCase() !== finalIgn.toLowerCase());
-              const updated = [...filtered, newAccount];
+              let updated: MinecraftAccount[];
+              if (typeof target === 'object' && target) {
+                // Update target account
+                updated = prev.map((a) => {
+                  if (a.id === target.id) {
+                    return {
+                      ...a,
+                      username: finalIgn,
+                      ign: finalIgn,
+                      uuid: finalUuid,
+                      verified: true,
+                      authError: undefined,
+                    };
+                  }
+                  return a;
+                });
+              } else {
+                // Add new account
+                const filtered = prev.filter((a) => (a.ign || a.username).toLowerCase() !== finalIgn.toLowerCase());
+                const newAccount: MinecraftAccount = {
+                  id: `acc_${Math.random().toString(36).substring(2, 9)}`,
+                  username: finalIgn,
+                  ign: finalIgn,
+                  uuid: finalUuid,
+                  auth_type: 'microsoft',
+                  verified: true,
+                  addedAt: Date.now(),
+                  expectedIgn: expectedName || undefined,
+                };
+                updated = [...filtered, newAccount];
+              }
+
               const accKey = `pocketafk_accounts_${currentUser}`;
               localStorage.setItem(accKey, JSON.stringify(updated));
 
@@ -827,7 +967,7 @@ export default function Dashboard() {
         currentUser={currentUser}
         onSaveProfile={handleSaveServer}
         onDeleteProfile={handleDeleteServer}
-        onOpenAddAccount={handleStartMicrosoftLogin}
+        onOpenAddAccount={() => handleStartMicrosoftLogin()}
       />
 
       {/* Settings / Bridge Configuration Modal */}
@@ -1213,7 +1353,7 @@ export default function Dashboard() {
 
                     <div className="flex items-center gap-3">
                       <button
-                        onClick={handleStartMicrosoftLogin}
+                        onClick={() => handleStartMicrosoftLogin()}
                         disabled={accounts.length >= 5}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs transition shadow-xs cursor-pointer"
                       >
@@ -1260,7 +1400,7 @@ export default function Dashboard() {
                                   Click &ldquo;Add Account&rdquo; above to authenticate and link your official Java Microsoft account.
                                 </p>
                                 <button
-                                  onClick={handleStartMicrosoftLogin}
+                                  onClick={() => handleStartMicrosoftLogin()}
                                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
                                 >
                                   <Plus className="w-3.5 h-3.5" /> Link Microsoft Account
@@ -1316,22 +1456,43 @@ export default function Dashboard() {
                                       </div>
                                       <div>
                                         <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
-                                          <span>{acc.ign || acc.username}</span>
-                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                          <span>{acc.ign || acc.expectedIgn || acc.username}</span>
+                                          {acc.authError ? (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                              Mismatch
+                                            </span>
+                                          ) : (
+                                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                          )}
                                         </div>
-                                        <span className="text-[10px] text-slate-400 font-mono">
-                                          {acc.uuid ? acc.uuid.substring(0, 16) + '...' : 'Java Edition'}
-                                        </span>
+                                        {acc.authError ? (
+                                          <p className="text-[10px] text-rose-600 font-medium leading-tight max-w-[220px] mt-0.5">
+                                            {acc.authError}
+                                          </p>
+                                        ) : (
+                                          <span className="text-[10px] text-slate-400 font-mono">
+                                            {acc.uuid ? acc.uuid.substring(0, 16) + '...' : 'Java Edition'}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
 
                                   {/* Account Access */}
                                   <td className="p-3.5">
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                      Working
-                                    </span>
+                                    {acc.authError ? (
+                                      <div className="space-y-1">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                          Verification Failed
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Working
+                                      </span>
+                                    )}
                                   </td>
 
                                   {/* Connections */}
@@ -1351,6 +1512,17 @@ export default function Dashboard() {
                                   {/* Actions */}
                                   <td className="p-3.5 text-right">
                                     <div className="flex items-center justify-end gap-1.5">
+                                      {/* Re-link button for failed / mismatched accounts */}
+                                      {acc.authError && (
+                                        <button
+                                          onClick={() => handleStartMicrosoftLogin(acc)}
+                                          className="p-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                          title="Re-authenticate with Microsoft"
+                                        >
+                                          <RefreshCw className="w-4 h-4" />
+                                        </button>
+                                      )}
+
                                       {/* Pin/Unpin */}
                                       <button
                                         onClick={() => handleTogglePin(acc.id)}
@@ -1464,7 +1636,7 @@ export default function Dashboard() {
                                     )}
                                     {accounts.length === 0 && (
                                       <button
-                                        onClick={handleStartMicrosoftLogin}
+                                        onClick={() => handleStartMicrosoftLogin()}
                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
                                       >
                                         <Plus className="w-3.5 h-3.5" /> Link Microsoft Java Account
@@ -1510,14 +1682,34 @@ export default function Dashboard() {
                                             }}
                                           />
                                         </div>
-                                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                                          <span>{acc.ign || acc.username}</span>
-                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                        <div>
+                                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                            <span>{acc.ign || acc.expectedIgn || acc.username}</span>
+                                            {acc.authError ? (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                                Mismatch
+                                              </span>
+                                            ) : (
+                                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                            )}
+                                          </div>
+                                          {acc.authError && (
+                                            <p className="text-[10px] text-rose-600 font-medium leading-tight max-w-[220px] mt-0.5">
+                                              {acc.authError}
+                                            </p>
+                                          )}
                                         </div>
                                       </div>
                                     </td>
                                     <td className="p-3">
-                                      {getStatusBadge(currentBotState)}
+                                      {acc.authError ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                          Failed
+                                        </span>
+                                      ) : (
+                                        getStatusBadge(currentBotState)
+                                      )}
                                     </td>
                                     <td className="p-3">
                                       <input
@@ -1530,6 +1722,17 @@ export default function Dashboard() {
                                     </td>
                                     <td className="p-3 text-right">
                                       <div className="flex items-center justify-end gap-1.5">
+                                        {/* Re-link if verification failed */}
+                                        {acc.authError && (
+                                          <button
+                                            onClick={() => handleStartMicrosoftLogin(acc)}
+                                            className="p-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                            title="Re-authenticate with Microsoft"
+                                          >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+
                                         <button
                                           onClick={() => handleTogglePin(acc.id)}
                                           className={`p-1.5 rounded-lg transition cursor-pointer ${
@@ -1645,7 +1848,7 @@ export default function Dashboard() {
                       <div className="flex justify-start">
                         <button
                           disabled={accounts.length >= 5}
-                          onClick={handleStartMicrosoftLogin}
+                          onClick={() => handleStartMicrosoftLogin()}
                           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-emerald-700 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-40"
                         >
                           <Plus className="w-4 h-4" /> Link Another Microsoft Account ({accounts.length}/5)
@@ -1667,12 +1870,15 @@ export default function Dashboard() {
                       </div>
 
                       {/* In-Game Minecraft Styled Console */}
-                      <div className="h-[480px]">
+                      <div className="h-[540px]">
                         <Terminal
                           messages={messages}
                           onSendMessage={(msg) => sendChat(activeServer.id, msg)}
                           onClear={() => clearMessages(activeServer.id)}
                           disabled={!isActiveServerRunning}
+                          serverName={activeServer.name}
+                          serverHost={activeServer.serverHost}
+                          serverPort={activeServer.serverPort}
                         />
                       </div>
                     </div>

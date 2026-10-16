@@ -164,6 +164,10 @@ export class PocketBotInstance {
       const realIgn = this.bot?.username || (this.bot?.player as any)?.username || this.config.username;
       const playerUuid = (this.bot as any)?._client?.uuid;
 
+      if (!this.config.username.includes('@') && realIgn.toLowerCase() !== this.config.username.toLowerCase()) {
+        console.warn(`[PocketAFK Warning] Account name mismatch: Configured as '${this.config.username}', but authenticated on Minecraft as '${realIgn}'`);
+      }
+
       // Broadcast real verified Java IGN back to frontend!
       this.broadcast({
         type: 'ACCOUNT_VERIFIED',
