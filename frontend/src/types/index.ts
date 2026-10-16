@@ -39,6 +39,8 @@ export interface ServerProfile {
   authType?: 'offline' | 'microsoft'; // Direct / Instant vs Microsoft Online
   autoReconnect: boolean;         // Auto reconnect on kick
   settings: BotSettings;          // Instance-specific AFK & physics settings
+  createdAt?: number;             // Timestamp when profile was created
+  connectionsCount?: number;      // Total connections made
 }
 
 export type BotLifecycleState =

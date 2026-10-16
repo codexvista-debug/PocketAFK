@@ -10,6 +10,7 @@ import { AccountModal } from '../components/AccountModal';
 import { ServerProfileModal } from '../components/ServerProfileModal';
 import { AuthModal } from '../components/AuthModal';
 import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
+import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { supabase } from '../lib/supabaseClient';
 import { syncAllToSupabase, deleteAccountFromSupabase } from '../lib/supabaseSync';
@@ -57,6 +58,8 @@ import {
   Terminal as TerminalIcon,
   Check,
   Copy,
+  ArrowUpDown,
+  Upload,
 } from 'lucide-react';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
@@ -120,6 +123,11 @@ export default function Dashboard() {
   const [accountFilter, setAccountFilter] = useState('');
   const [accountNotes, setAccountNotes] = useState<Record<string, string>>({});
   const [pinnedAccountIds, setPinnedAccountIds] = useState<string[]>([]);
+
+  // Server view & table state
+  const [pinnedServerIds, setPinnedServerIds] = useState<string[]>([]);
+  const [serverConnections, setServerConnections] = useState<Record<string, number>>({});
+  const [serverFilter, setServerFilter] = useState('');
 
   // Modals state
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -458,6 +466,10 @@ export default function Dashboard() {
       if (storedNotes) setAccountNotes(JSON.parse(storedNotes));
       const storedPinned = localStorage.getItem(`pocketafk_pinned_${currentUser || 'guest'}`);
       if (storedPinned) setPinnedAccountIds(JSON.parse(storedPinned));
+      const storedServerPinned = localStorage.getItem(`pocketafk_pinned_servers_${currentUser || 'guest'}`);
+      if (storedServerPinned) setPinnedServerIds(JSON.parse(storedServerPinned));
+      const storedServerConnections = localStorage.getItem(`pocketafk_server_connections_${currentUser || 'guest'}`);
+      if (storedServerConnections) setServerConnections(JSON.parse(storedServerConnections));
     } catch (e) {
       // ignore
     }
@@ -472,13 +484,38 @@ export default function Dashboard() {
     }
   };
 
-  // Toggle pin
+  // Toggle account pin
   const handleTogglePin = (accId: string) => {
     const isPinned = pinnedAccountIds.includes(accId);
     const updated = isPinned ? pinnedAccountIds.filter((id) => id !== accId) : [...pinnedAccountIds, accId];
     setPinnedAccountIds(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`pocketafk_pinned_${currentUser || 'guest'}`, JSON.stringify(updated));
+    }
+  };
+
+  // Toggle server pin
+  const handleToggleServerPin = (srvId: string) => {
+    const isPinned = pinnedServerIds.includes(srvId);
+    const updated = isPinned ? pinnedServerIds.filter((id) => id !== srvId) : [...pinnedServerIds, srvId];
+    setPinnedServerIds(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`pocketafk_pinned_servers_${currentUser || 'guest'}`, JSON.stringify(updated));
+    }
+  };
+
+  // Format server date
+  const formatServerDate = (timestamp?: number) => {
+    if (!timestamp) return 'Recent';
+    try {
+      const d = new Date(timestamp);
+      return (
+        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+        ', ' +
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      );
+    } catch {
+      return 'Recent';
     }
   };
 
@@ -557,9 +594,23 @@ export default function Dashboard() {
             authType: 'microsoft',
             autoReconnect: true,
             settings: DEFAULT_BOT_SETTINGS,
+            createdAt: Date.now() - 86400000 * 5,
+            connectionsCount: 0,
           },
         ];
         localStorage.setItem(srvKey, JSON.stringify(loadedServers));
+      } else {
+        let needsUpdate = false;
+        loadedServers = loadedServers.map((s, idx) => {
+          if (!s.createdAt) {
+            needsUpdate = true;
+            return { ...s, createdAt: Date.now() - (idx + 1) * 86400000 * 3 };
+          }
+          return s;
+        });
+        if (needsUpdate) {
+          localStorage.setItem(srvKey, JSON.stringify(loadedServers));
+        }
       }
 
       setServers(loadedServers);
@@ -836,6 +887,10 @@ export default function Dashboard() {
     const srvKey = `pocketafk_servers_${currentUser}`;
     profile.pocketUser = currentUser;
 
+    if (!profile.createdAt) {
+      profile.createdAt = Date.now();
+    }
+
     const matched = resolveServerAccount(profile);
     if (matched) {
       profile.accountId = matched.id;
@@ -898,6 +953,16 @@ export default function Dashboard() {
     if (!currentUser) return;
     const assignedAcc = targetAcc || resolveServerAccount(profile);
     const cleanPlayerName = assignedAcc?.ign || assignedAcc?.username || profile.name;
+
+    // Track connections count
+    setServerConnections((prev) => {
+      const cur = prev[profile.id] || profile.connectionsCount || 0;
+      const updated = { ...prev, [profile.id]: cur + 1 };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`pocketafk_server_connections_${currentUser || 'guest'}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
 
     startBot({
       id: profile.id,
@@ -1252,41 +1317,47 @@ export default function Dashboard() {
               </div>
 
               {/* Profiles List */}
-              {servers.map((srv) => {
-                const isSelected = srv.id === activeServerId;
-                const srvAssignedCount = (
-                  Array.isArray(srv.assignedAccountIds)
-                    ? srv.assignedAccountIds
-                    : srv.accountId ? [srv.accountId] : []
-                ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
-                const rawState = botStates[srv.id] || 'DISCONNECTED';
-                const isRunning = (rawState === 'SPAWNED' || rawState === 'LOGGED_IN' || rawState === 'CONNECTING') && srvAssignedCount > 0;
+              {[...servers]
+                .sort((a, b) => {
+                  const aPinned = pinnedServerIds.includes(a.id);
+                  const bPinned = pinnedServerIds.includes(b.id);
+                  if (aPinned && !bPinned) return -1;
+                  if (!aPinned && bPinned) return 1;
+                  return 0;
+                })
+                .map((srv) => {
+                  const isSelected = srv.id === activeServerId;
+                  const srvAssignedCount = (
+                    Array.isArray(srv.assignedAccountIds)
+                      ? srv.assignedAccountIds
+                      : srv.accountId ? [srv.accountId] : []
+                  ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
+                  const rawState = botStates[srv.id] || 'DISCONNECTED';
+                  const isRunning = (rawState === 'SPAWNED' || rawState === 'LOGGED_IN' || rawState === 'CONNECTING') && srvAssignedCount > 0;
 
-                return (
-                  <div key={srv.id} className="space-y-1 pt-1">
-                    {/* Server Profile Row */}
-                    <button
-                      onClick={() => {
-                        setActiveServerId(srv.id);
-                        setActiveMainView('profile');
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                        isSelected && activeMainView === 'profile'
-                          ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
-                          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <div className="w-5 h-5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                          {srv.name.charAt(0).toUpperCase()}
+                  return (
+                    <div key={srv.id} className="space-y-1 pt-1">
+                      {/* Server Profile Row */}
+                      <button
+                        onClick={() => {
+                          setActiveServerId(srv.id);
+                          setActiveMainView('profile');
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          isSelected && activeMainView === 'profile'
+                            ? 'bg-slate-100 text-slate-900 border border-slate-200 shadow-2xs'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <ServerLogo host={srv.serverHost} name={srv.name} size="w-5 h-5" />
+                          <span className="truncate">{srv.name}</span>
                         </div>
-                        <span className="truncate">{srv.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 shrink-0">
-                        <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600' : 'text-slate-400'}`} />
-                        <span>{isRunning ? '1' : '0'}/{srvAssignedCount}</span>
-                      </div>
-                    </button>
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 shrink-0">
+                          <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <span>{isRunning ? '1' : '0'}/{srvAssignedCount}</span>
+                        </div>
+                      </button>
 
                     {/* Sub-Feature Tabs */}
                     {isSelected && activeMainView === 'profile' && (
@@ -1426,64 +1497,239 @@ export default function Dashboard() {
               {/* VIEW: SERVERS OVERVIEW */}
               {activeMainView === 'servers' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  {/* Top Bar: Title, Action Buttons, and Filter */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-black text-white">Server Profiles</h2>
-                      <p className="text-xs text-slate-400">Configure up to 3 Minecraft servers to AFK simultaneously.</p>
+                      <h2 className="text-xl font-black text-slate-900">Servers</h2>
+                      <p className="text-xs text-slate-500">Configure and manage your Minecraft AFK servers.</p>
                     </div>
-                    <button
-                      disabled={servers.length >= 3}
-                      onClick={() => {
-                        setEditingServer(null);
-                        setIsServerModalOpen(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-40"
-                    >
-                      <Plus className="w-4 h-4" /> Add Server Profile
-                    </button>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (servers.length >= 3) {
+                            showToast('Maximum of 3 servers reached.', 'error');
+                            return;
+                          }
+                          setEditingServer(null);
+                          setIsServerModalOpen(true);
+                        }}
+                        disabled={servers.length >= 3}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Server</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          showToast('Server profile import coming soon.', 'info');
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition shadow-2xs cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Import</span>
+                      </button>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Filter..."
+                          value={serverFilter}
+                          onChange={(e) => setServerFilter(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition shadow-2xs w-44 sm:w-56"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {servers.map((srv) => {
-                      const assigned = resolveServerAccount(srv);
-                      const srvState = assigned ? (botStates[srv.id] || 'DISCONNECTED') : 'DISCONNECTED';
-                      return (
-                        <div
-                          key={srv.id}
-                          onClick={() => {
-                            setActiveServerId(srv.id);
-                            setActiveMainView('profile');
-                            setActiveSubTab('connect');
-                          }}
-                          className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-500/50 transition cursor-pointer space-y-3 shadow-xs"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-black text-sm text-slate-900">{srv.name}</span>
-                            {getStatusBadge(srvState)}
-                          </div>
-                          <div className="text-xs font-mono text-slate-500 flex items-center gap-1.5">
-                            <Globe className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{srv.serverHost}:{srv.serverPort}</span>
-                          </div>
-                          {assigned ? (
-                            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                              <div className="w-5 h-5 rounded-xs overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
-                                <img
-                                  src={`https://crafthead.net/helm/${encodeURIComponent((assigned.uuid || assigned.ign || assigned.username).split('@')[0])}/32`}
-                                  alt={assigned.ign || assigned.username}
-                                  className="w-full h-full object-cover [image-rendering:pixelated]"
-                                />
+                  {/* Servers Table */}
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
+                        <tr>
+                          <th className="p-3.5">
+                            <div className="flex items-center gap-1">
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                              <span>Name</span>
+                            </div>
+                          </th>
+                          <th className="p-3.5">
+                            <div className="flex items-center gap-1">
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                              <span>Online</span>
+                            </div>
+                          </th>
+                          <th className="p-3.5">
+                            <div className="flex items-center gap-1">
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                              <span>Connections</span>
+                            </div>
+                          </th>
+                          <th className="p-3.5">
+                            <div className="flex items-center gap-1">
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                              <span>Server IP</span>
+                            </div>
+                          </th>
+                          <th className="p-3.5">
+                            <div className="flex items-center gap-1">
+                              <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                              <span>Date Added</span>
+                            </div>
+                          </th>
+                          <th className="p-3.5 text-right w-24">
+                            <span className="sr-only">Actions</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {servers.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-12 text-center text-slate-500">
+                              <div className="space-y-3 max-w-sm mx-auto">
+                                <Server className="w-8 h-8 text-slate-300 mx-auto" />
+                                <p className="text-xs font-semibold text-slate-700">No server profiles added yet.</p>
+                                <p className="text-[11px] text-slate-400 leading-relaxed">
+                                  Create a server profile to configure your Minecraft target address and port.
+                                </p>
+                                <button
+                                  onClick={() => {
+                                    setEditingServer(null);
+                                    setIsServerModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-xs cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" /> Add Server
+                                </button>
                               </div>
-                              <span className="text-xs text-slate-800 font-bold">{assigned.ign || assigned.username}</span>
-                            </div>
-                          ) : (
-                            <div className="text-[11px] text-slate-400 pt-2 border-t border-slate-100 font-medium">
-                              No accounts assigned
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            </td>
+                          </tr>
+                        ) : (
+                          servers
+                            .filter((s) => {
+                              const q = serverFilter.toLowerCase().trim();
+                              if (!q) return true;
+                              return (
+                                s.name.toLowerCase().includes(q) ||
+                                s.serverHost.toLowerCase().includes(q)
+                              );
+                            })
+                            .sort((a, b) => {
+                              const aPinned = pinnedServerIds.includes(a.id);
+                              const bPinned = pinnedServerIds.includes(b.id);
+                              if (aPinned && !bPinned) return -1;
+                              if (!aPinned && bPinned) return 1;
+                              return 0;
+                            })
+                            .map((srv) => {
+                              const isPinned = pinnedServerIds.includes(srv.id);
+                              const totalAssigned = (
+                                Array.isArray(srv.assignedAccountIds)
+                                  ? srv.assignedAccountIds
+                                  : srv.accountId ? [srv.accountId] : []
+                              ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
+                              const rawState = botStates[srv.id] || 'DISCONNECTED';
+                              const isRunning = (rawState === 'SPAWNED' || rawState === 'LOGGED_IN' || rawState === 'CONNECTING') && totalAssigned > 0;
+                              const onlineCount = isRunning ? 1 : 0;
+                              const connections = serverConnections[srv.id] || srv.connectionsCount || 0;
+                              const dateAddedStr = formatServerDate(srv.createdAt);
+
+                              return (
+                                <tr
+                                  key={srv.id}
+                                  onClick={() => {
+                                    setActiveServerId(srv.id);
+                                    setActiveMainView('profile');
+                                    setActiveSubTab('connect');
+                                  }}
+                                  className="hover:bg-slate-50/80 transition cursor-pointer group"
+                                >
+                                  {/* Name + Logo */}
+                                  <td className="p-3.5">
+                                    <div className="flex items-center gap-3">
+                                      <ServerLogo host={srv.serverHost} name={srv.name} size="w-7 h-7" />
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-slate-900 text-xs group-hover:text-emerald-700 transition">
+                                          {srv.name}
+                                        </span>
+                                        {isPinned && (
+                                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-0.5">
+                                            <Pin className="w-2.5 h-2.5 fill-current" /> Pinned
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Online */}
+                                  <td className="p-3.5">
+                                    <div className="flex items-center gap-2 font-mono text-xs">
+                                      <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                                      <span className={isRunning ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
+                                        {onlineCount}/{totalAssigned}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* Connections */}
+                                  <td className="p-3.5">
+                                    <span className="font-mono text-xs text-slate-700 font-semibold">
+                                      {connections.toLocaleString()}
+                                    </span>
+                                  </td>
+
+                                  {/* Server IP */}
+                                  <td className="p-3.5">
+                                    <span className="font-mono text-xs text-slate-600 select-all font-medium">
+                                      {srv.serverHost}
+                                    </span>
+                                  </td>
+
+                                  {/* Date Added */}
+                                  <td className="p-3.5">
+                                    <span className="text-xs text-slate-500 font-medium">
+                                      {dateAddedStr}
+                                    </span>
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="p-3.5 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleServerPin(srv.id);
+                                        }}
+                                        className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                                          isPinned
+                                            ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
+                                            : 'text-slate-400 hover:text-slate-700 border-transparent hover:border-slate-200 hover:bg-slate-100'
+                                        }`}
+                                        title={isPinned ? 'Unpin server profile' : 'Pin to top'}
+                                      >
+                                        <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-current' : ''}`} />
+                                      </button>
+
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteServer(srv.id);
+                                        }}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition cursor-pointer"
+                                        title="Delete server profile"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
