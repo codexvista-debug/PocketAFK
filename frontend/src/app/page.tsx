@@ -261,8 +261,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const cmd = `pkg update -y && pkg install git nodejs-lts cloudflared -y && git config --global credential.helper store && rm -rf PocketAFK && git clone https://${atob('Z2hwX2hCM2pYQ3ViS1FRenIwNDBXdGEzT2RVRzA5eFhVMjBzM3ZwUA==')}@github.com/codexvista-debug/PocketAFK.git && cd PocketAFK/daemon && npm install && bash start.sh`;
-                  navigator.clipboard.writeText(cmd);
+                  navigator.clipboard.writeText("curl -sL https://pocketafk.vercel.app/install | bash");
                   alert("Copied Termux 1-click command to clipboard!");
                 }}
                 className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition cursor-pointer"
