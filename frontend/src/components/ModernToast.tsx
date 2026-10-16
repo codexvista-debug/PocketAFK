@@ -26,14 +26,14 @@ export const ModernToast: React.FC<ModernToastProps> = ({ toast, onDismiss }) =>
   if (!toast) return null;
 
   return (
-    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-100 max-w-md w-full px-4 animate-in fade-in slide-in-from-top-4 duration-200">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] max-w-md w-full px-4 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-200">
       <div
-        className={`flex items-center gap-3 p-3.5 rounded-2xl shadow-xl border backdrop-blur-md transition ${
+        className={`pointer-events-auto flex items-center gap-3 p-3.5 rounded-2xl shadow-2xl border backdrop-blur-md transition ${
           toast.type === 'success'
-            ? 'bg-emerald-950/90 text-emerald-100 border-emerald-500/30'
+            ? 'bg-slate-900/95 text-emerald-400 border-emerald-500/40 shadow-emerald-950/20'
             : toast.type === 'error'
-            ? 'bg-rose-950/90 text-rose-100 border-rose-500/30'
-            : 'bg-slate-900/90 text-slate-100 border-slate-700/50'
+            ? 'bg-slate-900/95 text-rose-400 border-rose-500/40 shadow-rose-950/20'
+            : 'bg-slate-900/95 text-slate-100 border-slate-700/60 shadow-slate-950/20'
         }`}
       >
         <div className="shrink-0">

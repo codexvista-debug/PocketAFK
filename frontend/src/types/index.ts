@@ -30,6 +30,7 @@ export interface ServerProfile {
   name: string;                   // Custom display name (e.g. "Hypixel AFK", "DonutSMP Base")
   pocketUser?: string | null;     // PocketAFK website username (e.g. "Chief")
   accountId: string;              // Linked MinecraftAccount id or IGN
+  assignedAccountIds?: string[];  // Accounts assigned to this server profile
   serverHost: string;             // Hostname / IP (e.g. "donutsmp.net", "mc.hypixel.net")
   serverPort: number;             // Port (default: 25565)
   serverVersion: string;          // Minecraft version (default: "auto", or "1.20.4", etc.)

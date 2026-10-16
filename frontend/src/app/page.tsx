@@ -19,6 +19,7 @@ import {
   RefreshCw, 
   Settings2, 
   Plus, 
+  Minus,
   Server, 
   Globe, 
   ShieldCheck, 
@@ -240,7 +241,8 @@ export default function Dashboard() {
 
   // Auto-sync tunnel from API or URL
   useEffect(() => {
-    if (!currentUser) return;
+    let isMounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
 
     async function syncTunnel() {
       if (typeof window === 'undefined') return;
@@ -256,11 +258,16 @@ export default function Dashboard() {
 
       try {
         const res = await fetch(`/api/tunnel?username=${encodeURIComponent(effectiveUser)}`, { cache: 'no-store' });
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const data = await res.json();
-          if (data && data.tunnel_url && data.tunnel_url.startsWith('wss://')) {
-            saveSettings(data.tunnel_url, authToken);
-            setAutoSynced(true);
+          const targetUrl = (data?.url || data?.tunnel_url || '').trim();
+          if (targetUrl && targetUrl.startsWith('wss://')) {
+            if (targetUrl !== daemonUrl) {
+              console.log('[PocketAFK] Auto-syncing discovered daemon tunnel:', targetUrl);
+              saveSettings(targetUrl, authToken);
+              setAutoSynced(true);
+              showToast('Discovered Termux daemon tunnel! Connecting...', 'success');
+            }
           }
         }
       } catch (err) {
@@ -269,7 +276,17 @@ export default function Dashboard() {
     }
 
     syncTunnel();
-  }, [currentUser, effectiveUser, authToken, saveSettings]);
+
+    // If socket is not authenticated, poll /api/tunnel every 3 seconds so the phone's 1-click startup automatically links!
+    if (socketStatus !== 'AUTHENTICATED') {
+      pollInterval = setInterval(syncTunnel, 3000);
+    }
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [currentUser, effectiveUser, authToken, daemonUrl, socketStatus, saveSettings]);
 
   // Load Notes & Pinned state
   useEffect(() => {
@@ -624,22 +641,69 @@ export default function Dashboard() {
     handleStopServer(activeServer.id);
   };
 
-  // Select all toggle
-  const filteredAccounts = useMemo(() => {
+  // Accounts assigned to current Server Profile
+  const profileAccountIds = useMemo(() => {
+    if (!activeServer) return [];
+    if (Array.isArray(activeServer.assignedAccountIds)) {
+      return activeServer.assignedAccountIds;
+    }
+    // Default fallback: if accountId is set, assign it, otherwise all linked accounts
+    return activeServer.accountId ? [activeServer.accountId] : accounts.map((a) => a.id);
+  }, [activeServer, accounts]);
+
+  const assignedAccounts = useMemo(() => {
     return accounts.filter((a) => {
+      if (!profileAccountIds.includes(a.id)) return false;
       const q = accountFilter.toLowerCase().trim();
       if (!q) return true;
       const ign = (a.ign || a.username).toLowerCase();
       const note = (accountNotes[a.id] || '').toLowerCase();
       return ign.includes(q) || note.includes(q);
     });
-  }, [accounts, accountFilter, accountNotes]);
+  }, [accounts, profileAccountIds, accountFilter, accountNotes]);
+
+  const availableAccounts = useMemo(() => {
+    return accounts.filter((a) => {
+      if (profileAccountIds.includes(a.id)) return false;
+      const q = accountFilter.toLowerCase().trim();
+      if (!q) return true;
+      const ign = (a.ign || a.username).toLowerCase();
+      const note = (accountNotes[a.id] || '').toLowerCase();
+      return ign.includes(q) || note.includes(q);
+    });
+  }, [accounts, profileAccountIds, accountFilter, accountNotes]);
+
+  const handleRemoveAccountFromProfile = (accId: string) => {
+    if (!activeServer) return;
+    const targetAcc = accounts.find((a) => a.id === accId);
+    const updatedIds = profileAccountIds.filter((id) => id !== accId);
+    const updatedServer: ServerProfile = {
+      ...activeServer,
+      assignedAccountIds: updatedIds,
+      accountId: activeServer.accountId === accId ? (updatedIds[0] || '') : activeServer.accountId,
+    };
+    handleSaveServer(updatedServer);
+    showToast(`Removed ${targetAcc?.ign || targetAcc?.username || 'account'} from ${activeServer.name}`, 'info');
+  };
+
+  const handleAddAccountToProfile = (accId: string) => {
+    if (!activeServer) return;
+    const targetAcc = accounts.find((a) => a.id === accId);
+    const updatedIds = Array.from(new Set([...profileAccountIds, accId]));
+    const updatedServer: ServerProfile = {
+      ...activeServer,
+      assignedAccountIds: updatedIds,
+      accountId: activeServer.accountId || accId,
+    };
+    handleSaveServer(updatedServer);
+    showToast(`Added ${targetAcc?.ign || targetAcc?.username || 'account'} to ${activeServer.name}`, 'success');
+  };
 
   const handleSelectAllToggle = () => {
-    if (selectedAccountIds.length === filteredAccounts.length) {
+    if (selectedAccountIds.length === assignedAccounts.length) {
       setSelectedAccountIds([]);
     } else {
-      setSelectedAccountIds(filteredAccounts.map((a) => a.id));
+      setSelectedAccountIds(assignedAccounts.map((a) => a.id));
     }
   };
 
@@ -1070,27 +1134,6 @@ export default function Dashboard() {
                     {socketStatus === 'AUTHENTICATED' ? 'Daemon Online' : 'Daemon Offline'}
                   </span>
                 </button>
-
-                {/* 1-Click Termux Command Pill */}
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(termuxCommand);
-                    showToast(`Copied 1-click launcher command!`, 'success');
-                  }}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 transition cursor-pointer shadow-2xs"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>1-Click Termux</span>
-                </button>
-
-                {/* Settings icon */}
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                  title="Bridge Settings"
-                >
-                  <Settings2 className="w-4 h-4" />
-                </button>
               </div>
             </header>
 
@@ -1241,7 +1284,7 @@ export default function Dashboard() {
                               <th className="p-3 w-8">
                                 <input
                                   type="checkbox"
-                                  checked={selectedAccountIds.length > 0 && selectedAccountIds.length === filteredAccounts.length}
+                                  checked={selectedAccountIds.length > 0 && selectedAccountIds.length === assignedAccounts.length}
                                   onChange={handleSelectAllToggle}
                                   className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                                 />
@@ -1253,22 +1296,27 @@ export default function Dashboard() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {filteredAccounts.length === 0 ? (
+                            {assignedAccounts.length === 0 ? (
                               <tr>
                                 <td colSpan={5} className="p-8 text-center text-slate-500">
                                   <div className="space-y-2">
-                                    <p className="text-xs">No Minecraft accounts linked yet.</p>
-                                    <button
-                                      onClick={handleStartMicrosoftLogin}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
-                                    >
-                                      <Plus className="w-3.5 h-3.5" /> Link Microsoft Java Account
-                                    </button>
+                                    <p className="text-xs">No accounts assigned to this server profile yet.</p>
+                                    {availableAccounts.length > 0 && (
+                                      <p className="text-[11px] text-slate-400">Click &ldquo;+&rdquo; below on any available account to assign it.</p>
+                                    )}
+                                    {accounts.length === 0 && (
+                                      <button
+                                        onClick={handleStartMicrosoftLogin}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" /> Link Microsoft Java Account
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
                             ) : (
-                              filteredAccounts.map((acc) => {
+                              assignedAccounts.map((acc) => {
                                 const isChecked = selectedAccountIds.includes(acc.id);
                                 const isAssignedActive = activeAccount?.id === acc.id;
                                 const currentBotState = isAssignedActive ? botState : 'DISCONNECTED';
@@ -1316,7 +1364,7 @@ export default function Dashboard() {
                                     <td className="p-3">
                                       <input
                                         type="text"
-                                        placeholder="Add note (e.g. at hashi's farm)..."
+                                        placeholder="Add Note"
                                         value={accountNotes[acc.id] || ''}
                                         onChange={(e) => handleUpdateNote(acc.id, e.target.value)}
                                         className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500"
@@ -1357,12 +1405,13 @@ export default function Dashboard() {
                                           </button>
                                         )}
 
+                                        {/* Remove from server profile (-) */}
                                         <button
-                                          onClick={() => handleDeleteAccount(acc.id)}
-                                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                          title="Unlink account"
+                                          onClick={() => handleRemoveAccountFromProfile(acc.id)}
+                                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                          title="Remove from this server profile"
                                         >
-                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <Minus className="w-3.5 h-3.5" />
                                         </button>
                                       </div>
                                     </td>
@@ -1373,6 +1422,66 @@ export default function Dashboard() {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Available Accounts to Add (+) to this Server Profile */}
+                      {availableAccounts.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-bold text-slate-700">Available Accounts (Not in this profile)</span>
+                            <span className="text-[11px] text-slate-400 font-medium">Click &ldquo;+ Add to Profile&rdquo; to assign</span>
+                          </div>
+                          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                            <table className="w-full text-left text-xs">
+                              <tbody className="divide-y divide-slate-100">
+                                {availableAccounts.map((acc) => (
+                                  <tr key={acc.id} className="hover:bg-slate-50/80 transition">
+                                    <td className="p-3">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-md overflow-hidden border border-slate-300 bg-slate-100 shrink-0">
+                                          <img
+                                            src={`https://crafthead.net/helm/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/32`}
+                                            alt={acc.ign || acc.username}
+                                            className="w-full h-full object-cover [image-rendering:pixelated]"
+                                            onError={(e) => {
+                                              const img = e.target as HTMLImageElement;
+                                              if (!img.src.includes('mc-heads')) {
+                                                img.src = `https://mc-heads.net/avatar/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/32`;
+                                              }
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                          <span>{acc.ign || acc.username}</span>
+                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <input
+                                        type="text"
+                                        placeholder="Add Note"
+                                        value={accountNotes[acc.id] || ''}
+                                        onChange={(e) => handleUpdateNote(acc.id, e.target.value)}
+                                        className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500"
+                                      />
+                                    </td>
+                                    <td className="p-3 text-right">
+                                      <button
+                                        onClick={() => handleAddAccountToProfile(acc.id)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer shadow-2xs"
+                                        title="Add to this server profile"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Add to Profile</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Add Account Button at Bottom of Table */}
                       <div className="flex justify-start">

@@ -14,16 +14,20 @@ export async function GET(req: NextRequest) {
   // 1. Check in-memory cache first
   const cached = userTunnels.get(username);
   if (cached && Date.now() - cached.updatedAt < 1000 * 60 * 60 * 12) { // 12 hours valid
-    return NextResponse.json(cached);
+    return NextResponse.json({
+      ...cached,
+      tunnel_url: cached.url,
+    });
   }
 
   // 2. Fallback to Supabase if connected
   if (supabase) {
     try {
-      const { data } = await supabase.from('tunnels').select('*').eq('username', username).maybeSingle();
+      const { data } = await supabase.from('tunnels').select('*').ilike('username', username).maybeSingle();
       if (data) {
         const tunnelObj = {
           url: data.daemon_url,
+          tunnel_url: data.daemon_url,
           token: data.daemon_token || '',
           updatedAt: new Date(data.updated_at).getTime(),
         };
@@ -36,10 +40,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (cached) {
-    return NextResponse.json(cached);
+    return NextResponse.json({
+      ...cached,
+      tunnel_url: cached.url,
+    });
   }
 
-  return NextResponse.json({ url: '', token: '', updatedAt: 0 });
+  return NextResponse.json({ url: '', tunnel_url: '', token: '', updatedAt: 0 });
 }
 
 export async function POST(req: NextRequest) {
