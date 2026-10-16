@@ -208,7 +208,18 @@ export class PocketBotInstance {
     // Chat / Message handler
     this.bot.on('message', (jsonMsg: any) => {
       const rawText = jsonMsg.toString();
-      const formatted = minecraftToHtml(jsonMsg.toAnsi ? jsonMsg.toAnsi() : rawText);
+      let sourceText = '';
+      try {
+        if (typeof jsonMsg.toMotd === 'function') {
+          sourceText = jsonMsg.toMotd();
+        } else if (typeof jsonMsg.toAnsi === 'function') {
+          sourceText = jsonMsg.toAnsi();
+        }
+      } catch (e) {
+        sourceText = rawText;
+      }
+
+      const formatted = minecraftToHtml(sourceText || rawText);
 
       this.logConsole({
         type: 'chat',

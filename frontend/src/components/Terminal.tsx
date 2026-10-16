@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
 import { Send, Trash2, ArrowDown, Terminal as TerminalIcon } from 'lucide-react';
+import { cleanMinecraftChatHtml } from '../lib/chatFormatter';
 
 interface TerminalProps {
   messages: ChatMessage[];
@@ -78,11 +79,11 @@ export const Terminal: React.FC<TerminalProps> = ({
         </div>
       </div>
 
-      {/* Messages Output (Dark high-contrast code pane so Minecraft colors render with 100% clarity) */}
+      {/* Messages Output (Dark high-contrast code pane with authentic Minecraft in-game text styling) */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#0f172a] selection:bg-emerald-500/30 text-slate-200"
+        className="flex-1 p-4 overflow-y-auto font-mono text-xs space-y-1.5 bg-[#0b0f19] selection:bg-emerald-500/30 text-slate-200"
       >
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500 italic text-center px-4">
@@ -91,25 +92,26 @@ export const Terminal: React.FC<TerminalProps> = ({
         ) : (
           messages.map((msg) => {
             const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const cleanHtml = cleanMinecraftChatHtml(msg.formattedText || msg.raw);
 
             if (msg.type === 'session_divider') {
               return (
                 <div key={msg.id} className="py-2 text-center">
-                  <div className="inline-block px-3 py-1 rounded bg-slate-800 border border-slate-700 text-[11px] text-amber-400 font-bold">
-                    <span dangerouslySetInnerHTML={{ __html: msg.formattedText }} />
+                  <div className="inline-block px-3 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] text-amber-400 font-bold [text-shadow:1px_1px_0px_rgba(0,0,0,0.85)]">
+                    <span dangerouslySetInnerHTML={{ __html: cleanHtml }} />
                   </div>
                 </div>
               );
             }
 
             return (
-              <div key={msg.id} className="flex items-start gap-2 leading-relaxed hover:bg-slate-800/50 px-2 py-0.5 rounded transition-colors">
+              <div key={msg.id} className="flex items-start gap-2 leading-relaxed hover:bg-slate-800/40 px-2 py-0.5 rounded transition-colors">
                 <span className="text-slate-500 text-[10px] select-none shrink-0 pt-0.5">
                   [{timeStr}]
                 </span>
                 <div 
-                  className="break-all whitespace-pre-wrap text-slate-200"
-                  dangerouslySetInnerHTML={{ __html: msg.formattedText }}
+                  className="break-all whitespace-pre-wrap text-slate-100 font-mono tracking-wide [text-shadow:1px_1px_0px_rgba(0,0,0,0.85)]"
+                  dangerouslySetInnerHTML={{ __html: cleanHtml }}
                 />
               </div>
             );

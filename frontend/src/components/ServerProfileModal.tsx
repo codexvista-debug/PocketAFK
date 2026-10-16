@@ -232,7 +232,8 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                   const isSelected = (accountId || accounts[0]?.id) === acc.id;
                   const displayName = acc.ign || acc.username;
                   const rawName = displayName.includes('@') ? displayName.split('@')[0] : displayName;
-                  const avatarUrl = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
+                  const idOrName = acc.uuid || rawName;
+                  const avatarUrl = `https://crafthead.net/helm/${encodeURIComponent(idOrName)}/48`;
 
                   return (
                     <button
@@ -253,7 +254,9 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
                           onError={(e) => {
                             const img = e.target as HTMLImageElement;
                             if (!img.src.includes('mc-heads')) {
-                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent(rawName)}/48`;
+                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent(idOrName)}/48`;
+                            } else if (!img.src.includes('minotar')) {
+                              img.src = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
                             } else {
                               img.src = 'https://minotar.net/helm/MHF_Steve/48.png';
                             }

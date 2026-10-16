@@ -104,7 +104,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   {uniqueVerifiedAccounts.map((acc) => {
                     const displayName = acc.ign || acc.username || 'Minecraft';
                     const rawName = displayName.includes('@') ? displayName.split('@')[0] : displayName;
-                    const primaryAvatarUrl = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
+                    const idOrName = acc.uuid || rawName;
+                    const primaryAvatarUrl = `https://crafthead.net/helm/${encodeURIComponent(idOrName)}/48`;
 
                     return (
                       <div
@@ -121,7 +122,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                               onError={(e) => {
                                 const img = e.target as HTMLImageElement;
                                 if (!img.src.includes('mc-heads')) {
-                                  img.src = `https://mc-heads.net/avatar/${encodeURIComponent(rawName)}/48`;
+                                  img.src = `https://mc-heads.net/avatar/${encodeURIComponent(idOrName)}/48`;
+                                } else if (!img.src.includes('minotar')) {
+                                  img.src = `https://minotar.net/helm/${encodeURIComponent(rawName)}/48.png`;
                                 } else {
                                   img.src = 'https://minotar.net/helm/MHF_Steve/48.png';
                                 }

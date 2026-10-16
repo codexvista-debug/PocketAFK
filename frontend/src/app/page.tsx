@@ -912,8 +912,6 @@ export default function Dashboard() {
                         const isRunning =
                           srvState === 'SPAWNED' || srvState === 'LOGGED_IN' || srvState === 'CONNECTING';
                         const assignedAcc = resolveServerAccount(srv);
-                        const avatarName = assignedAcc?.ign || assignedAcc?.username || 'MHF_Steve';
-                        const avatarUrl = `https://mc-heads.net/avatar/${encodeURIComponent(avatarName)}/28`;
 
                         return (
                           <div
@@ -938,13 +936,15 @@ export default function Dashboard() {
                                     <div className="flex items-center gap-1 text-[10px] text-slate-700 font-sans font-semibold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md">
                                       <div className="w-3.5 h-3.5 rounded-xs overflow-hidden border border-slate-300 bg-slate-200 shrink-0">
                                         <img
-                                          src={`https://minotar.net/helm/${encodeURIComponent((assignedAcc.ign || assignedAcc.username).split('@')[0])}/32.png`}
+                                          src={`https://crafthead.net/helm/${encodeURIComponent((assignedAcc.uuid || assignedAcc.ign || assignedAcc.username).split('@')[0])}/32`}
                                           alt={assignedAcc.ign || assignedAcc.username}
                                           className="w-full h-full object-cover [image-rendering:pixelated]"
                                           onError={(e) => {
                                             const img = e.target as HTMLImageElement;
                                             if (!img.src.includes('mc-heads')) {
-                                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent((assignedAcc.ign || assignedAcc.username).split('@')[0])}/32`;
+                                              img.src = `https://mc-heads.net/avatar/${encodeURIComponent((assignedAcc.uuid || assignedAcc.ign || assignedAcc.username).split('@')[0])}/32`;
+                                            } else if (!img.src.includes('minotar')) {
+                                              img.src = `https://minotar.net/helm/${encodeURIComponent((assignedAcc.ign || assignedAcc.username).split('@')[0])}/32.png`;
                                             } else {
                                               img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
                                             }
@@ -995,31 +995,6 @@ export default function Dashboard() {
                                 </button>
                               </div>
                             </div>
-
-                            {/* Assigned Account Info */}
-                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <img
-                                  src={avatarUrl}
-                                  alt={avatarName}
-                                  className="w-4 h-4 rounded-xs shrink-0 rendering-pixelated"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/28';
-                                  }}
-                                />
-                                <span className="font-semibold text-slate-700 truncate">
-                                  {assignedAcc ? (assignedAcc.ign || assignedAcc.username) : 'No Account'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                {assignedAcc?.verified && (
-                                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                    Verified
-                                  </span>
-                                )}
-                              </div>
-                            </div>
                           </div>
                         );
                       })}
@@ -1059,15 +1034,15 @@ export default function Dashboard() {
                                 <span className="font-bold text-slate-800 flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg text-[10px]">
                                   <div className="w-4 h-4 rounded-xs overflow-hidden border border-slate-300 bg-slate-200 shrink-0">
                                     <img
-                                      src={`https://minotar.net/helm/${encodeURIComponent((activeAccount.ign || activeAccount.username).split('@')[0])}/32.png`}
+                                      src={`https://crafthead.net/helm/${encodeURIComponent((activeAccount.uuid || activeAccount.ign || activeAccount.username).split('@')[0])}/32`}
                                       alt={activeAccount.ign || activeAccount.username}
                                       className="w-full h-full object-cover [image-rendering:pixelated]"
                                       onError={(e) => {
                                         const img = e.target as HTMLImageElement;
                                         if (!img.src.includes('mc-heads')) {
                                           img.src = `https://mc-heads.net/avatar/${encodeURIComponent((activeAccount.ign || activeAccount.username).split('@')[0])}/32`;
-                                        } else {
-                                          img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                                        } else if (!img.src.includes('minotar')) {
+                                          img.src = `https://minotar.net/helm/${encodeURIComponent((activeAccount.ign || activeAccount.username).split('@')[0])}/32.png`;
                                         }
                                       }}
                                     />
