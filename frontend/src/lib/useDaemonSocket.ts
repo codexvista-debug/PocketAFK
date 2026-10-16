@@ -5,18 +5,23 @@ import { BotLifecycleState, ChatMessage, ContainerWindow, Telemetry, BotSettings
 
 export type SocketStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'AUTHENTICATED' | 'AUTH_ERROR';
 
+export interface MsAuthData {
+  botId: string;
+  userCode: string;
+  url: string;
+  message: string;
+}
+
 export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
   const [daemonUrl, setDaemonUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('pocketafk_daemon_url');
-      // If localhost was stored from previous visits, delete it immediately to stop Chrome private network popup
       if (stored && (stored.includes('localhost') || stored.includes('127.0.0.1'))) {
         localStorage.removeItem('pocketafk_daemon_url');
         return '';
       }
       if (stored) return stored;
     }
-    // Never allow raw localhost from env vars on live site
     if (initialUrl && !initialUrl.includes('localhost') && !initialUrl.includes('127.0.0.1')) {
       return initialUrl;
     }
@@ -36,6 +41,7 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [containerWindow, setContainerWindow] = useState<ContainerWindow | null>(null);
+  const [msAuthData, setMsAuthData] = useState<MsAuthData | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -114,6 +120,10 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
 
             case 'WINDOW_CLOSE':
               setContainerWindow(null);
+              break;
+
+            case 'MS_AUTH_CODE':
+              setMsAuthData(data.payload);
               break;
           }
         } catch (e) {
@@ -205,6 +215,8 @@ export function useDaemonSocket(initialUrl?: string, initialToken?: string) {
     clickSlot,
     closeWindow,
     updateSettings,
-    clearMessages
+    clearMessages,
+    msAuthData,
+    clearMsAuth: () => setMsAuthData(null),
   };
 }

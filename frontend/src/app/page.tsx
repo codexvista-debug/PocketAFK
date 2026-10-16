@@ -11,6 +11,7 @@ import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { AccountModal } from '../components/AccountModal';
 import { AuthModal } from '../components/AuthModal';
+import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
 import { supabase } from '../lib/supabaseClient';
 import { Swords, Shield, Zap, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
 
@@ -47,6 +48,8 @@ export default function Dashboard() {
     closeWindow,
     updateSettings,
     clearMessages,
+    msAuthData,
+    clearMsAuth,
   } = useDaemonSocket();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -137,36 +140,24 @@ export default function Dashboard() {
       const stored = localStorage.getItem(userKey);
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
-          setAccounts(parsed);
-          if (parsed.length > 0) setActiveAccount(parsed[0]);
+          const parsed: Account[] = JSON.parse(stored);
+          // Purge any old fake starter accounts
+          const realAccounts = parsed.filter((a) => !a.id.startsWith('starter-'));
+          setAccounts(realAccounts);
+          if (realAccounts.length > 0) {
+            setActiveAccount(realAccounts[0]);
+          } else {
+            setActiveAccount(null);
+          }
           return;
         } catch (e) {
           // ignore
         }
       }
 
-      // Default initial starter account for this user
-      const defaultAcc: Account = {
-        id: `starter-${effectiveUser}`,
-        username: currentUser ? `${currentUser}_Bot` : 'MyPlayer',
-        auth_type: 'microsoft',
-        server_host: 'play.example.com',
-        server_port: 25565,
-        server_version: 'auto',
-        auto_reconnect: true,
-        anti_afk: { enabled: true, interval: 10 },
-        survival: { autoEat: false, autoTotem: false },
-        mob_farm: { enabled: false, targetRange: 3.5, attackCooldownMs: 650 },
-        settings: {
-          physics: true,
-          acceptResourcePacks: true,
-          muteErrors: false,
-          autoDisconnectOnBan: false
-        }
-      };
-      setAccounts([defaultAcc]);
-      setActiveAccount(defaultAcc);
+      // No accounts exist yet (pure clean state)
+      setAccounts([]);
+      setActiveAccount(null);
     }
 
     loadAccounts();
@@ -289,7 +280,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-100/50 via-slate-50 to-sky-100/40 text-slate-900 flex flex-col selection:bg-emerald-500/20">
       {/* Navigation Header */}
       <Header
         socketStatus={socketStatus}
@@ -480,6 +471,13 @@ export default function Dashboard() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onSuccess={handleLoginSuccess}
+      />
+
+      {/* Microsoft 1-Time Device Authentication Modal */}
+      <MicrosoftAuthModal
+        authData={msAuthData}
+        accountEmail={activeAccount?.username}
+        onClose={clearMsAuth}
       />
     </div>
   );

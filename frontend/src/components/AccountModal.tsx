@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Account } from '../types';
-import { X, UserPlus, Server, Trash2, CheckCircle2 } from 'lucide-react';
+import { X, UserPlus, Trash2, CheckCircle2, ShieldCheck, Mail } from 'lucide-react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -24,27 +24,23 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   onDeleteAccount
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
-  const [username, setUsername] = useState('');
-  const [authType, setAuthType] = useState<'microsoft' | 'offline'>('microsoft');
-  const [serverHost, setServerHost] = useState('');
-  const [serverPort, setServerPort] = useState('25565');
-  const [serverVersion, setServerVersion] = useState('auto');
+  const [minecraftEmail, setMinecraftEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !serverHost.trim()) return;
+    if (!minecraftEmail.trim()) return;
 
     setLoading(true);
     try {
       await onAddAccount({
-        username: username.trim(),
-        auth_type: authType,
-        server_host: serverHost.trim(),
-        server_port: parseInt(serverPort, 10) || 25565,
-        server_version: serverVersion.trim() || 'auto',
+        username: minecraftEmail.trim(), // Minecraft Microsoft Email
+        auth_type: 'microsoft',          // 100% Official Java locked
+        server_host: 'play.example.com', // Placeholder for now
+        server_port: 25565,
+        server_version: 'auto',
         auto_reconnect: true,
         anti_afk: { enabled: true, interval: 10 },
         survival: { autoEat: false, autoTotem: false },
@@ -57,21 +53,25 @@ export const AccountModal: React.FC<AccountModalProps> = ({
         }
       });
       setShowAddForm(false);
-      setUsername('');
-      setServerHost('');
+      setMinecraftEmail('');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-50/80 to-slate-50">
           <div className="flex items-center gap-2.5">
-            <Server className="w-5 h-5 text-emerald-600" />
-            <h2 className="font-bold text-sm text-slate-900">Bot Accounts & Servers</h2>
+            <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-bold text-sm text-slate-900">Minecraft Accounts</h2>
+              <span className="text-[11px] text-emerald-700 font-medium">Official Java Edition (Microsoft Auth)</span>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -99,8 +99,14 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               </div>
 
               {accounts.length === 0 ? (
-                <div className="text-center py-8 border border-dashed border-slate-300 rounded-xl text-slate-500 text-xs">
-                  No bot profiles configured yet. Click "Add Account" to get started.
+                <div className="text-center py-10 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 p-6 space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-800">No Minecraft accounts added yet</div>
+                  <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                    Click "Add Account" to connect your official Java Minecraft email.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -111,7 +117,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                         key={acc.id}
                         className={`p-3.5 rounded-xl border flex items-center justify-between transition ${
                           isSelected
-                            ? 'bg-emerald-50/60 border-emerald-300 shadow-2xs'
+                            ? 'bg-emerald-50/80 border-emerald-400 shadow-xs ring-1 ring-emerald-400/20'
                             : 'bg-white border-slate-200 hover:border-slate-300'
                         }`}
                       >
@@ -123,12 +129,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                             <span className="font-bold text-xs text-slate-900">
                               {acc.username}
                             </span>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200">
-                              {acc.auth_type}
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">
+                              Java Official
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                            {acc.server_host}:{acc.server_port}
+                            Microsoft Auth Protected
                           </div>
                         </div>
 
@@ -141,7 +147,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                           ) : (
                             <button
                               onClick={() => onSelectAccount(acc)}
-                              className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition"
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition"
                             >
                               Select
                             </button>
@@ -149,7 +155,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
                           <button
                             onClick={() => onDeleteAccount(acc.id)}
-                            className="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
                             title="Delete Account"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -162,86 +168,52 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               )}
             </>
           ) : (
-            /* Add Form */
-            <form onSubmit={handleSubmit} className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <div className="text-xs font-bold text-slate-900 pb-1 border-b border-slate-200">
-                New Bot Configuration
+            /* Clean Simplified Add Form (Email Only) */
+            <form onSubmit={handleSubmit} className="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-2xs">
+              <div>
+                <div className="text-xs font-bold text-slate-900">Add Minecraft Account</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Enter the email associated with your official Minecraft Java account.
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Minecraft Username / Email</label>
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. MyAfkBot"
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Account Type</label>
-                  <select
-                    value={authType}
-                    onChange={(e: any) => setAuthType(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
-                  >
-                    <option value="microsoft">Microsoft (Official)</option>
-                    <option value="offline">Offline / Cracked</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Minecraft Version</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Minecraft Microsoft Email
+                </label>
+                <div className="relative">
                   <input
-                    type="text"
-                    value={serverVersion}
-                    onChange={(e) => setServerVersion(e.target.value)}
-                    placeholder="auto or 1.20.4"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Server Host / IP</label>
-                  <input
-                    type="text"
+                    type="email"
                     required
-                    value={serverHost}
-                    onChange={(e) => setServerHost(e.target.value)}
-                    placeholder="play.example.com"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                    value={minecraftEmail}
+                    onChange={(e) => setMinecraftEmail(e.target.value)}
+                    placeholder="e.g. player@outlook.com or gmail.com"
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs"
                   />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Port</label>
-                  <input
-                    type="number"
-                    value={serverPort}
-                    onChange={(e) => setServerPort(e.target.value)}
-                    placeholder="25565"
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 shadow-2xs"
-                  />
-                </div>
+              </div>
+
+              {/* Locked to Official Java Badge */}
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Account Type: <b>Official Java (Microsoft Login)</b></span>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  disabled={loading || !minecraftEmail.trim()}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
                 >
-                  {loading ? 'Saving...' : 'Save Profile'}
+                  {loading ? 'Adding...' : 'Save Account'}
                 </button>
               </div>
             </form>

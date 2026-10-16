@@ -97,5 +97,6 @@ export type DaemonMessage =
   | { type: 'TELEMETRY'; payload: TelemetryPayload }
   | { type: 'CONTAINER_WINDOW'; payload: ContainerWindowPayload }
   | { type: 'WINDOW_CLOSE'; payload: { botId: string; windowId: number } }
+  | { type: 'MS_AUTH_CODE'; payload: { botId: string; userCode: string; url: string; message: string } }
   | { type: 'PONG'; payload: { timestamp: number } }
   | { type: 'SERVER_INFO'; payload: { version: string; activeBots: string[] } };

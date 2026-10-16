@@ -47,6 +47,22 @@ export class PocketBotInstance {
         profilesFolder: './profiles', // Caches OAuth tokens locally on device
         physicsEnabled: this.config.settings.physics !== false, // Default true
         viewDistance: 'tiny', // Memory optimization for Android Termux
+        onMsaCode: (data: any) => {
+          this.broadcast({
+            type: 'MS_AUTH_CODE',
+            payload: {
+              botId: this.config.id,
+              userCode: data.user_code,
+              url: data.verification_uri,
+              message: data.message
+            }
+          });
+          this.logConsole({
+            type: 'system',
+            raw: `[Microsoft Auth] Code: ${data.user_code} at ${data.verification_uri}`,
+            formattedText: `<span style="color:#00AAAA;font-weight:bold">[Microsoft Auth] Code: <span style="color:#FFAA00">${data.user_code}</span> &bull; <a href="${data.verification_uri}" target="_blank" style="color:#55FFFF;text-decoration:underline">Click here to authenticate</a></span>`
+          });
+        }
       });
 
       this.setupEventHandlers();
