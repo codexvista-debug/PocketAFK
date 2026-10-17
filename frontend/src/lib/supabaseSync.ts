@@ -203,7 +203,8 @@ export async function recordAccountConnectionStart(
   currentUser: string,
   accountName: string,
   serverHost: string,
-  startTime: number
+  startTime: number,
+  serverId?: string
 ) {
   if (!supabase || !currentUser || !accountName) return;
   try {
@@ -223,6 +224,7 @@ export async function recordAccountConnectionStart(
       connected_at: startTime,
       is_connected: true,
       server_host: serverHost,
+      server_id: serverId,
     };
 
     await supabase
@@ -295,9 +297,9 @@ export async function loadAccountSessionsFromSupabase(currentUser: string): Prom
       for (const row of data) {
         const connectedAt = row.settings?.connected_at;
         const isConnected = row.settings?.is_connected;
+        const srvId = row.settings?.server_id;
         if (connectedAt && typeof connectedAt === 'number' && isConnected !== false) {
-          if (row.bot_name) sessions[row.bot_name] = connectedAt;
-          if (row.server_host) sessions[row.server_host] = connectedAt;
+          if (srvId) sessions[srvId] = connectedAt;
         }
       }
     }

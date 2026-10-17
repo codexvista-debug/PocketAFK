@@ -172,38 +172,30 @@ export class BotManager {
 
       case 'SEND_CHAT': {
         const { botId, message, targetAccount } = msg.payload;
-        if (targetAccount && targetAccount !== 'all') {
-          const lower = targetAccount.toLowerCase();
-          const targetBot = Array.from(this.bots.values()).find(
-            (b) =>
-              b.config.username.toLowerCase() === lower ||
-              b.bot?.username?.toLowerCase() === lower ||
-              b.config.id.toLowerCase() === lower
-          );
-          if (targetBot) {
-            targetBot.chat(message);
-            break;
-          }
-        }
-
-        if (!botId || botId === 'all') {
-          for (const bot of this.bots.values()) {
-            bot.chat(message);
-          }
-        } else {
+        // 1. If botId is specified, route chat strictly to that bot instance
+        if (botId && botId !== 'all') {
           const bot = this.bots.get(botId);
           if (bot) {
             bot.chat(message);
-          } else {
-            const lower = botId.toLowerCase();
-            const foundBot = Array.from(this.bots.values()).find(
-              (b) =>
-                b.config.username.toLowerCase() === lower ||
-                b.bot?.username?.toLowerCase() === lower
-            );
-            if (foundBot) {
-              foundBot.chat(message);
+          }
+          break;
+        }
+
+        // 2. Fallback only if botId is 'all' or missing
+        if (targetAccount && targetAccount !== 'all') {
+          const lower = targetAccount.toLowerCase();
+          for (const b of this.bots.values()) {
+            if (
+              b.config.username.toLowerCase() === lower ||
+              b.bot?.username?.toLowerCase() === lower ||
+              b.config.id.toLowerCase() === lower
+            ) {
+              b.chat(message);
             }
+          }
+        } else {
+          for (const bot of this.bots.values()) {
+            bot.chat(message);
           }
         }
         break;
