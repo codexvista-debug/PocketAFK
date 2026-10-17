@@ -15,6 +15,31 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const username = searchParams.get('username')?.trim().toLowerCase() || 'default';
 
+  // Check if non-default user exists in Supabase
+  if (username !== 'default' && supabase) {
+    try {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('username', username)
+        .maybeSingle();
+
+      if (!userRow) {
+        userTunnels.delete(username);
+        return NextResponse.json({
+          error: `User @${username} does not exist in PocketAFK.`,
+          userNotFound: true,
+          url: '',
+          tunnel_url: '',
+          token: '',
+          isLive: false,
+        }, { status: 404 });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   // 1. Check in-memory cache first
   const cached = userTunnels.get(username);
   if (cached && cached.url && Date.now() - cached.updatedAt < TUNNEL_TIMEOUT_MS) {
@@ -83,6 +108,13 @@ export async function POST(req: NextRequest) {
           .ilike('username', cleanUsername)
           .maybeSingle();
 
+        if (!user) {
+          userTunnels.delete(cleanUsername);
+          return NextResponse.json({
+            error: `Unauthorized: User @${cleanUsername} does not exist in PocketAFK.`
+          }, { status: 404 });
+        }
+
         if (user && user.password_hash) {
           const expectedSecret = generateSecretCode(user.password_hash);
           const providedSecret = typeof token === 'string' ? token.trim() : '';
@@ -104,10 +136,7 @@ export async function POST(req: NextRequest) {
 
       if (supabase) {
         try {
-          await supabase.from('tunnels').update({
-            daemon_url: '',
-            updated_at: new Date().toISOString(),
-          }).ilike('username', cleanUsername);
+          await supabase.from('tunnels').delete().ilike('username', cleanUsername);
 
           // Automatically mark all connected bot accounts for this user as disconnected
           const { data: userAccs } = await supabase

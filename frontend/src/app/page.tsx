@@ -99,6 +99,46 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
 type MainView = 'profile' | 'servers' | 'accounts';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
+function purgeLocalUserData(username: string) {
+  if (typeof window === 'undefined' || !username) return;
+  const raw = username.trim();
+  const lower = raw.toLowerCase();
+  const prefixes = [
+    'pocketafk_accounts_',
+    'pocketafk_servers_',
+    'pocketafk_secret_',
+    'pocketafk_rank_',
+    'pocketafk_notes_',
+    'pocketafk_pinned_',
+    'pocketafk_pinned_servers_',
+    'pocketafk_server_connections_',
+    'pocketafk_player_logs_',
+    'pocketafk_sessions_',
+  ];
+  for (const prefix of prefixes) {
+    localStorage.removeItem(`${prefix}${raw}`);
+    localStorage.removeItem(`${prefix}${lower}`);
+  }
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      const kLower = k.toLowerCase();
+      if (
+        kLower === `pocketafk_secret_${lower}` ||
+        kLower === `pocketafk_accounts_${lower}` ||
+        kLower === `pocketafk_servers_${lower}` ||
+        kLower.endsWith(`_${lower}`) ||
+        kLower.includes(`_${lower}_`)
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {}
+}
+
 export default function Dashboard() {
   const [currentUser, setCurrentUser] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -470,6 +510,17 @@ export default function Dashboard() {
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
 
+  const handleLogout = useCallback(() => {
+    if (currentUser) {
+      purgeLocalUserData(currentUser);
+    }
+    setCurrentUser(null);
+    setSecretCode('');
+    localStorage.removeItem('pocketafk_user');
+    saveSettings('', '');
+    setToast(null);
+  }, [currentUser, saveSettings]);
+
   // Helper to resolve an account for a server profile
   const resolveServerAccount = useCallback(
     (srv: ServerProfile | null | undefined): MinecraftAccount | null => {
@@ -828,6 +879,14 @@ export default function Dashboard() {
 
       try {
         const res = await fetch(`/api/tunnel?username=${encodeURIComponent(currentUser)}`, { cache: 'no-store' });
+        if (res.status === 404 && isMounted) {
+          const errData = await res.json().catch(() => ({}));
+          if (errData?.userNotFound) {
+            console.warn(`[PocketAFK] User @${currentUser} no longer exists in Supabase (deleted). Purging and signing out.`);
+            handleLogout();
+            return;
+          }
+        }
         if (res.ok && isMounted) {
           const data = await res.json();
           const targetUrl = (data?.url || data?.tunnel_url || '').trim();
@@ -1028,6 +1087,20 @@ export default function Dashboard() {
       // 2. Fetch authoritative universal state from Supabase
       if (supabase && currentUser) {
         try {
+          // Check if the user still exists in Supabase users table!
+          // If the account was deleted in the admin page, userRow will be null.
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('id, username')
+            .ilike('username', currentUser)
+            .maybeSingle();
+
+          if (!userRow) {
+            console.warn(`[PocketAFK] User @${currentUser} does not exist in Supabase (deleted). Purging and signing out.`);
+            handleLogout();
+            return;
+          }
+
           const [remoteServers, remoteAccounts] = await Promise.all([
             loadServersFromSupabase(currentUser),
             loadAccountsFromSupabase(currentUser),
@@ -1038,13 +1111,9 @@ export default function Dashboard() {
           if (remoteServers !== null && Array.isArray(remoteServers)) {
             // Supabase is the central universal source of truth!
             finalServers = remoteServers;
-          } else if (localSrvs.length > 0) {
-            finalServers = localSrvs;
-            await saveServersToSupabase(currentUser, finalServers);
           } else {
             // New accounts start with clean slate (0 server profiles)
             finalServers = [];
-            await saveServersToSupabase(currentUser, finalServers);
           }
 
           // Ensure each server profile loads its server-specific quick commands
@@ -1064,20 +1133,18 @@ export default function Dashboard() {
           localStorage.setItem(srvKey, JSON.stringify(finalServers));
           if (finalServers.length > 0) {
             setActiveServerId((prev) => (finalServers.some((s) => s.id === prev) ? prev : finalServers[0].id));
+          } else {
+            setActiveServerId('');
           }
 
           // Handle Universal Accounts:
-          if (remoteAccounts && remoteAccounts.length > 0) {
+          if (remoteAccounts !== null && Array.isArray(remoteAccounts)) {
             // Authoritative accounts from Supabase!
             setAccounts(remoteAccounts);
             localStorage.setItem(accKey, JSON.stringify(remoteAccounts));
-          } else if (localAccs.length > 0) {
-            const verified = localAccs.filter((a) => a.verified && !a.username.includes('@'));
-            if (verified.length > 0) {
-              await syncAllToSupabase(currentUser, verified, finalServers);
-              setAccounts(verified);
-              localStorage.setItem(accKey, JSON.stringify(verified));
-            }
+          } else {
+            setAccounts([]);
+            localStorage.setItem(accKey, JSON.stringify([]));
           }
         } catch (err) {
           console.warn('Failed to load universal data from Supabase:', err);
@@ -1086,7 +1153,7 @@ export default function Dashboard() {
     }
 
     loadData();
-  }, [currentUser]);
+  }, [currentUser, handleLogout]);
 
   // Microsoft OAuth Device Code Sign-In with Target Identity Verification Guard
   const handleStartMicrosoftLogin = async (target?: MinecraftAccount | string) => {
@@ -1724,15 +1791,13 @@ export default function Dashboard() {
     );
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setSecretCode('');
-    localStorage.removeItem('pocketafk_user');
-    saveSettings('', '');
-    setToast(null);
-  };
-
-  const handleLoginSuccess = (user: string, secret?: string) => {
+  const handleLoginSuccess = (user: string, secret?: string, isNewUser?: boolean) => {
+    if (isNewUser) {
+      purgeLocalUserData(user);
+      setAccounts([]);
+      setServers([]);
+      setActiveServerId('');
+    }
     setCurrentUser(user);
     localStorage.setItem('pocketafk_user', user);
     if (secret) {

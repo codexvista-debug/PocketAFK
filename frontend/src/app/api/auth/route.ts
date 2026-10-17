@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        user: { username: cleanUsername, secretCode, rank: 'iron' }
+        user: { username: cleanUsername, secretCode, rank: 'iron', isNewUser: true }
       });
     }
 

@@ -449,18 +449,41 @@ export async function POST(req: NextRequest) {
       }
 
       const cleanUser = username.trim();
+      const lowerUser = cleanUser.toLowerCase();
 
-      // Delete user's accounts
-      await supabase.from('accounts').delete().ilike('username', cleanUser);
+      // 1. Purge live in-memory tunnel cache
+      sharedUserTunnels.delete(lowerUser);
+      sharedUserTunnels.delete(cleanUser);
 
-      // Delete user
+      // 2. Delete user's tunnel from Supabase
+      try {
+        await supabase.from('tunnels').delete().ilike('username', cleanUser);
+        await supabase.from('tunnels').delete().eq('username', cleanUser);
+        await supabase.from('tunnels').delete().eq('username', lowerUser);
+      } catch (e) {
+        console.warn('Error purging user tunnel:', e);
+      }
+
+      // 3. Delete all Minecraft accounts, server profiles (__meta_servers__), rank (__meta_rank__), logs, commands
+      try {
+        await supabase.from('accounts').delete().ilike('username', cleanUser);
+        await supabase.from('accounts').delete().eq('username', cleanUser);
+        await supabase.from('accounts').delete().eq('username', lowerUser);
+      } catch (e) {
+        console.warn('Error purging user accounts & metadata:', e);
+      }
+
+      // 4. Delete user record from Supabase users table
       const { error: delErr } = await supabase.from('users').delete().ilike('username', cleanUser);
 
       if (delErr) {
         return NextResponse.json({ error: delErr.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, message: `User @${cleanUser} and all associated accounts deleted.` });
+      return NextResponse.json({
+        success: true,
+        message: `User @${cleanUser} and all associated accounts, server profiles, rank, and tunnels permanently deleted.`
+      });
     }
 
     // Action 5: Delete Minecraft account
