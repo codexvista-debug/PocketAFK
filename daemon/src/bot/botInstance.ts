@@ -6,6 +6,7 @@ const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity, MinimapPlayer, MinimapMob } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
 import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens } from './tokenManager';
+import { sampleTerrainGrid } from '../terrainMapper';
 
 export type MessageBroadcastFn = (message: any) => void;
 
@@ -28,6 +29,9 @@ export class PocketBotInstance {
   public recentMessages: ChatMessagePayload[] = [];
   private blocksBrokenOrGenerated: number = 0;
   private recentBlockEvents: number[] = [];
+  private terrainGridCache: any = null;
+  private terrainGridSampledAt: number = 0;
+  private terrainGridCenter: { x: number; y: number; z: number } | null = null;
 
   constructor(config: BotConfig, broadcast: MessageBroadcastFn) {
     this.config = config;
@@ -631,6 +635,14 @@ export class PocketBotInstance {
       };
 
       if (this.bot?.entities) {
+        const HOSTILE_MOBS = new Set([
+          'zombie', 'skeleton', 'creeper', 'spider', 'cave_spider', 'enderman', 'witch', 'blaze',
+          'ghast', 'warden', 'phantom', 'drowned', 'husk', 'stray', 'silverfish', 'slime',
+          'magma_cube', 'hoglin', 'zoglin', 'piglin_brute', 'pillager', 'ravager', 'vindicator',
+          'evoker', 'vex', 'shulker', 'guardian', 'elder_guardian', 'wither', 'wither_skeleton', 'ender_dragon'
+        ]);
+
+        const myUsername = (this.bot.username || this.config.username || '').toLowerCase();
         const entityList: RadarEntity[] = [];
         const playersList: MinimapPlayer[] = [];
         const mobsList: MinimapMob[] = [];
@@ -642,34 +654,120 @@ export class PocketBotInstance {
           const dist = Math.sqrt(dx * dx + dz * dz);
           if (dist > 48) return;
 
-          if (entity.type === 'player' && entity.username) {
-            entityList.push({
+          const rawName = (entity.name || '').toLowerCase();
+          const isPlayer = entity.type === 'player';
+
+          // 1. Players
+          if (isPlayer) {
+            let pUsername = entity.username;
+            if (!pUsername && this.bot?.players) {
+              const matched = Object.values(this.bot.players).find((p: any) => p?.entity?.id === entity.id);
+              if (matched) pUsername = (matched as any).username;
+            }
+            if (!pUsername) {
+              pUsername = (entity as any).displayName?.text || (entity as any).displayName || entity.name;
+            }
+
+            if (pUsername && pUsername.toLowerCase() !== myUsername) {
+              const entYaw = entity.yaw || 0;
+              const entDeg = (((180 - (entYaw * 180) / Math.PI) % 360) + 360) % 360;
+              let entFacing = 'South';
+              if (entDeg >= 315 || entDeg < 45) entFacing = 'South';
+              else if (entDeg >= 45 && entDeg < 135) entFacing = 'West';
+              else if (entDeg >= 135 && entDeg < 225) entFacing = 'North';
+              else entFacing = 'East';
+
+              entityList.push({
+                id: entity.id,
+                type: 'player',
+                name: pUsername,
+                username: pUsername,
+                x: Math.round(entity.position.x * 10) / 10,
+                y: Math.round(entity.position.y * 10) / 10,
+                z: Math.round(entity.position.z * 10) / 10,
+                yaw: entity.yaw,
+                distance: Math.round(dist * 10) / 10
+              });
+
+              playersList.push({
+                username: pUsername,
+                x: Math.round(entity.position.x * 10) / 10,
+                y: Math.round(entity.position.y * 10) / 10,
+                z: Math.round(entity.position.z * 10) / 10,
+                dx: Math.round(dx * 10) / 10,
+                dz: Math.round(dz * 10) / 10,
+                distance: Math.round(dist * 10) / 10,
+                yaw: Math.round(entYaw * 100) / 100,
+                facing: entFacing,
+                health: (entity as any).health ? Math.round((entity as any).health) : undefined,
+              });
+            }
+            return;
+          }
+
+          // 2. Primed TNT (Purple marker on Xaero's Minimap)
+          if (rawName.includes('tnt') || entity.name === 'primed_tnt' || entity.name === 'tnt') {
+            mobsList.push({
               id: entity.id,
-              type: 'player',
-              name: entity.username,
-              username: entity.username,
-              x: Math.round(entity.position.x * 10) / 10,
-              y: Math.round(entity.position.y * 10) / 10,
-              z: Math.round(entity.position.z * 10) / 10,
-              yaw: entity.yaw,
-              distance: Math.round(dist * 10) / 10
-            });
-            playersList.push({
-              username: entity.username,
+              name: 'Primed TNT',
+              type: 'tnt',
+              distance: Math.round(dist * 10) / 10,
               x: Math.round(entity.position.x * 10) / 10,
               y: Math.round(entity.position.y * 10) / 10,
               z: Math.round(entity.position.z * 10) / 10,
               dx: Math.round(dx * 10) / 10,
               dz: Math.round(dz * 10) / 10,
-              distance: Math.round(dist * 10) / 10,
-              yaw: entity.yaw,
+              isHostile: true,
             });
-          } else if (entity.type === 'mob' || entity.type === 'hostile' || entity.kind === 'Hostile mobs') {
-            const mName = entity.name || entity.displayName || 'Monster';
+            return;
+          }
+
+          // 3. Dropped Items (e.g. Cobblestone from cobble farms)
+          if (rawName === 'item' || entity.type === 'object' && rawName.includes('item')) {
+            let itemName = 'Cobblestone';
+            if ((entity as any).item?.name) {
+              itemName = (entity as any).item.name.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+            } else if ((entity as any).item?.displayName) {
+              itemName = (entity as any).item.displayName;
+            } else if (Array.isArray((entity as any).metadata)) {
+              for (const m of (entity as any).metadata) {
+                if (m && typeof m === 'object') {
+                  const itmId = m.itemId ?? m.id;
+                  if (itmId && this.bot?.registry?.items?.[itmId]) {
+                    itemName = this.bot.registry.items[itmId].displayName;
+                    break;
+                  }
+                }
+              }
+            }
+
+            mobsList.push({
+              id: entity.id,
+              name: itemName,
+              type: 'item',
+              distance: Math.round(dist * 10) / 10,
+              x: Math.round(entity.position.x * 10) / 10,
+              y: Math.round(entity.position.y * 10) / 10,
+              z: Math.round(entity.position.z * 10) / 10,
+              dx: Math.round(dx * 10) / 10,
+              dz: Math.round(dz * 10) / 10,
+              isHostile: false,
+            });
+            return;
+          }
+
+          // 4. Hostile Mobs
+          const isHostile = HOSTILE_MOBS.has(rawName) || entity.type === 'hostile' || entity.kind === 'Hostile mobs';
+          if (isHostile) {
+            const rawDisplayName = (entity as any).displayName?.text || (entity as any).displayName || entity.name || 'Monster';
+            const cleanName = typeof rawDisplayName === 'string'
+              ? rawDisplayName.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+              : 'Monster';
+
             entityList.push({
               id: entity.id,
               type: 'hostile',
-              name: mName,
+              name: cleanName,
               x: Math.round(entity.position.x * 10) / 10,
               y: Math.round(entity.position.y * 10) / 10,
               z: Math.round(entity.position.z * 10) / 10,
@@ -677,7 +775,7 @@ export class PocketBotInstance {
             });
             mobsList.push({
               id: entity.id,
-              name: mName,
+              name: cleanName,
               type: 'hostile',
               distance: Math.round(dist * 10) / 10,
               x: Math.round(entity.position.x * 10) / 10,
@@ -687,12 +785,21 @@ export class PocketBotInstance {
               dz: Math.round(dz * 10) / 10,
               isHostile: true,
             });
-          } else if (entity.type === 'animal' || entity.type === 'passive' || entity.kind === 'Passive mobs') {
-            const aName = entity.name || entity.displayName || 'Animal';
+            return;
+          }
+
+          // 5. Passive / Neutral Animals & Mobs
+          const IGNORED = new Set(['arrow', 'spectral_arrow', 'trident', 'experience_orb', 'area_effect_cloud']);
+          if (!IGNORED.has(rawName) && entity.type !== 'projectile' && entity.type !== 'orb') {
+            const rawDisplayName = (entity as any).displayName?.text || (entity as any).displayName || entity.name || 'Animal';
+            const cleanName = typeof rawDisplayName === 'string'
+              ? rawDisplayName.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+              : 'Animal';
+
             entityList.push({
               id: entity.id,
               type: 'passive',
-              name: aName,
+              name: cleanName,
               x: Math.round(entity.position.x * 10) / 10,
               y: Math.round(entity.position.y * 10) / 10,
               z: Math.round(entity.position.z * 10) / 10,
@@ -700,7 +807,7 @@ export class PocketBotInstance {
             });
             mobsList.push({
               id: entity.id,
-              name: aName,
+              name: cleanName,
               type: 'passive',
               distance: Math.round(dist * 10) / 10,
               x: Math.round(entity.position.x * 10) / 10,
@@ -713,9 +820,31 @@ export class PocketBotInstance {
           }
         });
 
+        playersList.sort((a, b) => a.distance - b.distance);
+        mobsList.sort((a, b) => a.distance - b.distance);
+
         payload.entities = entityList;
         payload.nearbyPlayers = playersList;
-        payload.nearbyMobs = mobsList;
+        payload.nearbyMobs = mobsList.slice(0, 60);
+      }
+    } catch {}
+
+    // Sample real Minecraft chunk terrain blocks around bot for authentic Xaero's minimap
+    try {
+      const mapCenter = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
+      const movedFarEnough = !this.terrainGridCenter
+        || Math.abs(mapCenter.x - this.terrainGridCenter.x) >= 3
+        || Math.abs(mapCenter.y - this.terrainGridCenter.y) >= 3
+        || Math.abs(mapCenter.z - this.terrainGridCenter.z) >= 3;
+      if (!this.terrainGridCache || Date.now() - this.terrainGridSampledAt >= 2000 || movedFarEnough) {
+        this.terrainGridCache = sampleTerrainGrid(this.bot, 20);
+        this.terrainGridSampledAt = Date.now();
+        this.terrainGridCenter = mapCenter;
+      }
+      if (this.terrainGridCache) {
+        payload.terrainGrid = this.terrainGridCache;
+        if (this.terrainGridCache.currentBiome) payload.currentBiome = this.terrainGridCache.currentBiome;
+        if (this.terrainGridCache.currentLandBlock) payload.currentLandBlock = this.terrainGridCache.currentLandBlock;
       }
     } catch {}
 

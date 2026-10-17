@@ -148,6 +148,13 @@ export interface TerrainGridData {
   cells: number[];
   heights: number[];
   timeOfDay?: string;
+  weather?: string;
+  lightLevel?: number;
+  groundElevation?: number;
+  seaLevelDelta?: number;
+  skyClearance?: string;
+  landscapeSummary?: Array<{ name: string; percentage: number; color: string }>;
+  hazards?: string[];
 }
 
 export interface Telemetry {
