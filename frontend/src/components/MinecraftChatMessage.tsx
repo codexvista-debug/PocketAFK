@@ -11,6 +11,14 @@ interface MinecraftChatMessageProps {
 
 // Light-mode optimized high-contrast Minecraft Rank colors (matches VistaAFK)
 const LIGHT_RANK_COLORS: Record<string, string> = {
+  // DonutSMP & Survival SMP Ranks
+  IRON: '#64748b',       // Slate 500
+  GOLD: '#d97706',       // Amber 600
+  DIAMOND: '#0284c7',    // Sky 600
+  EMERALD: '#059669',    // Emerald 600
+  NETHERITE: '#475569',  // Dark Slate
+  DONUT: '#ea580c',      // Orange 600
+  CHIEF: '#7c3aed',      // Purple 600
   TITAN: '#0284c7',     // Sky 600
   KING: '#d97706',      // Amber 600
   CHAMPION: '#b45309',  // Amber 700
@@ -26,6 +34,11 @@ const LIGHT_RANK_COLORS: Record<string, string> = {
   'VIP+': '#059669',
   MVP: '#0891b2',       // Cyan 600
   'MVP+': '#0284c7',
+  MEDIA: '#e11d48',     // Rose 600
+  YOUTUBE: '#e11d48',
+  STREAMER: '#9333ea',
+  HELPER: '#06b6d4',    // Cyan 500
+  STAFF: '#dc2626',     // Red 600
   ADMIN: '#dc2626',     // Red 600
   OWNER: '#dc2626',
   MOD: '#059669',
@@ -124,7 +137,7 @@ export function parseLightMinecraftColorCodes(text: string): React.ReactNode {
 export function stripMinecraftFormatting(text: string): string {
   if (!text) return '';
   return text
-    .replace(/<[^>]*>/g, '') // strip html tags if any
+    .replace(/<\/?(?:span|div|b|i|u|p|br|strong|em|font|a)\b[^>]*>/gi, '') // strip HTML formatting tags only without removing Minecraft <Player> names
     .replace(/§[0-9a-fk-orxghijpqstu]/gi, '')
     .replace(/§/g, '')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -173,9 +186,9 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
     );
   }
 
-  // 1. Matches rank + player username + message (e.g. "MEMBER _StarWings9451 ▶ ay un kit inicial" or "[EMPEROR] Xossil > hello")
+  // 1. Matches rank + player username + message (e.g. "DIAMOND Bob ▶ hello", "[OVERLORD] Xossil > hello", "DONUT Chief » message")
   const rankPlayerMatch = cleanText.match(
-    /^(?:\[?(TITAN\+*|KING\+*|CHAMPION\+*|KNIGHT\+*|EMPEROR\+*|OVERLORD\+*|LORD\+*|JESTER\+*|MEMBER\+*|VIP\+*|MVP\+*|ADMIN|OWNER|MOD)\]?)\s+([a-zA-Z0-9_]{3,16})(?:\s+\[[^\]]{1,12}\])?\s*(?:▶|>|:)\s*(.*)$/i
+    /^(?:\[?(IRON\+*|GOLD\+*|DIAMOND\+*|EMERALD\+*|NETHERITE\+*|DONUT\+*|CHIEF\+*|TITAN\+*|KING\+*|CHAMPION\+*|KNIGHT\+*|EMPEROR\+*|OVERLORD\+*|LORD\+*|JESTER\+*|MEMBER\+*|VIP\+*|MVP\+*|MEDIA|YOUTUBE|STREAMER|HELPER|STAFF|ADMIN|OWNER|MOD)\]?)\s+([+*.~#]?[a-zA-Z0-9_]{1,24})(?:\s+\[[^\]]{1,12}\])?\s*(?:▶|>|:|»)\s*(.*)$/i
   );
 
   if (rankPlayerMatch) {
@@ -187,7 +200,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
 
     // Extract color-coded message body from rawText if available
     let rawBody = cleanBody;
-    const arrowIndex = rawText.search(/[▶>:]/);
+    const arrowIndex = rawText.search(/[▶>:»]/);
     if (arrowIndex !== -1) {
       rawBody = rawText.slice(arrowIndex + 1).replace(/^[\s§r]+/, '');
     }
@@ -235,16 +248,20 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
     );
   }
 
-  // 2. Standard player chat match: <Username> message
-  const standardPlayerMatch = cleanText.match(/^<([a-zA-Z0-9_]{3,16})>\s*(.*)$/);
+  // 2. Standard player chat match: <Username> message, Username » message, or Username > message
+  const standardPlayerMatch = cleanText.match(
+    /^(?:<([+*.~#]?[a-zA-Z0-9_]{1,24})>|([+*.~#]?[a-zA-Z0-9_]{3,20})\s*(?:▶|>|»))\s*(.*)$/
+  );
   if (standardPlayerMatch) {
-    const username = standardPlayerMatch[1];
-    const cleanBody = standardPlayerMatch[2];
+    const username = standardPlayerMatch[1] || standardPlayerMatch[2];
+    const cleanBody = standardPlayerMatch[3];
 
     let rawBody = cleanBody;
     const closingBracket = rawText.indexOf('>');
-    if (closingBracket !== -1) {
-      rawBody = rawText.slice(closingBracket + 1).replace(/^[\s§r]+/, '');
+    const arrowIndex = rawText.search(/[▶>»]/);
+    const splitIndex = standardPlayerMatch[1] ? closingBracket : arrowIndex;
+    if (splitIndex !== -1) {
+      rawBody = rawText.slice(splitIndex + 1).replace(/^[\s§r]+/, '');
     }
 
     return (
