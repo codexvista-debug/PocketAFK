@@ -4,6 +4,7 @@ import { RANKS, UserRank, getRankConfig } from '@/lib/ranks';
 import { hashPassword, generateSecretCode, USERNAME_REGEX } from '@/lib/authUtils';
 
 import { sharedUserTunnels } from '@/lib/tunnelStore';
+import { getRegistrationsPaused, setRegistrationsPaused } from '@/lib/systemConfig';
 
 export const dynamic = 'force-dynamic';
 
@@ -277,6 +278,7 @@ export async function GET(req: NextRequest) {
     });
 
     const activeTunnelsCount = tunnelList.filter((t) => t.isRecent).length;
+    const isRegistrationsPaused = await getRegistrationsPaused();
 
     return NextResponse.json({
       stats: {
@@ -285,7 +287,9 @@ export async function GET(req: NextRequest) {
         totalConnected: realAccounts.filter((a) => a.isConnected).length,
         totalTunnels: activeTunnelsCount,
         rankBreakdown,
+        isRegistrationsPaused,
       },
+      isRegistrationsPaused,
       users: userList,
       accounts: realAccounts,
       tunnels: tunnelList,
@@ -365,6 +369,22 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { action } = body;
+
+    // Action 0: Pause or Resume public registrations
+    if (action === 'toggle_registrations') {
+      const { paused } = body;
+      const current = await getRegistrationsPaused();
+      const targetState = typeof paused === 'boolean' ? paused : !current;
+      const success = await setRegistrationsPaused(targetState);
+      if (!success) {
+        return NextResponse.json({ error: 'Failed to update registration status in database' }, { status: 500 });
+      }
+      return NextResponse.json({
+        success: true,
+        isRegistrationsPaused: targetState,
+        message: targetState ? 'Public registrations are now PAUSED.' : 'Public registrations are now RESUMED & OPEN.',
+      });
+    }
 
     // Action 1: Change user rank
     if (action === 'change_rank') {

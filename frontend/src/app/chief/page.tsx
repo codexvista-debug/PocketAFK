@@ -38,6 +38,10 @@ import {
   Globe,
   BarChart3,
   LogOut,
+  UserCheck,
+  UserX,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { RANKS, RANK_ORDER, UserRank } from '@/lib/ranks';
 import { MinecraftChatMessage } from '@/components/MinecraftChatMessage';
@@ -111,6 +115,10 @@ export default function ChiefAdminPage() {
   const [userRankFilter, setUserRankFilter] = useState<string>('all');
   const [accountSearch, setAccountSearch] = useState<string>('');
   const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline' | 'legit' | 'suspicious'>('online');
+
+  // System Config States
+  const [isRegistrationsPaused, setIsRegistrationsPaused] = useState<boolean>(false);
+  const [isTogglingRegistrations, setIsTogglingRegistrations] = useState<boolean>(false);
 
   // Modal States
   const [resetPasswordUser, setResetPasswordUser] = useState<UserItem | null>(null);
@@ -278,6 +286,9 @@ export default function ChiefAdminPage() {
       setUsers(data.users || []);
       setAccounts(data.accounts || []);
       setTunnels(data.tunnels || []);
+      if (data.isRegistrationsPaused !== undefined) {
+        setIsRegistrationsPaused(Boolean(data.isRegistrationsPaused));
+      }
     } catch (err: any) {
       showToast(err.message || 'Error fetching data', 'error');
     } finally {
@@ -289,6 +300,28 @@ export default function ChiefAdminPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Handle Toggle Registrations (Pause / Resume)
+  const handleToggleRegistrations = async () => {
+    setIsTogglingRegistrations(true);
+    try {
+      const nextPaused = !isRegistrationsPaused;
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_registrations', paused: nextPaused }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to toggle registrations');
+
+      setIsRegistrationsPaused(data.isRegistrationsPaused ?? nextPaused);
+      showToast(data.message || (nextPaused ? 'Registrations paused' : 'Registrations resumed'), nextPaused ? 'info' : 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Error toggling registrations', 'error');
+    } finally {
+      setIsTogglingRegistrations(false);
+    }
+  };
 
   // Handle Rank Change
   const handleChangeRank = async (username: string, newRank: UserRank) => {
@@ -1052,6 +1085,43 @@ export default function ChiefAdminPage() {
                   className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
                 />
               </div>
+
+              {/* Pause / Resume Registrations Toggle Button */}
+              <button
+                type="button"
+                onClick={handleToggleRegistrations}
+                disabled={isTogglingRegistrations}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-2 border disabled:opacity-50 active:scale-95 ${
+                  isRegistrationsPaused
+                    ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/90 shadow-amber-500/10'
+                    : 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100/90 shadow-emerald-500/10'
+                }`}
+                title={
+                  isRegistrationsPaused
+                    ? 'Public sign-ups are paused. Click to resume registrations.'
+                    : 'Public sign-ups are open. Click to pause registrations.'
+                }
+              >
+                {isRegistrationsPaused ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <UserX className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Registrations: Paused</span>
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                      Resume
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Registrations: Active</span>
+                    <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                      Pause
+                    </span>
+                  </>
+                )}
+              </button>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Lock, UserPlus, LogIn, ShieldAlert, Check } from 'lucide-react';
 
 interface AuthModalProps {
@@ -15,6 +15,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [registrationsPaused, setRegistrationsPaused] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/auth?check_registrations=true')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.registrationsPaused !== undefined) {
+          setRegistrationsPaused(Boolean(data.registrationsPaused));
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -104,6 +117,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
           )}
 
+          {isRegister && registrationsPaused && (
+            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600" />
+              <span>Public registrations are temporarily paused by the administrator.</span>
+            </div>
+          )}
+
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-semibold text-slate-700">Username</label>
@@ -148,13 +168,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
           <button
             type="submit"
-            disabled={loading || !username.trim() || !password.trim()}
+            disabled={loading || !username.trim() || !password.trim() || (isRegister && registrationsPaused)}
             className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer mt-2"
           >
             {loading ? 'Please wait...' : isRegister ? (
-              <>
-                <UserPlus className="w-4 h-4" /> Create Account
-              </>
+              registrationsPaused ? (
+                <>
+                  <ShieldAlert className="w-4 h-4" /> Registrations Paused
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" /> Create Account
+                </>
+              )
             ) : (
               <>
                 <LogIn className="w-4 h-4" /> Sign In

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 import { hashPassword, generateSecretCode, USERNAME_REGEX } from '@/lib/authUtils';
+import { getRegistrationsPaused } from '@/lib/systemConfig';
 
 // In-memory fallback if Supabase is temporarily unreachable
 const localUsers = new Map<string, string>();
@@ -10,8 +11,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const username = searchParams.get('username')?.trim().toLowerCase();
 
-    if (!username) {
-      return NextResponse.json({ error: 'Username required' }, { status: 400 });
+    if (!username || searchParams.get('check_registrations') === 'true') {
+      const isPaused = await getRegistrationsPaused();
+      return NextResponse.json({ registrationsPaused: isPaused });
     }
 
     if (supabase) {
@@ -59,6 +61,13 @@ export async function POST(req: NextRequest) {
     const secretCode = generateSecretCode(cleanUsername, hashedPassword);
 
     if (action === 'register') {
+      const isPaused = await getRegistrationsPaused();
+      if (isPaused) {
+        return NextResponse.json({
+          error: 'Registrations are currently paused by the administrator. Please check back later.'
+        }, { status: 403 });
+      }
+
       if (supabase) {
         // Check if user exists in Supabase (case-insensitive)
         const { data: existing } = await supabase
