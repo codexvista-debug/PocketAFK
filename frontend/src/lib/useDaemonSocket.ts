@@ -41,7 +41,7 @@ export function useDaemonSocket(
   const [authToken, setAuthToken] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
-      return localStorage.getItem(`pocketafk_daemon_token_${u}`) || '';
+      return localStorage.getItem(`pocketafk_daemon_token_${u}`) || localStorage.getItem(`pocketafk_secret_${u}`) || '';
     }
     return '';
   });
@@ -80,7 +80,7 @@ export function useDaemonSocket(
     }
 
     const nextUrl = localStorage.getItem(`pocketafk_daemon_url_${u}`) || '';
-    const nextToken = localStorage.getItem(`pocketafk_daemon_token_${u}`) || '';
+    const nextToken = localStorage.getItem(`pocketafk_daemon_token_${u}`) || localStorage.getItem(`pocketafk_secret_${u}`) || '';
     
     setDaemonUrl(nextUrl);
     setAuthToken(nextToken);
@@ -153,10 +153,11 @@ export function useDaemonSocket(
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
+        const effectiveToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem(`pocketafk_secret_${currentUser ? currentUser.trim().toLowerCase() : 'guest'}`) || '' : '');
         ws.send(JSON.stringify({
           type: 'AUTH',
           payload: { 
-            token: authToken,
+            token: effectiveToken,
             username: currentUser || 'guest'
           }
         }));

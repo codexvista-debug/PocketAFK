@@ -124,17 +124,15 @@ pkill -f "tsx src/index.ts" 2>/dev/null || true
 pkill -f "cloudflared tunnel" 2>/dev/null || true
 sleep 1
 
-# Write dedicated daemon owner and auth token to .env
+# Write dedicated daemon owner to .env
 cat << ENVEOF > .env
 PORT=8080
 POCKETAFK_OWNER=$APP_USER
-DAEMON_AUTH_TOKEN=$APP_SECRET
 ENVEOF
 
 run_daemon_loop() {
   export TERMUX_SUPERVISOR=1
   export POCKETAFK_OWNER="$APP_USER"
-  export DAEMON_AUTH_TOKEN="$APP_SECRET"
   while true; do
     npm run start >> daemon.log 2>&1
     EXIT_CODE=$?

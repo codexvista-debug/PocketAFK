@@ -454,6 +454,7 @@ export default function Dashboard() {
     daemonUrl,
     authToken,
     saveSettings,
+    reconnect: reconnectDaemon,
     startBot,
     stopBot,
     restartBot,
@@ -815,7 +816,8 @@ export default function Dashboard() {
           window.history.replaceState({}, document.title, window.location.pathname);
           return;
         }
-        saveSettings(queryTunnel, authToken);
+        const effectiveToken = (secretCode || authToken || '').trim();
+        saveSettings(queryTunnel, effectiveToken);
         setAutoSynced(true);
         window.history.replaceState({}, document.title, window.location.pathname);
         return;
@@ -828,11 +830,14 @@ export default function Dashboard() {
         if (res.ok && isMounted) {
           const data = await res.json();
           const targetUrl = (data?.url || data?.tunnel_url || '').trim();
+          const targetToken = (data?.token || secretCode || authToken || '').trim();
           if (targetUrl && targetUrl.startsWith('wss://')) {
-            if (targetUrl !== daemonUrl) {
+            if (targetUrl !== daemonUrl || (targetToken && targetToken !== authToken)) {
               console.log(`[PocketAFK] Auto-syncing discovered daemon tunnel for @${currentUser}:`, targetUrl);
-              saveSettings(targetUrl, authToken);
+              saveSettings(targetUrl, targetToken);
               setAutoSynced(true);
+            } else if (socketStatus === 'DISCONNECTED') {
+              reconnectDaemon();
             }
           } else if (!targetUrl && daemonUrl) {
             console.log(`[PocketAFK] No registered daemon tunnel for @${currentUser}. Clearing stale tunnel settings.`);
@@ -855,7 +860,7 @@ export default function Dashboard() {
       isMounted = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [currentUser, authToken, daemonUrl, socketStatus, saveSettings]);
+  }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings, reconnectDaemon]);
 
   // Load Notes & Pinned state
   useEffect(() => {

@@ -99,15 +99,18 @@ wss.on('connection', (ws: WebSocket, req) => {
           return;
         }
 
-        // 2. Verify auth token if configured
-        if (AUTH_TOKEN && clientToken !== AUTH_TOKEN) {
-          console.warn(chalk.red(`[Security Alert] Blocked connection with invalid token for user @${clientUser || 'unknown'}`));
-          ws.send(JSON.stringify({
-            type: 'AUTH_RESULT',
-            payload: { success: false, message: 'Invalid daemon authentication token' }
-          }));
-          ws.close();
-          return;
+        // 2. Verify auth token if configured (owner is already verified above)
+        const isOwner = Boolean(DAEMON_OWNER && clientUser && clientUser === DAEMON_OWNER.toLowerCase());
+        if (AUTH_TOKEN && !isOwner) {
+          if (clientToken !== AUTH_TOKEN) {
+            console.warn(chalk.red(`[Security Alert] Blocked connection with invalid token for user @${clientUser || 'unknown'}`));
+            ws.send(JSON.stringify({
+              type: 'AUTH_RESULT',
+              payload: { success: false, message: 'Invalid daemon authentication token' }
+            }));
+            ws.close();
+            return;
+          }
         }
 
         authenticatedClients.add(ws);
