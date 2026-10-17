@@ -834,6 +834,9 @@ export default function Dashboard() {
               saveSettings(targetUrl, authToken);
               setAutoSynced(true);
             }
+          } else if (!targetUrl && daemonUrl) {
+            console.log(`[PocketAFK] No registered daemon tunnel for @${currentUser}. Clearing stale tunnel settings.`);
+            saveSettings('', '');
           }
         }
       } catch (err) {

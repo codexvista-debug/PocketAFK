@@ -89,7 +89,7 @@ export interface ContainerWindowPayload {
 
 // Client to Daemon Messages
 export type ClientMessage =
-  | { type: 'AUTH'; payload: { token: string } }
+  | { type: 'AUTH'; payload: { token: string; username?: string } }
   | { type: 'START_BOT'; payload: BotConfig }
   | { type: 'STOP_BOT'; payload: { botId: string; accountId?: string; username?: string } }
   | { type: 'RESTART_BOT'; payload: { botId: string } }

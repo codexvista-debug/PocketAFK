@@ -155,7 +155,10 @@ export function useDaemonSocket(
         }
         ws.send(JSON.stringify({
           type: 'AUTH',
-          payload: { token: authToken }
+          payload: { 
+            token: authToken,
+            username: currentUser || 'guest'
+          }
         }));
       };
 
@@ -167,7 +170,14 @@ export function useDaemonSocket(
               if (data.payload.success) {
                 setStatus('AUTHENTICATED');
               } else {
+                console.warn('[Daemon Auth Rejected]', data.payload?.message);
                 setStatus('AUTH_ERROR');
+                if (socketRef.current) {
+                  try {
+                    socketRef.current.close();
+                  } catch (e) {}
+                  socketRef.current = null;
+                }
               }
               break;
 
@@ -272,7 +282,11 @@ export function useDaemonSocket(
         if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+            const storedUrl = typeof window !== 'undefined' ? localStorage.getItem(`pocketafk_daemon_url_${u}`) : '';
+            if (storedUrl && storedUrl === daemonUrl) {
+              connect();
+            }
           }, 2500);
         }
       };
@@ -286,34 +300,46 @@ export function useDaemonSocket(
     } catch (e) {
       setStatus('DISCONNECTED');
     }
-  }, [daemonUrl, authToken, enabled]);
+  }, [daemonUrl, authToken, enabled, currentUser]);
 
   useEffect(() => {
     if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
       connect();
-    } else if (!enabled && socketRef.current) {
-      try {
-        socketRef.current.close();
-      } catch (e) {}
-      socketRef.current = null;
+    } else {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (socketRef.current) {
+        try {
+          socketRef.current.close();
+        } catch (e) {}
+        socketRef.current = null;
+      }
       setStatus('DISCONNECTED');
     }
     return () => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (socketRef.current) {
-        socketRef.current.close();
+        try {
+          socketRef.current.close();
+        } catch (e) {}
+        socketRef.current = null;
       }
     };
   }, [connect, daemonUrl, enabled]);
 
   const sendJson = useCallback((msg: any) => {
-    if (!enabled) return false;
+    if (!enabled || !daemonUrl || status !== 'AUTHENTICATED') return false;
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(msg));
       return true;
     }
     return false;
-  }, [enabled]);
+  }, [enabled, daemonUrl, status]);
 
   const startBot = useCallback((config: any) => {
     if (config?.id) {

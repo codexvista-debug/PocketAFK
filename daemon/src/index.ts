@@ -31,13 +31,15 @@ process.on('unhandledRejection', (reason: any) => {
 });
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
-const AUTH_TOKEN = process.env.DAEMON_AUTH_TOKEN || '';
+const AUTH_TOKEN = (process.env.DAEMON_AUTH_TOKEN || '').trim();
+const DAEMON_OWNER = (process.env.POCKETAFK_OWNER || '').trim();
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ 
     service: 'PocketAFK Daemon', 
     status: 'running', 
+    owner: DAEMON_OWNER || 'unrestricted',
     uptime: Math.round(process.uptime()),
     timestamp: Date.now() 
   }));
@@ -61,8 +63,8 @@ wss.on('connection', (ws: WebSocket, req) => {
   const ip = req.socket.remoteAddress;
   console.log(chalk.gray(`[Connection] New WebSocket connected from ${ip}`));
 
-  // If no auth token is configured in .env, allow all connections
-  if (!AUTH_TOKEN) {
+  // If no auth token and no owner are configured, allow connection
+  if (!AUTH_TOKEN && !DAEMON_OWNER) {
     authenticatedClients.add(ws);
     ws.send(JSON.stringify({
       type: 'AUTH_RESULT',
@@ -83,23 +85,40 @@ wss.on('connection', (ws: WebSocket, req) => {
 
       // Handle Authentication
       if (parsed.type === 'AUTH') {
-        if (!AUTH_TOKEN || parsed.payload.token === AUTH_TOKEN) {
-          authenticatedClients.add(ws);
+        const clientUser = (parsed.payload.username || '').trim().toLowerCase();
+        const clientToken = (parsed.payload.token || '').trim();
+
+        // 1. Verify user identity against daemon owner
+        if (DAEMON_OWNER && (!clientUser || clientUser !== DAEMON_OWNER.toLowerCase())) {
+          console.warn(chalk.red(`[Security Alert] Blocked connection from user @${clientUser || 'anonymous'}: Daemon is dedicated to @${DAEMON_OWNER}`));
           ws.send(JSON.stringify({
             type: 'AUTH_RESULT',
-            payload: { success: true, message: 'Authentication successful' }
+            payload: { success: false, message: `Access Denied: This phone daemon belongs exclusively to @${DAEMON_OWNER}` }
           }));
-          console.log(chalk.green(`[Auth] Client authenticated successfully`));
-          
-          // Sync current states
-          botManager.handleClientMessage({ type: 'REQUEST_SYNC' });
-        } else {
-          ws.send(JSON.stringify({
-            type: 'AUTH_RESULT',
-            payload: { success: false, message: 'Invalid authentication token' }
-          }));
-          console.log(chalk.red(`[Auth] Client failed authentication: invalid token`));
+          ws.close();
+          return;
         }
+
+        // 2. Verify auth token if configured
+        if (AUTH_TOKEN && clientToken !== AUTH_TOKEN) {
+          console.warn(chalk.red(`[Security Alert] Blocked connection with invalid token for user @${clientUser || 'unknown'}`));
+          ws.send(JSON.stringify({
+            type: 'AUTH_RESULT',
+            payload: { success: false, message: 'Invalid daemon authentication token' }
+          }));
+          ws.close();
+          return;
+        }
+
+        authenticatedClients.add(ws);
+        ws.send(JSON.stringify({
+          type: 'AUTH_RESULT',
+          payload: { success: true, message: 'Authentication successful' }
+        }));
+        console.log(chalk.green(`[Auth] Client authenticated successfully for @${clientUser || DAEMON_OWNER || 'guest'}`));
+        
+        // Sync current states
+        botManager.handleClientMessage({ type: 'REQUEST_SYNC' });
         return;
       }
 
