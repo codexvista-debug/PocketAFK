@@ -110,7 +110,7 @@ export default function ChiefAdminPage() {
   const [userSearch, setUserSearch] = useState<string>('');
   const [userRankFilter, setUserRankFilter] = useState<string>('all');
   const [accountSearch, setAccountSearch] = useState<string>('');
-  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline' | 'legit' | 'suspicious'>('all');
+  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline' | 'legit' | 'suspicious'>('online');
 
   // Modal States
   const [resetPasswordUser, setResetPasswordUser] = useState<UserItem | null>(null);
