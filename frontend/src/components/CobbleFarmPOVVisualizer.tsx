@@ -1,26 +1,23 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { 
-  Eye, 
-  Activity, 
-  Radio, 
-  Sparkles, 
+  Compass, 
+  Users, 
+  Skull, 
+  Box, 
+  ZoomIn, 
+  ZoomOut, 
   Play, 
   Pause, 
   Maximize2, 
   Minimize2, 
-  Flame, 
-  Droplets, 
-  Box, 
-  CheckCircle2, 
-  AlertTriangle,
-  Compass,
-  Cpu,
+  Sparkles,
   Layers,
-  Zap
+  Zap,
+  RotateCcw
 } from 'lucide-react';
-import { Telemetry, FarmMachineState } from '@/types';
+import { Telemetry, RadarEntity } from '@/types';
 
 interface CobbleFarmPOVVisualizerProps {
   telemetry: Telemetry | null;
@@ -29,7 +26,20 @@ interface CobbleFarmPOVVisualizerProps {
   serverName?: string;
 }
 
-type ViewMode = 'iso' | 'first_person' | 'radar';
+// 28 Cobblestone Generator Machines Layout in front of bot
+// 2 rows of 14 machines = 28 total machines
+const TOTAL_MACHINES = 28;
+const MACHINES_PER_ROW = 14;
+
+interface FarmMachineConfig {
+  id: number;
+  row: number;
+  col: number;
+  relX: number; // offset relative to bot
+  relZ: number;
+  phase: number;
+  status: 'running' | 'idle' | 'jammed';
+}
 
 export function CobbleFarmPOVVisualizer({
   telemetry,
@@ -38,1011 +48,634 @@ export function CobbleFarmPOVVisualizer({
   serverName = 'DonutSMP'
 }: CobbleFarmPOVVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('iso');
+  const [zoom, setZoom] = useState<number>(1.2);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1.0);
+  const [showPlayers, setShowPlayers] = useState<boolean>(true);
+  const [showMobs, setShowMobs] = useState<boolean>(true);
+  const [showMachines, setShowMachines] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [particlesEnabled, setParticlesEnabled] = useState<boolean>(true);
-  const [simulatedBlocks, setSimulatedBlocks] = useState<number>(1420);
+  const [simulatedBlocks, setSimulatedBlocks] = useState<number>(14820);
+  const avatarCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
-  // Machine override/test states
-  const [machineStates, setMachineStates] = useState<Record<string, { status: 'running' | 'idle' | 'jammed'; blocks: number }>>({
-    north: { status: 'running', blocks: 355 },
-    east: { status: 'running', blocks: 362 },
-    south: { status: 'running', blocks: 348 },
-    west: { status: 'running', blocks: 355 },
-  });
+  // Generate 28 machines positioned in front of the bot
+  const machines = useMemo<FarmMachineConfig[]>(() => {
+    const list: FarmMachineConfig[] = [];
+    const spacingX = 22; // horizontal block spacing
+    const spacingZ = 28; // row spacing in front of bot
+    const startX = -((MACHINES_PER_ROW - 1) * spacingX) / 2;
 
-  // Keep simulated block count ticking if online or playing
+    for (let i = 0; i < TOTAL_MACHINES; i++) {
+      const row = Math.floor(i / MACHINES_PER_ROW); // 0 or 1
+      const col = i % MACHINES_PER_ROW; // 0 to 13
+      list.push({
+        id: i + 1,
+        row,
+        col,
+        relX: startX + col * spacingX,
+        relZ: -(40 + row * spacingZ), // in front of bot (negative Z is North in Minecraft)
+        phase: (i % 7) * 0.14, // rhythmic wave pulses across rows
+        status: 'running',
+      });
+    }
+    return list;
+  }, []);
+
+  // Increment simulated block counter when running
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
-      setSimulatedBlocks(prev => prev + 1);
-      setMachineStates(prev => {
-        const dirs = ['north', 'east', 'south', 'west'] as const;
-        const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
-        return {
-          ...prev,
-          [randomDir]: {
-            ...prev[randomDir],
-            blocks: prev[randomDir].blocks + 1
-          }
-        };
-      });
-    }, Math.max(200, Math.floor(1200 / speedMultiplier)));
-
+      // 28 machines running generates blocks rapidly
+      setSimulatedBlocks(prev => prev + Math.floor(Math.random() * 3) + 2);
+    }, 600);
     return () => clearInterval(interval);
-  }, [isPlaying, speedMultiplier]);
+  }, [isPlaying]);
 
-  // Canvas render animation loop
+  // Main Canvas Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationFrameId: number;
+    let animId: number;
     let startTime = performance.now();
 
-    // Particle pool for steam, sparks, and item drops
+    // Particle pool for steam puffs when cobblestone forms
     const particles: Array<{
       x: number;
       y: number;
       vx: number;
       vy: number;
-      size: number;
+      radius: number;
       alpha: number;
-      color: string;
       life: number;
       maxLife: number;
     }> = [];
 
-    const spawnParticles = (x: number, y: number, type: 'steam' | 'spark' | 'drop', count = 2) => {
-      if (!particlesEnabled) return;
-      for (let i = 0; i < count; i++) {
-        if (particles.length > 120) particles.shift();
-        if (type === 'steam') {
-          particles.push({
-            x: x + (Math.random() - 0.5) * 12,
-            y: y + (Math.random() - 0.5) * 6,
-            vx: (Math.random() - 0.5) * 0.8,
-            vy: -0.8 - Math.random() * 1.2,
-            size: 3 + Math.random() * 4,
-            alpha: 0.65,
-            color: 'rgba(235, 240, 255,',
-            life: 0,
-            maxLife: 35 + Math.random() * 20,
-          });
-        } else if (type === 'spark') {
-          particles.push({
-            x: x + (Math.random() - 0.5) * 8,
-            y: y + (Math.random() - 0.5) * 4,
-            vx: (Math.random() - 0.5) * 1.5,
-            vy: -1.2 - Math.random() * 1.5,
-            size: 2 + Math.random() * 2,
-            alpha: 0.9,
-            color: Math.random() > 0.4 ? 'rgba(255, 140, 0,' : 'rgba(255, 220, 50,',
-            life: 0,
-            maxLife: 25 + Math.random() * 15,
-          });
-        } else if (type === 'drop') {
-          particles.push({
-            x: x + (Math.random() - 0.5) * 6,
-            y: y,
-            vx: (Math.random() - 0.5) * 0.4,
-            vy: 0.8 + Math.random() * 0.8,
-            size: 3,
-            alpha: 0.85,
-            color: 'rgba(140, 140, 140,',
-            life: 0,
-            maxLife: 30,
-          });
-        }
-      }
-    };
-
     const render = (now: number) => {
       const elapsed = (now - startTime) / 1000;
-      const clockTime = isPlaying ? elapsed * speedMultiplier : 0;
+      const t = isPlaying ? elapsed : 0;
 
-      // Handle retina resolution
+      // Handle High-DPI screens
       const dpr = window.devicePixelRatio || 1;
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
       }
+
       ctx.save();
       ctx.scale(dpr, dpr);
 
-      // Clear with Minecraft stone / cavern dark theme
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, width, height);
+      // --- 1. XAERO'S MINIMAP BACKGROUND (Dark Tactical Overworld Grid) ---
+      ctx.fillStyle = '#1c2430'; // Classic Xaero's map slate background
+      ctx.fillRect(0, 0, w, h);
 
-      // Coordinates and yaw from telemetry
+      // Center of minimap viewport
+      const cx = w / 2;
+      const cy = h / 2 + 70; // Offset bot slightly lower so 28 machines in front take center stage
+
+      // Bot Coordinates & Yaw from telemetry
       const botYaw = telemetry?.position?.yaw ?? -90;
-      const botPitch = telemetry?.position?.pitch ?? 0;
-      const botX = telemetry?.position?.x ?? -88475.6;
-      const botY = telemetry?.position?.y ?? -52;
-      const botZ = telemetry?.position?.z ?? -178317.7;
+      const posX = telemetry?.position?.x ?? -88475.6;
+      const posY = telemetry?.position?.y ?? -52;
+      const posZ = telemetry?.position?.z ?? -178317.7;
 
-      if (viewMode === 'iso') {
-        renderIsometricFarm(ctx, width, height, clockTime, botYaw, spawnParticles);
-      } else if (viewMode === 'first_person') {
-        renderFirstPersonPOV(ctx, width, height, clockTime, botYaw, botPitch, spawnParticles);
-      } else if (viewMode === 'radar') {
-        renderTacticalRadar(ctx, width, height, clockTime, botYaw);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+
+      // --- 2. MINECRAFT TERRAIN / PLATFORM GRID ---
+      // Draw stone brick floor surrounding the bot and machines
+      const gridSpan = 260;
+      ctx.fillStyle = '#2b3545';
+      ctx.fillRect(-gridSpan, -gridSpan, gridSpan * 2, gridSpan * 2);
+
+      // Voxel grid lines (1 block = 16px scaled)
+      ctx.strokeStyle = 'rgba(71, 85, 105, 0.45)';
+      ctx.lineWidth = 1;
+      const blockSize = 16;
+      for (let x = -gridSpan; x <= gridSpan; x += blockSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, -gridSpan);
+        ctx.lineTo(x, gridSpan);
+        ctx.stroke();
+      }
+      for (let z = -gridSpan; z <= gridSpan; z += blockSize) {
+        ctx.beginPath();
+        ctx.moveTo(-gridSpan, z);
+        ctx.lineTo(gridSpan, z);
+        ctx.stroke();
       }
 
-      // Update and draw floating particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life++;
-        const currentAlpha = p.alpha * (1 - p.life / p.maxLife);
+      // Redstone clock line running behind the 28 machines
+      ctx.save();
+      const pulseGlow = Math.sin(t * 7) > 0;
+      ctx.strokeStyle = pulseGlow ? '#ef4444' : '#7f1d1d';
+      ctx.shadowBlur = pulseGlow ? 8 : 0;
+      ctx.shadowColor = '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-160, -100);
+      ctx.lineTo(160, -100);
+      ctx.stroke();
+      ctx.restore();
 
-        ctx.fillStyle = `${p.color} ${Math.max(0, currentAlpha)})`;
+      // --- 3. RENDER THE 28 COBBLESTONE GENERATOR MACHINES ---
+      if (showMachines) {
+        machines.forEach((m) => {
+          // Piston cycle: 0 -> 1 loop with phase offset
+          const cycle = (t * 1.1 + m.phase) % 1.0;
+          // Piston extends from 0.0 to 0.4, retracts 0.4 to 0.7, recharges 0.7 to 1.0
+          const isExtending = cycle < 0.4;
+          const pistonOffset = isExtending ? (cycle / 0.4) * 6 : Math.max(0, (1 - (cycle - 0.4) / 0.3) * 6);
+
+          const mx = m.relX;
+          const mz = m.relZ;
+
+          // Water channel (left block)
+          ctx.fillStyle = '#0284c7';
+          ctx.fillRect(mx - 8, mz - 6, 5, 12);
+
+          // Lava channel (right block)
+          ctx.fillStyle = '#ea580c';
+          ctx.fillRect(mx + 3, mz - 6, 5, 12);
+
+          // Piston Base Block (top)
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(mx - 4, mz - 12, 8, 6);
+
+          // Piston Head (Oak wood extending forward)
+          ctx.fillStyle = '#b45309';
+          ctx.fillRect(mx - 4, mz - 6 + pistonOffset, 8, 3);
+          ctx.strokeStyle = '#78350f';
+          ctx.lineWidth = 0.8;
+          ctx.strokeRect(mx - 4, mz - 6 + pistonOffset, 8, 3);
+
+          // Newly formed Cobblestone Block being pushed forward
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillRect(mx - 3.5, mz - 2 + pistonOffset * 0.7, 7, 7);
+          ctx.strokeStyle = '#334155';
+          ctx.strokeRect(mx - 3.5, mz - 2 + pistonOffset * 0.7, 7, 7);
+
+          // Hopper collection block (front)
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(mx - 4, mz + 7, 8, 6);
+
+          // Active Steam Particles
+          if (isExtending && cycle > 0.1 && cycle < 0.25 && Math.random() > 0.7) {
+            particles.push({
+              x: mx + (Math.random() - 0.5) * 4,
+              y: mz + 2,
+              vx: (Math.random() - 0.5) * 0.4,
+              vy: -0.6 - Math.random() * 0.5,
+              radius: 1.5 + Math.random() * 2,
+              alpha: 0.75,
+              life: 0,
+              maxLife: 20 + Math.random() * 10
+            });
+          }
+
+          // Small machine number label
+          ctx.font = '6px monospace';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.textAlign = 'center';
+          ctx.fillText(`M${m.id}`, mx, mz - 14);
+        });
+
+        // Farm boundary banner indicator
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.roundRect(-165, -95, 330, 85, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = '#34d399';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡ 28 COBBLESTONE GENERATOR MACHINES (ONLINE & PUSHING) ⚡', 0, -82);
+      }
+
+      // --- 4. RENDER NEARBY MOBS (HOSTILE & PASSIVE) ---
+      if (showMobs) {
+        // Collect entities from telemetry or fallback to live demonstration entities
+        const entities: RadarEntity[] = telemetry?.entities && telemetry.entities.length > 0
+          ? telemetry.entities
+          : [
+              { id: 101, type: 'hostile', name: 'Zombie', x: posX + 14, y: posY, z: posZ - 22, distance: 14 },
+              { id: 102, type: 'hostile', name: 'Skeleton', x: posX - 18, y: posY, z: posZ - 35, distance: 20 },
+              { id: 103, type: 'passive', name: 'Cow', x: posX + 28, y: posY, z: posZ + 15, distance: 28 },
+              { id: 104, type: 'passive', name: 'Sheep', x: posX - 24, y: posY, z: posZ + 20, distance: 24 },
+            ];
+
+        entities.forEach((ent) => {
+          if (ent.type === 'player') return; // rendered in player step
+
+          // Offset relative to bot position
+          const relEntX = (ent.x - posX) * 5;
+          const relEntZ = (ent.z - posZ) * 5;
+
+          if (ent.type === 'hostile') {
+            // Classic Xaero's Red Entity Dot with Danger Ring
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(relEntX, relEntZ, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pulsing warning ring
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(relEntX, relEntZ, 7 + Math.sin(t * 6) * 2, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Mob Name Tag
+            ctx.font = 'bold 8px monospace';
+            ctx.fillStyle = '#fca5a5';
+            ctx.textAlign = 'center';
+            ctx.fillText(`☠ ${ent.name}`, relEntX, relEntZ - 8);
+          } else {
+            // Passive Mob (Yellow Dot)
+            ctx.fillStyle = '#eab308';
+            ctx.beginPath();
+            ctx.arc(relEntX, relEntZ, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.font = '7px monospace';
+            ctx.fillStyle = '#fef08a';
+            ctx.textAlign = 'center';
+            ctx.fillText(ent.name, relEntX, relEntZ - 6);
+          }
+        });
+      }
+
+      // --- 5. RENDER PLAYERS WITH SKIN HEADS & USERNAMES ---
+      if (showPlayers) {
+        // Collect players from telemetry or provide nearby player roster
+        const playerEntities: RadarEntity[] = (telemetry?.entities || []).filter(e => e.type === 'player');
+        if (playerEntities.length === 0) {
+          // Display current user & clanmates
+          playerEntities.push(
+            { id: 1, type: 'player', name: accountUsername, username: accountUsername, x: posX, y: posY, z: posZ, yaw: botYaw, distance: 0 },
+            { id: 2, type: 'player', name: 'Chief', username: 'Chief', x: posX + 6, y: posY, z: posZ - 8, yaw: -45, distance: 6 },
+            { id: 3, type: 'player', name: 'xossil', username: 'xossil', x: posX - 12, y: posY, z: posZ - 10, yaw: 120, distance: 12 },
+          );
+        } else {
+          // Always ensure the bot's own avatar is present at center
+          if (!playerEntities.find(p => p.username?.toLowerCase() === accountUsername.toLowerCase())) {
+            playerEntities.unshift({
+              id: 999,
+              type: 'player',
+              name: accountUsername,
+              username: accountUsername,
+              x: posX,
+              y: posY,
+              z: posZ,
+              yaw: botYaw,
+              distance: 0
+            });
+          }
+        }
+
+        playerEntities.forEach((p) => {
+          const isMe = p.username?.toLowerCase() === accountUsername.toLowerCase();
+          const relPX = isMe ? 0 : (p.x - posX) * 6;
+          const relPZ = isMe ? 0 : (p.z - posZ) * 6;
+
+          // Draw Player 8x8 Pixel Skin Head
+          drawPlayerSkinHead(ctx, relPX, relPZ, p.username || 'Player', isMe);
+
+          // Facing Pointer Arrow (Xaero's minimap direction pointer)
+          const pYaw = isMe ? botYaw : (p.yaw ?? 0);
+          const pRad = ((pYaw + 90) * Math.PI) / 180;
+          ctx.strokeStyle = isMe ? '#38bdf8' : '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(relPX, relPZ);
+          ctx.lineTo(relPX + Math.cos(pRad) * 12, relPZ + Math.sin(pRad) * 12);
+          ctx.stroke();
+
+          // Player Username Text Tag with Minecraft Drop Shadow
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          const uText = isMe ? `★ @${p.username} (YOU)` : `@${p.username}`;
+
+          // Shadow
+          ctx.fillStyle = '#000000';
+          ctx.fillText(uText, relPX + 1, relPZ + 16);
+          // Foreground
+          ctx.fillStyle = isMe ? '#38bdf8' : '#f8fafc';
+          ctx.fillText(uText, relPX, relPZ + 15);
+        });
+      }
+
+      // --- 6. STEAM / PARTICLE SYSTEM ---
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const pt = particles[i];
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.life++;
+        const alpha = pt.alpha * (1 - pt.life / pt.maxLife);
+
+        ctx.fillStyle = `rgba(241, 245, 249, ${Math.max(0, alpha)})`;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        if (p.life >= p.maxLife) {
+        if (pt.life >= pt.maxLife) {
           particles.splice(i, 1);
         }
       }
 
+      ctx.restore(); // Exit world transform
+
+      // --- 7. XAERO'S MINIMAP METALLIC BORDER & COMPASS (N, E, S, W) ---
+      renderXaerosMinimapFrame(ctx, w, h);
+
+      // --- 8. MINECRAFT COORDINATES & STATUS HUD AT BOTTOM ---
+      renderXaerosCoordinatesBar(ctx, w, h, posX, posY, posZ, botYaw);
+
       ctx.restore();
-      animationFrameId = requestAnimationFrame(render);
+      animId = requestAnimationFrame(render);
     };
 
-    animationFrameId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [viewMode, isPlaying, speedMultiplier, particlesEnabled, machineStates, telemetry]);
+    animId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animId);
+  }, [zoom, isPlaying, showPlayers, showMobs, showMachines, machines, telemetry, accountUsername]);
 
-  // --- RENDERER 1: 3D ISOMETRIC COBBLESTONE FARM ---
-  const renderIsometricFarm = (
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    t: number,
-    yaw: number,
-    spawnParticle: (x: number, y: number, type: 'steam' | 'spark' | 'drop', c?: number) => void
-  ) => {
-    const cx = w / 2;
-    const cy = h / 2 + 20;
-
-    // Subtle isometric floor grid
-    ctx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
-    ctx.lineWidth = 1;
-    for (let x = -6; x <= 6; x++) {
-      ctx.beginPath();
-      const p1 = toIso(x * 32, -6 * 32, cx, cy);
-      const p2 = toIso(x * 32, 6 * 32, cx, cy);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-    for (let y = -6; y <= 6; y++) {
-      ctx.beginPath();
-      const p1 = toIso(-6 * 32, y * 32, cx, cy);
-      const p2 = toIso(6 * 32, y * 32, cx, cy);
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    // Redstone wiring lines connecting the 4 machines
-    ctx.save();
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = '#ef4444';
-    ctx.strokeStyle = '#dc2626';
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([4, 4]);
-    ctx.lineDashOffset = -t * 12;
-
-    ctx.beginPath();
-    const northPt = toIso(0, -95, cx, cy);
-    const eastPt = toIso(95, 0, cx, cy);
-    const southPt = toIso(0, 95, cx, cy);
-    const westPt = toIso(-95, 0, cx, cy);
-    ctx.moveTo(northPt.x, northPt.y);
-    ctx.lineTo(eastPt.x, eastPt.y);
-    ctx.lineTo(southPt.x, southPt.y);
-    ctx.lineTo(westPt.x, westPt.y);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-
-    // 4 Cobblestone Generator Machines around the bot
-    const machines = [
-      { id: 'north', name: 'Machine #1 [North]', dx: 0, dy: -90, dir: 'N', phase: 0 },
-      { id: 'east', name: 'Machine #2 [East]', dx: 90, dy: 0, dir: 'E', phase: 0.25 },
-      { id: 'south', name: 'Machine #3 [South]', dx: 0, dy: 90, dir: 'S', phase: 0.5 },
-      { id: 'west', name: 'Machine #4 [West]', dx: -90, dy: 0, dir: 'W', phase: 0.75 },
-    ];
-
-    // Render machines in sorted depth order
-    machines.forEach((m) => {
-      const state = machineStates[m.id] || { status: 'running', blocks: 350 };
-      const isRunning = state.status === 'running';
-
-      // Piston stroke animation cycle (0 -> 1)
-      const cycle = isRunning ? (t * 0.9 + m.phase) % 1.0 : 0;
-      // 0.0 - 0.35: Extension (push cobblestone forward)
-      // 0.35 - 0.7: Retraction
-      // 0.7 - 1.0: Dwell / generator cool-down
-      let extension = 0;
-      if (cycle < 0.35) {
-        extension = cycle / 0.35; // Extending
-      } else if (cycle < 0.7) {
-        extension = 1.0 - (cycle - 0.35) / 0.35; // Retracting
-      } else {
-        extension = 0;
-      }
-
-      const mIso = toIso(m.dx, m.dy, cx, cy);
-
-      // Piston Base Block
-      drawIsoVoxel(ctx, m.dx, m.dy, 0, 24, 24, 20, cx, cy, '#475569', '#334155', '#1e293b');
-
-      // Piston Head & Shaft extending towards the center
-      const pushVec = { x: -Math.sign(m.dx) * extension * 16, y: -Math.sign(m.dy) * extension * 16 };
-      drawIsoVoxel(
-        ctx,
-        m.dx + pushVec.x,
-        m.dy + pushVec.y,
-        4,
-        18,
-        18,
-        10,
-        cx, cy,
-        '#b45309', // Oak wood head
-        '#92400e',
-        '#78350f'
-      );
-
-      // Water & Lava source blocks on the sides of the generator
-      const sideOffset = m.dx === 0 ? { x: 28, y: 0 } : { x: 0, y: 28 };
-
-      // Water block (flowing blue)
-      drawIsoVoxel(
-        ctx,
-        m.dx + sideOffset.x,
-        m.dy + sideOffset.y,
-        0,
-        18, 18, 14,
-        cx, cy,
-        'rgba(14, 165, 233, 0.85)',
-        'rgba(2, 132, 199, 0.85)',
-        'rgba(3, 105, 161, 0.85)'
-      );
-
-      // Lava block (molten orange)
-      drawIsoVoxel(
-        ctx,
-        m.dx - sideOffset.x,
-        m.dy - sideOffset.y,
-        0,
-        18, 18, 14,
-        cx, cy,
-        '#ea580c',
-        '#c2410c',
-        '#9a3412'
-      );
-
-      // Cobblestone forming block
-      const cobblePos = {
-        x: m.dx - Math.sign(m.dx || 0) * 22,
-        y: m.dy - Math.sign(m.dy || 0) * 22,
-      };
-      drawIsoCobbleBlock(ctx, cobblePos.x, cobblePos.y, 0, 20, cx, cy);
-
-      // Hopper below collecting line
-      drawIsoVoxel(
-        ctx,
-        cobblePos.x,
-        cobblePos.y,
-        -16,
-        16, 16, 12,
-        cx, cy,
-        '#374151',
-        '#1f2937',
-        '#111827'
-      );
-
-      // Particles during extension
-      if (isRunning && cycle > 0.05 && cycle < 0.3) {
-        spawnParticle(mIso.x, mIso.y - 12, 'steam', 1);
-        if (Math.random() > 0.6) spawnParticle(mIso.x, mIso.y - 8, 'spark', 1);
-        if (Math.random() > 0.7) spawnParticle(mIso.x, mIso.y + 6, 'drop', 1);
-      }
-
-      // Machine Status HUD Tag
-      ctx.save();
-      ctx.font = 'bold 10px monospace';
-      const tagText = `${m.name}: ${isRunning ? (extension > 0.1 ? '⚡ PUSH' : '🟢 RUN') : '🔴 JAM'}`;
-      const tagMetrics = ctx.measureText(tagText);
-      const tagX = mIso.x - tagMetrics.width / 2;
-      const tagY = mIso.y - 36;
-
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.strokeStyle = isRunning ? 'rgba(52, 211, 153, 0.4)' : 'rgba(239, 68, 68, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(tagX - 6, tagY - 11, tagMetrics.width + 12, 17, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = isRunning ? '#34d399' : '#f87171';
-      ctx.fillText(tagText, tagX, tagY + 2);
-      ctx.restore();
-    });
-
-    // Central Bot in Isometric View
-    renderIsometricBot(ctx, cx, cy, t, yaw);
-  };
-
-  // --- HELPER: Isometric 3D Projection Math ---
-  const toIso = (x: number, y: number, cx: number, cy: number) => {
-    return {
-      x: cx + (x - y) * 1.0,
-      y: cy + (x + y) * 0.55,
-    };
-  };
-
-  const drawIsoVoxel = (
+  // Helper: Draw authentic pixelated Minecraft player skin head
+  const drawPlayerSkinHead = (
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    z: number,
-    w: number,
-    l: number,
-    h: number,
-    cx: number,
-    cy: number,
-    topCol: string,
-    leftCol: string,
-    rightCol: string
+    username: string,
+    isSelf: boolean
   ) => {
-    const hw = w / 2;
-    const hl = l / 2;
-
-    // Top Face
-    const p1 = toIso(x - hw, y - hl, cx, cy);
-    const p2 = toIso(x + hw, y - hl, cx, cy);
-    const p3 = toIso(x + hw, y + hl, cx, cy);
-    const p4 = toIso(x - hw, y + hl, cx, cy);
-
-    const zOffset = z * 1.1;
-
-    ctx.fillStyle = topCol;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y - zOffset);
-    ctx.lineTo(p2.x, p2.y - zOffset);
-    ctx.lineTo(p3.x, p3.y - zOffset);
-    ctx.lineTo(p4.x, p4.y - zOffset);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-    ctx.stroke();
-
-    // Left Face
-    ctx.fillStyle = leftCol;
-    ctx.beginPath();
-    ctx.moveTo(p4.x, p4.y - zOffset);
-    ctx.lineTo(p3.x, p3.y - zOffset);
-    ctx.lineTo(p3.x, p3.y - zOffset + h);
-    ctx.lineTo(p4.x, p4.y - zOffset + h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Right Face
-    ctx.fillStyle = rightCol;
-    ctx.beginPath();
-    ctx.moveTo(p3.x, p3.y - zOffset);
-    ctx.lineTo(p2.x, p2.y - zOffset);
-    ctx.lineTo(p2.x, p2.y - zOffset + h);
-    ctx.lineTo(p3.x, p3.y - zOffset + h);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  };
-
-  const drawIsoCobbleBlock = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    z: number,
-    size: number,
-    cx: number,
-    cy: number
-  ) => {
-    drawIsoVoxel(ctx, x, y, z, size, size, size, cx, cy, '#94a3b8', '#64748b', '#475569');
-    // Subtle cobblestone fleck texture
-    const center = toIso(x, y, cx, cy);
-    ctx.fillStyle = '#334155';
-    ctx.beginPath();
-    ctx.arc(center.x - 4, center.y - z - 2, 1.5, 0, Math.PI * 2);
-    ctx.arc(center.x + 3, center.y - z - 4, 1.5, 0, Math.PI * 2);
-    ctx.arc(center.x, center.y - z + 2, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  const renderIsometricBot = (
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    t: number,
-    yaw: number
-  ) => {
-    const swing = Math.sin(t * 8) * 6;
-
-    // Pedestal stand
-    drawIsoVoxel(ctx, 0, 0, 0, 24, 24, 6, cx, cy, '#334155', '#1e293b', '#0f172a');
-
-    // Bot Body (Teal shirt / Minecraft Steve)
-    drawIsoVoxel(ctx, 0, 0, 8, 12, 10, 16, cx, cy, '#0284c7', '#0369a1', '#075985');
-
-    // Bot Head (facing angle)
-    const headYawRad = (yaw * Math.PI) / 180;
-    const headOffsetX = Math.cos(headYawRad) * 3;
-    const headOffsetY = Math.sin(headYawRad) * 3;
-    drawIsoVoxel(ctx, headOffsetX, headOffsetY, 24, 10, 10, 10, cx, cy, '#fbcfe8', '#f472b6', '#db2777');
-
-    // Swinging Arm with Diamond Pickaxe
     ctx.save();
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 3;
-    const armPt = toIso(6, 4, cx, cy);
-    ctx.beginPath();
-    ctx.moveTo(armPt.x, armPt.y - 18);
-    ctx.lineTo(armPt.x + 8 + swing, armPt.y - 10 + swing * 0.5);
-    ctx.stroke();
+    const size = 16;
+    const hx = x - size / 2;
+    const hy = y - size / 2;
 
-    // Pickaxe head
-    ctx.fillStyle = '#06b6d4';
-    ctx.beginPath();
-    ctx.arc(armPt.x + 10 + swing, armPt.y - 10 + swing * 0.5, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    // Head base (Skin tone)
+    ctx.fillStyle = '#eac39d';
+    ctx.fillRect(hx, hy, size, size);
 
-    // Nametag
-    ctx.save();
-    ctx.font = 'bold 11px monospace';
-    const nameText = `@${accountUsername} (AFK)`;
-    const metrics = ctx.measureText(nameText);
-    const nx = cx - metrics.width / 2;
-    const ny = cy - 54;
+    // Hair (Dark Brown / Styled)
+    ctx.fillStyle = isSelf ? '#1e293b' : '#3f271a';
+    ctx.fillRect(hx, hy, size, 4);
+    ctx.fillRect(hx, hy, 3, 7);
+    ctx.fillRect(hx + size - 3, hy, 3, 7);
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(nx - 6, ny - 11, metrics.width + 12, 18, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText(nameText, nx, ny + 2);
-    ctx.restore();
-  };
-
-  // --- RENDERER 2: FIRST-PERSON IN-GAME CAMERA (POV) ---
-  const renderFirstPersonPOV = (
-    ctx: CanvasRenderingContext2D,
-    w: number,
-    h: number,
-    t: number,
-    yaw: number,
-    pitch: number,
-    spawnParticle: (x: number, y: number, type: 'steam' | 'spark' | 'drop', c?: number) => void
-  ) => {
-    const cx = w / 2;
-    const cy = h / 2;
-
-    // Cavern Wall ahead
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.5, '#1e293b');
-    grad.addColorStop(1, '#0f172a');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Stone ceiling & floor framing
-    ctx.fillStyle = '#334155';
-    ctx.fillRect(0, 0, w, 45);
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, h - 55, w, 55);
-
-    // Left Chamber: Flowing Water Stream
-    ctx.fillStyle = 'rgba(14, 165, 233, 0.65)';
-    ctx.fillRect(w * 0.1, 45, w * 0.22, h - 100);
-    // Water shimmer lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) {
-      const lineY = 60 + ((t * 80 + i * 50) % (h - 130));
-      ctx.beginPath();
-      ctx.moveTo(w * 0.12, lineY);
-      ctx.lineTo(w * 0.3, lineY + 6);
-      ctx.stroke();
-    }
-
-    // Right Chamber: Flowing Molten Lava Stream
-    ctx.fillStyle = 'rgba(234, 88, 12, 0.85)';
-    ctx.fillRect(w * 0.68, 45, w * 0.22, h - 100);
-    // Lava ember lines
-    ctx.strokeStyle = 'rgba(254, 240, 138, 0.5)';
-    for (let i = 0; i < 4; i++) {
-      const lineY = 60 + ((t * 50 + i * 60) % (h - 130));
-      ctx.beginPath();
-      ctx.moveTo(w * 0.7, lineY);
-      ctx.lineTo(w * 0.88, lineY + 8);
-      ctx.stroke();
-    }
-
-    // Piston Head & Arm pushing from top-rear towards center
-    const pistonCycle = (t * 0.9) % 1.0;
-    const pistonPush = pistonCycle < 0.4 ? (pistonCycle / 0.4) : (1.0 - (pistonCycle - 0.4) / 0.4);
-    const pistonY = 30 + pistonPush * 40;
-
-    ctx.fillStyle = '#92400e'; // Oak wooden head
-    ctx.fillRect(cx - 50, pistonY, 100, 24);
-    ctx.strokeStyle = '#78350f';
-    ctx.strokeRect(cx - 50, pistonY, 100, 24);
-
-    // Metal shaft
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(cx - 12, 0, 24, pistonY);
-
-    // Center Cobblestone Block right in front of the bot
-    const blockSize = Math.min(180, w * 0.32);
-    const blockX = cx - blockSize / 2;
-    const blockY = cy - blockSize / 2 + 10;
-
-    // Cobblestone Face
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(blockX, blockY, blockSize, blockSize);
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(blockX, blockY, blockSize, blockSize);
-
-    // Cobble texture pattern
-    ctx.fillStyle = '#475569';
-    for (let px = 0; px < 4; px++) {
-      for (let py = 0; py < 4; py++) {
-        if ((px + py) % 2 === 0) {
-          ctx.fillRect(blockX + px * (blockSize / 4) + 6, blockY + py * (blockSize / 4) + 6, blockSize / 4 - 12, blockSize / 4 - 12);
-        }
-      }
-    }
-
-    // Breaking crack animation cycle (0% -> 100%)
-    const crackCycle = (t * 2.5) % 1.0;
-    if (crackCycle > 0.1) {
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 30);
-      ctx.lineTo(cx - 20, cy);
-      ctx.lineTo(cx + 15, cy + 25);
-      if (crackCycle > 0.4) {
-        ctx.lineTo(cx - 30, cy + 35);
-        ctx.moveTo(cx, cy - 30);
-        ctx.lineTo(cx + 25, cy - 10);
-      }
-      ctx.stroke();
-    }
-
-    // Steam & sparks at block junction
-    if (Math.random() > 0.4) {
-      spawnParticle(blockX + 10, cy, 'steam', 1);
-      spawnParticle(blockX + blockSize - 10, cy, 'spark', 1);
-    }
-
-    // Crosshair (+)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 10, cy);
-    ctx.lineTo(cx + 10, cy);
-    ctx.moveTo(cx, cy - 10);
-    ctx.lineTo(cx, cy + 10);
-    ctx.stroke();
-
-    // First-Person Pickaxe Swing in bottom right
-    const swingAngle = Math.sin(t * 12) * 0.45;
-    ctx.save();
-    ctx.translate(w - 90, h - 30);
-    ctx.rotate(-0.8 + swingAngle);
-
-    // Pickaxe Handle (wood)
-    ctx.fillStyle = '#78350f';
-    ctx.fillRect(-6, -110, 12, 110);
-
-    // Pickaxe Head (Diamond)
-    ctx.fillStyle = '#06b6d4';
-    ctx.beginPath();
-    ctx.moveTo(-45, -110);
-    ctx.quadraticCurveTo(0, -135, 45, -110);
-    ctx.lineTo(35, -95);
-    ctx.quadraticCurveTo(0, -115, -35, -95);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.restore();
-
-    // In-game HUD: Top Compass Ribbon
-    ctx.save();
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fillRect(w * 0.25, 8, w * 0.5, 28);
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
-    ctx.strokeRect(w * 0.25, 8, w * 0.5, 28);
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'center';
-    const normYaw = Math.round(yaw);
-    ctx.fillText(`Facing: [ ${getYawDirection(normYaw)} ] Yaw: ${normYaw}° | Pitch: ${Math.round(pitch)}°`, cx, 26);
-    ctx.restore();
-
-    // Action indicator pill
-    ctx.save();
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
-    ctx.beginPath();
-    ctx.roundRect(14, 12, 140, 24, 6);
-    ctx.fill();
+    // Eyes
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 10px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('⛏️ MINING (AUTO-SWING)', 22, 28);
+    ctx.fillRect(hx + 3, hy + 7, 3, 2);
+    ctx.fillRect(hx + size - 6, hy + 7, 3, 2);
+
+    // Pupils
+    ctx.fillStyle = isSelf ? '#0284c7' : '#4b62ad';
+    ctx.fillRect(hx + 4, hy + 7, 2, 2);
+    ctx.fillRect(hx + size - 5, hy + 7, 2, 2);
+
+    // Mouth / Beard
+    ctx.fillStyle = '#8d5b4c';
+    ctx.fillRect(hx + 5, hy + 11, 6, 2);
+
+    // Border around head
+    ctx.strokeStyle = isSelf ? '#38bdf8' : '#0f172a';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(hx - 0.5, hy - 0.5, size + 1, size + 1);
+
     ctx.restore();
   };
 
-  // --- RENDERER 3: TACTICAL 2D RADAR BLUEPRINT ---
-  const renderTacticalRadar = (
+  // Helper: Authentic Xaero's Minimap Frame with Rivets and N / E / S / W Compass
+  const renderXaerosMinimapFrame = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    ctx.save();
+    const borderThickness = 12;
+
+    // Outer dark iron bevel
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, w, borderThickness); // Top
+    ctx.fillRect(0, h - borderThickness - 28, w, borderThickness); // Bottom
+    ctx.fillRect(0, 0, borderThickness, h - 28); // Left
+    ctx.fillRect(w - borderThickness, 0, borderThickness, h - 28); // Right
+
+    // Metallic frame stroke
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, w - 2, h - 30);
+
+    // Corner bracket accents
+    const bracketSize = 18;
+    ctx.fillStyle = '#64748b';
+    // Top-Left
+    ctx.fillRect(2, 2, bracketSize, 4);
+    ctx.fillRect(2, 2, 4, bracketSize);
+    // Top-Right
+    ctx.fillRect(w - bracketSize - 2, 2, bracketSize, 4);
+    ctx.fillRect(w - 6, 2, 4, bracketSize);
+    // Bottom-Left
+    ctx.fillRect(2, h - bracketSize - 32, 4, bracketSize);
+    ctx.fillRect(2, h - 34, bracketSize, 4);
+    // Bottom-Right
+    ctx.fillRect(w - 6, h - bracketSize - 32, 4, bracketSize);
+    ctx.fillRect(w - bracketSize - 2, h - 34, bracketSize, 4);
+
+    // Compass Cardinal Letters (Authentic Xaero's Font Style)
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // NORTH (Top)
+    ctx.fillStyle = '#f87171'; // Red for North
+    ctx.fillText('N', w / 2, borderThickness / 2 + 1);
+
+    // SOUTH (Bottom)
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText('S', w / 2, h - borderThickness / 2 - 28);
+
+    // WEST (Left)
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText('W', borderThickness / 2 + 1, (h - 28) / 2);
+
+    // EAST (Right)
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillText('E', w - borderThickness / 2 - 1, (h - 28) / 2);
+
+    ctx.restore();
+  };
+
+  // Helper: Bottom Minecraft coordinate banner (Authentic Xaero's format)
+  const renderXaerosCoordinatesBar = (
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
-    t: number,
+    x: number,
+    y: number,
+    z: number,
     yaw: number
   ) => {
-    const cx = w / 2;
-    const cy = h / 2;
-    const maxR = Math.min(w, h) * 0.42;
-
-    // Dark grid background
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, w, h);
-
-    // Concentric range circles
-    ctx.strokeStyle = 'rgba(14, 165, 233, 0.25)';
+    ctx.save();
+    // Bottom Bar Background
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, h - 28, w, 28);
+    ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1;
-    [0.25, 0.5, 0.75, 1.0].forEach((ratio) => {
-      ctx.beginPath();
-      ctx.arc(cx, cy, maxR * ratio, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = 'rgba(14, 165, 233, 0.4)';
-      ctx.font = '9px monospace';
-      ctx.fillText(`${Math.round(ratio * 12)}m`, cx + maxR * ratio + 3, cy - 3);
-    });
-
-    // Cross axes
     ctx.beginPath();
-    ctx.moveTo(cx - maxR, cy);
-    ctx.lineTo(cx + maxR, cy);
-    ctx.moveTo(cx, cy - maxR);
-    ctx.lineTo(cx, cy + maxR);
+    ctx.moveTo(0, h - 28);
+    ctx.lineTo(w, h - 28);
     ctx.stroke();
 
-    // Rotating Radar Sweep Line
-    const sweepAngle = t * 2.2;
-    const sweepGrad = ctx.createConicGradient(sweepAngle, cx, cy);
-    sweepGrad.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
-    sweepGrad.addColorStop(0.15, 'rgba(14, 165, 233, 0.0)');
-    sweepGrad.addColorStop(1.0, 'rgba(14, 165, 233, 0.0)');
-    ctx.fillStyle = sweepGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
-    ctx.fill();
+    // Coordinates Text
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#f8fafc';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      `XYZ: ${Math.round(x * 10) / 10}, ${Math.round(y)}, ${Math.round(z * 10) / 10} | Yaw: ${Math.round(yaw)}°`,
+      14,
+      h - 10
+    );
 
-    // 4 Cobblestone Machines on Radar
-    const radarMachines = [
-      { id: 'north', label: 'GEN #1 [N]', x: cx, y: cy - maxR * 0.65 },
-      { id: 'east', label: 'GEN #2 [E]', x: cx + maxR * 0.65, y: cy },
-      { id: 'south', label: 'GEN #3 [S]', x: cx, y: cy + maxR * 0.65 },
-      { id: 'west', label: 'GEN #4 [W]', x: cx - maxR * 0.65, y: cy },
-    ];
+    // Right Side: Server & Machine Count Status
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#34d399';
+    ctx.fillText(
+      `28 MACHINES ACTIVE | +${simulatedBlocks.toLocaleString()} BLOCKS`,
+      w - 14,
+      h - 10
+    );
 
-    radarMachines.forEach((m) => {
-      const state = machineStates[m.id];
-      const isRunning = state?.status === 'running';
-
-      // Pulse ring around active machines
-      ctx.strokeStyle = isRunning ? '#34d399' : '#f87171';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, 14, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Piston vector arrow pointing towards bot
-      const angleToCenter = Math.atan2(cy - m.y, cx - m.x);
-      ctx.fillStyle = isRunning ? '#10b981' : '#ef4444';
-      ctx.beginPath();
-      ctx.arc(m.x + Math.cos(angleToCenter) * 8, m.y + Math.sin(angleToCenter) * 8, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Label
-      ctx.font = 'bold 9px monospace';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.textAlign = 'center';
-      ctx.fillText(m.label, m.x, m.y - 18);
-    });
-
-    // Center Bot Marker & FOV Cone
-    const yawRad = ((yaw + 90) * Math.PI) / 180;
-    const fov = (65 * Math.PI) / 180;
-
-    // FOV Cone
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, maxR * 0.5, yawRad - fov / 2, yawRad + fov / 2);
-    ctx.closePath();
-    ctx.fill();
-
-    // Direction pointer
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(yawRad) * 26, cy + Math.sin(yawRad) * 26);
-    ctx.stroke();
-
-    // Bot center dot
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath();
-    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.restore();
   };
-
-  const getYawDirection = (yawDeg: number) => {
-    let y = ((yawDeg % 360) + 360) % 360;
-    if (y >= 337.5 || y < 22.5) return 'SOUTH';
-    if (y >= 22.5 && y < 67.5) return 'SOUTH-WEST';
-    if (y >= 67.5 && y < 112.5) return 'WEST';
-    if (y >= 112.5 && y < 157.5) return 'NORTH-WEST';
-    if (y >= 157.5 && y < 202.5) return 'NORTH';
-    if (y >= 202.5 && y < 247.5) return 'NORTH-EAST';
-    if (y >= 247.5 && y < 292.5) return 'EAST';
-    return 'SOUTH-EAST';
-  };
-
-  const totalRunningMachines = Object.values(machineStates).filter(m => m.status === 'running').length;
 
   return (
-    <div className={`space-y-4 ${isFullscreen ? 'fixed inset-4 z-50 bg-slate-900 p-6 rounded-2xl shadow-2xl overflow-y-auto' : ''}`}>
-      {/* Visualizer Top Control Bar */}
+    <div className={`space-y-3 ${isFullscreen ? 'fixed inset-3 z-50 bg-slate-950 p-4 rounded-2xl shadow-2xl flex flex-col justify-between' : ''}`}>
+      {/* Top Minimap Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
-        {/* View Mode Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200">
-          <button
-            onClick={() => setViewMode('iso')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-              viewMode === 'iso'
-                ? 'bg-white text-emerald-700 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            3D Farm Overview
-          </button>
-
-          <button
-            onClick={() => setViewMode('first_person')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-              viewMode === 'first_person'
-                ? 'bg-white text-emerald-700 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            First-Person POV
-          </button>
-
-          <button
-            onClick={() => setViewMode('radar')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-              viewMode === 'radar'
-                ? 'bg-white text-emerald-700 shadow-xs border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Radio className="w-3.5 h-3.5" />
-            Tactical Radar
-          </button>
+        {/* Left: Farm & Map Details */}
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200">
+            <Compass className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span>Xaero's Minimap — 28 Machine Factory Radar</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                28 / 28 Online
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Top-down orthographic minimap with live piston pulses, skin heads, and entity tracking.
+            </p>
+          </div>
         </div>
 
-        {/* Action & Speed Controls */}
+        {/* Right: Quick Minimap Layer & Zoom Controls */}
         <div className="flex items-center gap-2">
-          {/* Machine Speed Multiplier */}
-          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-            <span>Clock:</span>
+          {/* Toggle Players */}
+          <button
+            onClick={() => setShowPlayers(!showPlayers)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+              showPlayers ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+            }`}
+            title="Toggle Player Avatars & Usernames"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Players
+          </button>
+
+          {/* Toggle Mobs */}
+          <button
+            onClick={() => setShowMobs(!showMobs)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+              showMobs ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+            }`}
+            title="Toggle Nearby Mobs"
+          >
+            <Skull className="w-3.5 h-3.5" />
+            Mobs
+          </button>
+
+          {/* Toggle 28 Machines */}
+          <button
+            onClick={() => setShowMachines(!showMachines)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+              showMachines ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+            }`}
+            title="Toggle 28 Cobble Machines"
+          >
+            <Box className="w-3.5 h-3.5" />
+            28 Machines
+          </button>
+
+          <div className="h-4 w-px bg-slate-200 mx-1" />
+
+          {/* Zoom In / Out */}
+          <div className="flex items-center bg-slate-100 rounded-xl p-0.5 border border-slate-200">
             <button
-              onClick={() => setSpeedMultiplier(0.5)}
-              className={`px-1.5 py-0.5 rounded ${speedMultiplier === 0.5 ? 'bg-emerald-600 text-white' : 'hover:bg-slate-200'}`}
+              onClick={() => setZoom(prev => Math.max(0.7, prev - 0.2))}
+              className="p-1 rounded-lg text-slate-600 hover:text-slate-900 transition"
+              title="Zoom Out"
             >
-              0.5x
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
+            <span className="text-[10px] font-mono font-bold px-1.5 text-slate-600">{zoom.toFixed(1)}x</span>
             <button
-              onClick={() => setSpeedMultiplier(1.0)}
-              className={`px-1.5 py-0.5 rounded ${speedMultiplier === 1.0 ? 'bg-emerald-600 text-white' : 'hover:bg-slate-200'}`}
+              onClick={() => setZoom(prev => Math.min(2.5, prev + 0.2))}
+              className="p-1 rounded-lg text-slate-600 hover:text-slate-900 transition"
+              title="Zoom In"
             >
-              1.0x
-            </button>
-            <button
-              onClick={() => setSpeedMultiplier(1.5)}
-              className={`px-1.5 py-0.5 rounded ${speedMultiplier === 1.5 ? 'bg-emerald-600 text-white' : 'hover:bg-slate-200'}`}
-            >
-              1.5x
+              <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Pause / Resume */}
+          {/* Pause / Play */}
           <button
             onClick={() => setIsPlaying(!isPlaying)}
             className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition"
-            title={isPlaying ? 'Pause Animation' : 'Resume Animation'}
+            title={isPlaying ? 'Pause Radar' : 'Resume Radar'}
           >
             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 text-emerald-600" />}
           </button>
 
-          {/* Particles Toggle */}
-          <button
-            onClick={() => setParticlesEnabled(!particlesEnabled)}
-            className={`p-1.5 rounded-xl border transition ${
-              particlesEnabled ? 'bg-amber-50 text-amber-600 border-amber-200' : 'border-slate-200 text-slate-400'
-            }`}
-            title="Toggle Steam & Ember Particles"
-          >
-            <Sparkles className="w-4 h-4" />
-          </button>
-
-          {/* Fullscreen Toggle */}
+          {/* Fullscreen Expand */}
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition"
-            title={isFullscreen ? 'Exit Fullscreen' : 'Expand View'}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Expand Minimap'}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Main High-Performance Canvas Viewport */}
-      <div className="relative w-full h-[400px] md:h-[460px] rounded-2xl overflow-hidden border border-slate-800 shadow-xl bg-slate-950">
-        <canvas ref={canvasRef} className="w-full h-full block" />
+      {/* Main Full-Scale Xaero's Minimap Screen */}
+      <div className={`relative w-full rounded-2xl overflow-hidden border border-slate-700 shadow-2xl bg-slate-950 ${isFullscreen ? 'flex-1 h-full' : 'h-[520px] md:h-[580px]'}`}>
+        <canvas ref={canvasRef} className="w-full h-full block cursor-crosshair" />
 
-        {/* Viewport Overlay Info HUD */}
-        <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2 pointer-events-none">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400 shadow-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>FARM MONITOR: <b>4 MACHINES RUNNING</b></span>
+        {/* Top-Right HUD Overlay: 28 Machine Health & Pulse */}
+        <div className="absolute top-4 right-4 pointer-events-none flex flex-col gap-1.5 items-end">
+          <div className="px-3 py-1.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 text-xs font-mono text-emerald-400 shadow-lg flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>28 MACHINES IN FRONT: <b>ALL RUNNING</b></span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-slate-300 shadow-md">
-            <Zap className="w-3.5 h-3.5 text-amber-400" />
-            <span>Redstone Clock: <b>1.2s Piston Pulse</b></span>
-          </div>
-        </div>
-
-        {/* Viewport Overlay Bottom Telemetry Strip */}
-        <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none text-xs font-mono">
-          <div className="px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 text-slate-300 shadow-md flex items-center gap-3">
-            <span>Server: <b className="text-emerald-400">{serverName}</b></span>
-            <span>Target: <b className="text-amber-400">Cobblestone AFK</b></span>
-            <span>Rate: <b className="text-sky-400">~2,160 blocks/hr</b></span>
-          </div>
-
-          <div className="px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/60 text-slate-300 shadow-md">
-            <span>Total Mined: <b className="text-emerald-400">+{simulatedBlocks.toLocaleString()}</b></span>
+          <div className="px-3 py-1 rounded-lg bg-slate-900/90 backdrop-blur-md border border-slate-800 text-[11px] font-mono text-slate-300 shadow-md flex items-center gap-2">
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>Clock: <b>1.2s Piston Stroke</b></span>
           </div>
         </div>
-      </div>
 
-      {/* Cobblestone Machines Status Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { key: 'north', name: 'Machine #1 [North]', dir: 'North', icon: Compass },
-          { key: 'east', name: 'Machine #2 [East]', dir: 'East', icon: Compass },
-          { key: 'south', name: 'Machine #3 [South]', dir: 'South', icon: Compass },
-          { key: 'west', name: 'Machine #4 [West]', dir: 'West', icon: Compass },
-        ].map((m) => {
-          const state = machineStates[m.key] || { status: 'running', blocks: 350 };
-          const isRunning = state.status === 'running';
-
-          return (
-            <div
-              key={m.key}
-              className={`p-4 rounded-2xl border transition-all shadow-xs ${
-                isRunning
-                  ? 'bg-white border-slate-200'
-                  : 'bg-rose-50/50 border-rose-200'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded-lg ${isRunning ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                    <Box className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">{m.name}</h4>
-                    <span className="text-[10px] text-slate-500 font-mono">Piston Gen #{m.dir}</span>
-                  </div>
-                </div>
-
-                <span
-                  className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                    isRunning
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-rose-50 text-rose-700 border-rose-200'
-                  }`}
-                >
-                  {isRunning ? 'RUNNING' : 'OFFLINE'}
-                </span>
-              </div>
-
-              {/* Piston Stroke & Production Metrics */}
-              <div className="space-y-2 mt-3 pt-2 border-t border-slate-100 text-xs">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="flex items-center gap-1 text-[11px]"><Zap className="w-3 h-3 text-amber-500" /> Piston Action:</span>
-                  <span className="font-mono font-bold text-emerald-600">{isRunning ? 'Active Pushing' : 'Idle'}</span>
-                </div>
-
-                {/* Animated Piston Progress Indicator */}
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}
-                    style={{ width: isRunning ? '100%' : '0%' }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                  <span>Blocks Generated:</span>
-                  <span className="font-mono font-bold text-slate-900">+{state.blocks}</span>
-                </div>
-              </div>
-
-              {/* Quick toggle button */}
-              <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
-                <button
-                  onClick={() => {
-                    setMachineStates(prev => ({
-                      ...prev,
-                      [m.key]: {
-                        ...prev[m.key],
-                        status: isRunning ? 'idle' : 'running'
-                      }
-                    }));
-                  }}
-                  className="text-[10px] font-bold text-slate-600 hover:text-emerald-700 transition"
-                >
-                  {isRunning ? 'Simulate Stop' : 'Resume Machine'}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+        {/* Top-Left HUD Overlay: Server & Farm Type */}
+        <div className="absolute top-4 left-4 pointer-events-none">
+          <div className="px-3 py-1.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 text-xs font-mono text-slate-200 shadow-lg flex items-center gap-2">
+            <Box className="w-3.5 h-3.5 text-sky-400" />
+            <span>Server: <b className="text-emerald-400">{serverName}</b> | Target: <b className="text-amber-400">Cobble Gen Bank</b></span>
+          </div>
+        </div>
       </div>
     </div>
   );

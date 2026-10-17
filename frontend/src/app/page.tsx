@@ -3715,17 +3715,17 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* LIVE COBBLESTONE FARM POV & MACHINE ANIMATIONS */}
+                        {/* LIVE XAERO'S MINIMAP & 28 COBBLESTONE FARM MACHINES */}
                         <div>
                           <div className="mb-3">
                             <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                              <span>Cobblestone Farm POV & Live Machine Operations</span>
+                              <span>Xaero's Minimap — 28 Machine Factory Radar</span>
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                4 Active Generators
+                                28 Active Generators
                               </span>
                             </h3>
                             <p className="text-xs text-slate-500">
-                              Real-time interactive 3D overview, first-person bot POV, animated pistons pushing cobblestone, and machine telemetry.
+                              Live top-down tactical minimap displaying 28 animated cobblestone machines in front of the bot, player skin heads, usernames, and nearby mobs.
                             </p>
                           </div>
 

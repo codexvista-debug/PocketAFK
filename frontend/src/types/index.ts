@@ -95,6 +95,18 @@ export interface FarmTelemetry {
   machines?: FarmMachineState[];
 }
 
+export interface RadarEntity {
+  id: number;
+  type: 'player' | 'hostile' | 'passive';
+  name: string;
+  username?: string;
+  x: number;
+  y: number;
+  z: number;
+  yaw?: number;
+  distance: number;
+}
+
 export interface Telemetry {
   botId: string;
   serverId?: string;
@@ -117,6 +129,7 @@ export interface Telemetry {
   uptime?: number;
   version?: string;
   farm?: FarmTelemetry;
+  entities?: RadarEntity[];
 }
 
 export interface ContainerSlot {
