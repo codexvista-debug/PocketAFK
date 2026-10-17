@@ -1641,46 +1641,37 @@ export default function Dashboard() {
     }
   };
 
-  // Bot Status Badge
+  // Bot Status Badge (Clean Online / Offline toggle badge)
   const getStatusBadge = (state: BotLifecycleState) => {
     switch (state) {
       case 'SPAWNED':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Connected
-          </span>
-        );
       case 'LOGGED_IN':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-            Logged In
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs group-hover:bg-emerald-200 transition">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Online
           </span>
         );
       case 'CONNECTING':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-            Connecting
-          </span>
-        );
       case 'RECONNECTING':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40">
-            Reconnecting
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs group-hover:bg-amber-200 transition">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            Connecting...
           </span>
         );
       case 'KICKED':
       case 'ERROR':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/40">
-            {state}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200 shadow-2xs group-hover:bg-rose-200 transition">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            {state === 'KICKED' ? 'Kicked' : 'Error'}
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#1e2535] text-slate-400 border border-[#2a3449]">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-300/80 shadow-2xs group-hover:bg-slate-200 transition">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
             Offline
           </span>
         );
@@ -2864,17 +2855,14 @@ export default function Dashboard() {
                                               handleStartServer(updated, acc);
                                             }
                                           }}
-                                          className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-150 hover:bg-slate-100 hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                                          className="group inline-flex items-center transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
                                           title={
                                             isBotActive
-                                              ? `Status: ${currentBotState} • Click to disconnect @${acc.ign || acc.username}`
-                                              : `Status: Offline • Click to connect @${acc.ign || acc.username} to ${activeServer.name}`
+                                              ? `Online • Click to disconnect @${acc.ign || acc.username}`
+                                              : `Offline • Click to connect @${acc.ign || acc.username}`
                                           }
                                         >
                                           {getStatusBadge(currentBotState)}
-                                          <span className="text-[10px] font-mono text-slate-400 group-hover:text-emerald-700 transition-colors hidden sm:inline opacity-70 group-hover:opacity-100">
-                                            {isBotActive ? '✕ Disconnect' : '▶ Connect'}
-                                          </span>
                                         </button>
                                       )}
                                     </td>
@@ -2920,32 +2908,7 @@ export default function Dashboard() {
                                           <Pin className="w-3.5 h-3.5" />
                                         </button>
 
-                                        {isBotActive ? (
-                                          <button
-                                            onClick={() => handleStopServer(activeServer.id, acc)}
-                                            className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
-                                            title="Disconnect bot"
-                                          >
-                                            <Square className="w-3.5 h-3.5 fill-current" />
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => {
-                                              const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
-                                              const updatedAssigned = Array.from(new Set([...currentAssigned, acc.id]));
-                                              const updated = { ...activeServer, accountId: acc.id, assignedAccountIds: updatedAssigned };
-                                              handleSaveServer(updated);
-                                              handleStartServer(updated, acc);
-                                            }}
-                                            disabled={socketStatus !== 'AUTHENTICATED'}
-                                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 transition cursor-pointer"
-                                            title="Connect this account"
-                                          >
-                                            <Play className="w-3.5 h-3.5 fill-current" />
-                                          </button>
-                                        )}
-
-                                        {/* Remove from server profile (-) */}
+                                         {/* Remove from server profile (-) */}
                                         <button
                                           onClick={() => handleRemoveAccountFromProfile(acc.id)}
                                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
