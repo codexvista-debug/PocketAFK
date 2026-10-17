@@ -59,6 +59,7 @@ export function useDaemonSocket(
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const onAccountVerifiedRef = useRef(onAccountVerified);
   onAccountVerifiedRef.current = onAccountVerified;
 
@@ -77,6 +78,10 @@ export function useDaemonSocket(
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
     }
 
     const nextUrl = localStorage.getItem(`pocketafk_daemon_url_${u}`) || '';
@@ -170,6 +175,15 @@ export function useDaemonSocket(
             case 'AUTH_RESULT':
               if (data.payload.success) {
                 setStatus('AUTHENTICATED');
+                // Start keepalive PING every 10s to prevent Cloudflare tunnel & mobile carrier NAT timeout
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                pingIntervalRef.current = setInterval(() => {
+                  if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    try {
+                      socketRef.current.send(JSON.stringify({ type: 'PING' }));
+                    } catch (e) {}
+                  }
+                }, 10000);
               } else {
                 console.warn('[Daemon Auth Rejected]', data.payload?.message);
                 setStatus('AUTH_ERROR');
@@ -280,20 +294,34 @@ export function useDaemonSocket(
       ws.onclose = () => {
         setStatus('DISCONNECTED');
         socketRef.current = null;
+        setBotStates({});
+        setBotStateReasons({});
+        setTelemetries({});
+        setContainerWindows({});
+        setMsAuthData(null);
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
         if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
-            const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
-            const storedUrl = typeof window !== 'undefined' ? localStorage.getItem(`pocketafk_daemon_url_${u}`) : '';
-            if (storedUrl && storedUrl === daemonUrl) {
-              connect();
-            }
-          }, 2500);
+            connect();
+          }, 2000);
         }
       };
 
       ws.onerror = () => {
         setStatus('DISCONNECTED');
+        setBotStates({});
+        setBotStateReasons({});
+        setTelemetries({});
+        setContainerWindows({});
+        setMsAuthData(null);
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
         try {
           ws.close();
         } catch (e) {}
@@ -311,6 +339,10 @@ export function useDaemonSocket(
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
       if (socketRef.current) {
         try {
           socketRef.current.close();
@@ -323,6 +355,10 @@ export function useDaemonSocket(
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
       }
       if (socketRef.current) {
         try {
@@ -413,23 +449,27 @@ export function useDaemonSocket(
 
   // Scoped getters for active instance (supports multi-account sub-bots under activeServerId)
   const currentBotId = activeBotId || '';
-  const subBotStates = Object.entries(botStates).filter(([k]) => k.startsWith(`${currentBotId}__`));
+  const isDaemonAuthenticated = enabled && status === 'AUTHENTICATED';
+  const subBotStates = isDaemonAuthenticated ? Object.entries(botStates).filter(([k]) => k.startsWith(`${currentBotId}__`)) : [];
   const activeSubState = subBotStates.find(([, s]) => s === 'SPAWNED' || s === 'LOGGED_IN' || s === 'CONNECTING')?.[1];
 
-  const currentBotState: BotLifecycleState =
-    (currentBotId && botStates[currentBotId]) ||
-    activeSubState ||
-    'DISCONNECTED';
+  const currentBotState: BotLifecycleState = isDaemonAuthenticated
+    ? ((currentBotId && botStates[currentBotId]) ||
+       activeSubState ||
+       'DISCONNECTED')
+    : 'DISCONNECTED';
 
-  const currentBotReason: string =
-    (currentBotId && botStateReasons[currentBotId]) ||
-    subBotStates.find(([k]) => botStateReasons[k])?.[1] ||
-    '';
+  const currentBotReason: string = isDaemonAuthenticated
+    ? ((currentBotId && botStateReasons[currentBotId]) ||
+       subBotStates.find(([k]) => botStateReasons[k])?.[1] ||
+       '')
+    : (status === 'CONNECTING' ? 'Connecting to Termux daemon...' : 'Termux daemon is offline');
 
-  const currentTelemetry: Telemetry | null =
-    (currentBotId && telemetries[currentBotId]) ||
-    Object.entries(telemetries).find(([k, t]) => k.startsWith(`${currentBotId}__`) && t !== null)?.[1] ||
-    null;
+  const currentTelemetry: Telemetry | null = isDaemonAuthenticated
+    ? ((currentBotId && telemetries[currentBotId]) ||
+       Object.entries(telemetries).find(([k, t]) => k.startsWith(`${currentBotId}__`) && t !== null)?.[1] ||
+       null)
+    : null;
 
   const currentMessages: ChatMessage[] = currentBotId
     ? Object.entries(messagesByBot)
@@ -439,10 +479,11 @@ export function useDaemonSocket(
         .slice(-250)
     : [];
 
-  const currentWindow: ContainerWindow | null =
-    (currentBotId && containerWindows[currentBotId]) ||
-    Object.entries(containerWindows).find(([k, w]) => k.startsWith(`${currentBotId}__`) && w !== null)?.[1] ||
-    null;
+  const currentWindow: ContainerWindow | null = isDaemonAuthenticated
+    ? ((currentBotId && containerWindows[currentBotId]) ||
+       Object.entries(containerWindows).find(([k, w]) => k.startsWith(`${currentBotId}__`) && w !== null)?.[1] ||
+       null)
+    : null;
 
   return {
     status: enabled ? status : 'DISCONNECTED',
@@ -451,10 +492,10 @@ export function useDaemonSocket(
     telemetry: currentTelemetry,
     messages: currentMessages,
     containerWindow: currentWindow,
-    botStates,
-    botStateReasons,
-    botVersions,
-    telemetries,
+    botStates: isDaemonAuthenticated ? botStates : {},
+    botStateReasons: isDaemonAuthenticated ? botStateReasons : {},
+    botVersions: isDaemonAuthenticated ? botVersions : {},
+    telemetries: isDaemonAuthenticated ? telemetries : {},
     messagesByBot,
     daemonUrl,
     authToken,

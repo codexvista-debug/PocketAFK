@@ -914,9 +914,6 @@ export default function Dashboard() {
             } else if (socketStatus === 'DISCONNECTED') {
               reconnectDaemon();
             }
-          } else if (!targetUrl && daemonUrl) {
-            console.log(`[PocketAFK] No registered daemon tunnel for @${currentUser}. Clearing stale tunnel settings.`);
-            saveSettings('', '');
           }
         }
       } catch (err) {
@@ -2181,12 +2178,14 @@ export default function Dashboard() {
                   ).filter((id) => accounts.some((a) => a.id === id || a.ign === id));
                   const srvAssignedCount = assignedIds.length;
 
-                  // Detect any running or connecting bot under this server (srv.id or srv.id__accId)
-                  const activePrefixBots = Object.entries(botStates).filter(
-                    ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
-                  ).length;
+                  const isDaemonConnected = socketStatus === 'AUTHENTICATED';
 
-                  const assignedOnlineCount = assignedIds.filter((accId) => {
+                  // Detect any running or connecting bot under this server (srv.id or srv.id__accId)
+                  const activePrefixBots = isDaemonConnected ? Object.entries(botStates).filter(
+                    ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
+                  ).length : 0;
+
+                  const assignedOnlineCount = isDaemonConnected ? assignedIds.filter((accId) => {
                     const acc = accounts.find((a) => a.id === accId || a.ign === accId);
                     const st =
                       botStates[`${srv.id}__${accId}`] ||
@@ -2194,18 +2193,19 @@ export default function Dashboard() {
                       (acc ? botStates[`${srv.id}__${acc.ign}`] : undefined) ||
                       botStates[srv.id];
                     return st === 'SPAWNED' || st === 'LOGGED_IN';
-                  }).length;
+                  }).length : 0;
 
-                  const onlineCount = Math.max(
+                  const onlineCount = isDaemonConnected ? Math.max(
                     activePrefixBots,
                     assignedOnlineCount,
                     (srv.id === activeServerId && (botState === 'SPAWNED' || botState === 'LOGGED_IN')) ? 1 : 0
-                  );
+                  ) : 0;
 
-                  const isConnecting =
+                  const isConnecting = isDaemonConnected && (
                     Object.entries(botStates).some(
                       ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && st === 'CONNECTING'
-                    ) || (srv.id === activeServerId && botState === 'CONNECTING');
+                    ) || (srv.id === activeServerId && botState === 'CONNECTING')
+                  );
 
                   const isRunning = onlineCount > 0 || isConnecting;
                   const totalSlots = Math.max(srvAssignedCount, onlineCount);
@@ -2549,11 +2549,13 @@ export default function Dashboard() {
                               ).filter((id) => accounts.some((a) => a.id === id || a.ign === id));
                               const totalAssigned = assignedIds.length;
 
-                              const activePrefixBots = Object.entries(botStates).filter(
-                                ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
-                              ).length;
+                              const isDaemonConnected = socketStatus === 'AUTHENTICATED';
 
-                              const assignedOnlineCount = assignedIds.filter((accId) => {
+                              const activePrefixBots = isDaemonConnected ? Object.entries(botStates).filter(
+                                ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
+                              ).length : 0;
+
+                              const assignedOnlineCount = isDaemonConnected ? assignedIds.filter((accId) => {
                                 const acc = accounts.find((a) => a.id === accId || a.ign === accId);
                                 const st =
                                   botStates[`${srv.id}__${accId}`] ||
@@ -2561,11 +2563,11 @@ export default function Dashboard() {
                                   (acc ? botStates[`${srv.id}__${acc.ign}`] : undefined) ||
                                   botStates[srv.id];
                                 return st === 'SPAWNED' || st === 'LOGGED_IN';
-                              }).length;
+                              }).length : 0;
 
-                              const onlineCount = Math.max(activePrefixBots, assignedOnlineCount);
+                              const onlineCount = isDaemonConnected ? Math.max(activePrefixBots, assignedOnlineCount) : 0;
 
-                              const hasConnecting =
+                              const hasConnecting = isDaemonConnected && (
                                 Object.entries(botStates).some(
                                   ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && st === 'CONNECTING'
                                 ) ||
@@ -2577,7 +2579,8 @@ export default function Dashboard() {
                                     (acc ? botStates[`${srv.id}__${acc.ign}`] : undefined) ||
                                     botStates[srv.id];
                                   return st === 'CONNECTING';
-                                });
+                                })
+                              );
 
                               const isRunning = onlineCount > 0 || hasConnecting;
                               const connections = serverConnections[srv.id] || srv.connectionsCount || 0;
@@ -3022,19 +3025,24 @@ export default function Dashboard() {
                                   activeServer.accountId === acc.ign ||
                                   activeServer.accountId === acc.username;
 
-                                const currentBotState: BotLifecycleState =
+                                const isDaemonConnected = socketStatus === 'AUTHENTICATED';
+
+                                const rawBotState: BotLifecycleState =
                                   botStates[botKey] ||
                                   (isAssignedActive ? ((activeServer.id === activeServerId ? botState : botStates[activeServer.id]) || botStates[activeServer.id]) : undefined) ||
                                   'DISCONNECTED';
 
-                                const currentBotReason: string =
-                                  botStateReasons[botKey] ||
-                                  (isAssignedActive ? ((activeServer.id === activeServerId ? botStateReason : botStateReasons[activeServer.id]) || botStateReasons[activeServer.id]) : undefined) ||
-                                  '';
+                                const currentBotState: BotLifecycleState = isDaemonConnected ? rawBotState : 'DISCONNECTED';
+
+                                const currentBotReason: string = isDaemonConnected
+                                  ? (botStateReasons[botKey] ||
+                                     (isAssignedActive ? ((activeServer.id === activeServerId ? botStateReason : botStateReasons[activeServer.id]) || botStateReasons[activeServer.id]) : undefined) ||
+                                     '')
+                                  : (socketStatus === 'CONNECTING' ? 'Connecting to Termux daemon...' : 'Termux daemon is offline');
 
                                 const isPinned = pinnedAccountIds.includes(acc.id);
-                                const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
-                                const isBotConnecting = currentBotState === 'CONNECTING';
+                                const isBotOnline = isDaemonConnected && (currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN');
+                                const isBotConnecting = isDaemonConnected && currentBotState === 'CONNECTING';
                                 const isBotActive = isBotOnline || isBotConnecting;
 
                                 const srvStart = sessionStartTimes[botKey] || (isAssignedActive ? sessionStartTimes[activeServer.id] : undefined);
@@ -3049,7 +3057,7 @@ export default function Dashboard() {
                                     : srvTel && typeof srvTel.connectedAt === 'number' && srvTel.connectedAt > 0
                                     ? Math.max(0, Math.floor((nowTick - srvTel.connectedAt) / 1000))
                                     : 0;
-                                const accountUptime = isBotOnline ? Math.max(daemonUptime, localSec) : 0;
+                                const accountUptime = (isDaemonConnected && isBotOnline) ? Math.max(daemonUptime, localSec) : 0;
 
                                 return (
                                   <tr
@@ -3605,14 +3613,17 @@ export default function Dashboard() {
 
                   {/* SUB-TAB 5: POV / TELEMETRY */}
                   {activeSubTab === 'pov' && (() => {
-                    const activeSubBot = Object.entries(botStates).find(
+                    const isDaemonConnected = socketStatus === 'AUTHENTICATED';
+                    const activeSubBot = isDaemonConnected ? Object.entries(botStates).find(
                       ([k, st]) => (k === activeServer.id || k.startsWith(`${activeServer.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
-                    );
+                    ) : null;
                     const isSrvOnline =
-                      Boolean(activeSubBot) ||
-                      botStates[activeServer.id] === 'SPAWNED' ||
-                      botStates[activeServer.id] === 'LOGGED_IN' ||
-                      (activeServer.id === activeServerId && (botState === 'SPAWNED' || botState === 'LOGGED_IN'));
+                      isDaemonConnected && (
+                        Boolean(activeSubBot) ||
+                        botStates[activeServer.id] === 'SPAWNED' ||
+                        botStates[activeServer.id] === 'LOGGED_IN' ||
+                        (activeServer.id === activeServerId && (botState === 'SPAWNED' || botState === 'LOGGED_IN'))
+                      );
 
                     const subBotTel = Object.entries(telemetries || {}).find(
                       ([k, t]) => (k === activeServer.id || k.startsWith(`${activeServer.id}__`)) && t !== null

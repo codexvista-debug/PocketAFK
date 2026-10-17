@@ -100,7 +100,8 @@ export type ClientMessage =
   | { type: 'UPDATE_SETTINGS'; payload: { botId: string; settings: Partial<BotSettings> } }
   | { type: 'VERIFY_ACCOUNT'; payload: { accountId: string; email: string } }
   | { type: 'IMPORT_ACCOUNT_TOKENS'; payload: { ign: string; tokenCache: any } }
-  | { type: 'REQUEST_SYNC'; payload?: { botId?: string } };
+  | { type: 'REQUEST_SYNC'; payload?: { botId?: string } }
+  | { type: 'PING' };
 
 // Daemon to Client Messages
 export type DaemonMessage =

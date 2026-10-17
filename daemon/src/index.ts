@@ -134,6 +134,12 @@ wss.on('connection', (ws: WebSocket, req) => {
         return;
       }
 
+      // Keepalive PING / PONG to prevent Cloudflare tunnel / mobile NAT idle dropouts
+      if (parsed.type === 'PING') {
+        ws.send(JSON.stringify({ type: 'PONG', payload: { timestamp: Date.now() } }));
+        return;
+      }
+
       // Forward to bot manager
       botManager.handleClientMessage(parsed);
     } catch (err: any) {
