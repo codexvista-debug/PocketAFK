@@ -2068,8 +2068,8 @@ export default function Dashboard() {
               })}
             </div>
 
-            {/* Bottom User Pill */}
-            <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-1">
+            {/* Desktop Bottom User Pill (hidden on mobile so it does not appear in the middle) */}
+            <div className="hidden md:flex p-3 border-t border-slate-200 bg-slate-50/50 items-center justify-between gap-1 mt-auto shrink-0">
               <div className="flex items-center gap-2 truncate min-w-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <span className="text-xs font-bold text-slate-800 font-mono truncate">
@@ -2078,6 +2078,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
+                  type="button"
                   onClick={() => setIsRankModalOpen(true)}
                   className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
                   title="Click to view or upgrade Rank"
@@ -2086,6 +2087,7 @@ export default function Dashboard() {
                   <span>{currentRankConfig.name}</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleLogout}
                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                   title="Sign Out"
@@ -3581,6 +3583,35 @@ export default function Dashboard() {
               )}
             </div>
           </main>
+
+          {/* Mobile Bottom User Bar (Strictly at the very bottom of the page in mobile view) */}
+          <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 flex items-center justify-between gap-1 shadow-xs mt-auto shrink-0 z-20">
+            <div className="flex items-center gap-2 truncate min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-xs font-bold text-slate-800 font-mono truncate">
+                @{effectiveUser}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsRankModalOpen(true)}
+                className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
+                title="Click to view or upgrade Rank"
+              >
+                <span>{currentRankConfig.gemIcon}</span>
+                <span>{currentRankConfig.name}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
