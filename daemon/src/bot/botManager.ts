@@ -47,28 +47,37 @@ export class BotManager {
     if (!idOrName) return;
     const target = idOrName.toLowerCase();
 
-    // Direct match by key
+    // 1. Direct match by exact key/botId (most common and specific)
     const directBot = this.bots.get(idOrName);
     if (directBot) {
       directBot.stop();
       this.bots.delete(idOrName);
+      updateTermuxNotification(this.getAllBots());
+      return;
     }
 
-    // Match by ID, username, accountId, or active bot IGN
+    // 2. Case-insensitive match by botId
     for (const [bId, instance] of Array.from(this.bots.entries())) {
-      const cfgUser = instance.config?.username?.toLowerCase();
-      const cfgAccId = instance.config?.accountId?.toLowerCase();
-      const botUser = instance.bot?.username?.toLowerCase();
-      if (
-        bId.toLowerCase() === target ||
-        cfgUser === target ||
-        botUser === target ||
-        (cfgAccId && cfgAccId === target)
-      ) {
+      if (bId.toLowerCase() === target) {
         instance.stop();
         this.bots.delete(bId);
+        updateTermuxNotification(this.getAllBots());
+        return;
       }
     }
+
+    // 3. Fallback only if no bot was matched by ID: match by active bot IGN or username
+    for (const [bId, instance] of Array.from(this.bots.entries())) {
+      const cfgUser = instance.config?.username?.toLowerCase();
+      const botUser = instance.bot?.username?.toLowerCase();
+      if (cfgUser === target || botUser === target) {
+        instance.stop();
+        this.bots.delete(bId);
+        updateTermuxNotification(this.getAllBots());
+        return;
+      }
+    }
+
     updateTermuxNotification(this.getAllBots());
   }
 
@@ -121,11 +130,13 @@ export class BotManager {
         this.startBot(msg.payload);
         break;
 
-      case 'STOP_BOT':
-        this.stopBot(msg.payload.botId || (msg.payload as any).username || (msg.payload as any).accountId || (msg.payload as any).ign);
-        if (msg.payload.accountId) this.stopBot(msg.payload.accountId);
-        if (msg.payload.username) this.stopBot(msg.payload.username);
+      case 'STOP_BOT': {
+        const targetId = msg.payload.botId || (msg.payload as any).id || (msg.payload as any).username;
+        if (targetId) {
+          this.stopBot(targetId);
+        }
         break;
+      }
 
       case 'RESTART_BOT': {
         const bot = this.bots.get(msg.payload.botId);

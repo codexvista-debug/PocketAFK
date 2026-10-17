@@ -1459,14 +1459,10 @@ export default function Dashboard() {
       );
     }
 
-    // Remove from local sessionStartTimes
+    // Remove from local sessionStartTimes for this profile only
     setSessionStartTimes((prev) => {
       const next = { ...prev };
       delete next[profileId];
-      if (acc) {
-        delete next[acc.id];
-        if (cleanPlayerName) delete next[cleanPlayerName];
-      }
       if (typeof window !== 'undefined') {
         const u = currentUser || 'guest';
         localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(next));
@@ -1474,11 +1470,17 @@ export default function Dashboard() {
       return next;
     });
 
-    if (currentUser && cleanPlayerName) {
+    const isRunningElsewhere = servers.some(
+      (s) =>
+        s.id !== profileId &&
+        (botStates[s.id] === 'SPAWNED' || botStates[s.id] === 'LOGGED_IN' || botStates[s.id] === 'CONNECTING') &&
+        (s.accountId === acc?.id || s.accountId === acc?.ign || s.accountId === cleanPlayerName)
+    );
+    if (currentUser && cleanPlayerName && !isRunningElsewhere) {
       recordAccountConnectionStop(currentUser, cleanPlayerName).catch(() => {});
     }
 
-    stopBot(profileId, acc?.id, cleanPlayerName);
+    stopBot(profileId);
     showToast(`Bot connection stopped${cleanPlayerName ? ` (@${cleanPlayerName})` : ''}.`, 'info');
   };
 
@@ -2752,12 +2754,6 @@ export default function Dashboard() {
                                   ? thisServerBotState
                                   : 'DISCONNECTED';
 
-                                const otherRunningServer = servers.find(
-                                  (s) =>
-                                    s.id !== activeServer.id &&
-                                    (botStates[s.id] === 'SPAWNED' || botStates[s.id] === 'LOGGED_IN' || botStates[s.id] === 'CONNECTING') &&
-                                    (s.accountId === acc.id || s.accountId === acc.ign || s.accountId === acc.username || s.assignedAccountIds?.includes(acc.id))
-                                );
 
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
@@ -2879,14 +2875,6 @@ export default function Dashboard() {
                                           >
                                             {getStatusBadge(currentBotState)}
                                           </button>
-                                          {!isBotActive && otherRunningServer && (
-                                            <span
-                                              className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs"
-                                              title={`This account is currently active in server profile "${otherRunningServer.name}"`}
-                                            >
-                                              In {otherRunningServer.name}
-                                            </span>
-                                          )}
                                         </div>
                                       )}
                                     </td>

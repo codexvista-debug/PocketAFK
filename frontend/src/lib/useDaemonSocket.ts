@@ -317,24 +317,20 @@ export function useDaemonSocket(
 
   const startBot = useCallback((config: any) => {
     if (config?.id) {
-      setBotStates((prev) => {
-        const next: Record<string, BotLifecycleState> = { ...prev, [config.id]: 'CONNECTING' as BotLifecycleState };
-        if (config.username) next[config.username] = 'CONNECTING';
-        if (config.accountId) next[config.accountId] = 'CONNECTING';
-        return next;
-      });
+      setBotStates((prev) => ({
+        ...prev,
+        [config.id]: 'CONNECTING' as BotLifecycleState,
+      }));
     }
     return sendJson({ type: 'START_BOT', payload: config });
   }, [sendJson]);
 
-  const stopBot = useCallback((botId: string, accountId?: string, username?: string) => {
-    setBotStates((prev) => {
-      const next: Record<string, BotLifecycleState> = { ...prev, [botId]: 'DISCONNECTED' as BotLifecycleState };
-      if (accountId) next[accountId] = 'DISCONNECTED';
-      if (username) next[username] = 'DISCONNECTED';
-      return next;
-    });
-    return sendJson({ type: 'STOP_BOT', payload: { botId, accountId, username } });
+  const stopBot = useCallback((botId: string, _accountId?: string, _username?: string) => {
+    setBotStates((prev) => ({
+      ...prev,
+      [botId]: 'DISCONNECTED' as BotLifecycleState,
+    }));
+    return sendJson({ type: 'STOP_BOT', payload: { botId } });
   }, [sendJson]);
 
   const restartBot = useCallback((botId: string) => {
