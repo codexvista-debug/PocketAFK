@@ -64,7 +64,7 @@ export async function loadServersFromSupabase(currentUser: string): Promise<Serv
 
     if (error || !data || data.length === 0) return null;
     const servers = data[0]?.settings?.servers;
-    if (Array.isArray(servers) && servers.length > 0) {
+    if (Array.isArray(servers)) {
       return servers;
     }
     return null;

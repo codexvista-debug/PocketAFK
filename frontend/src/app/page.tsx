@@ -1035,44 +1035,15 @@ export default function Dashboard() {
 
           // Handle Universal Servers:
           let finalServers: ServerProfile[] = [];
-          if (remoteServers && remoteServers.length > 0) {
+          if (remoteServers !== null && Array.isArray(remoteServers)) {
             // Supabase is the central universal source of truth!
             finalServers = remoteServers;
           } else if (localSrvs.length > 0) {
             finalServers = localSrvs;
             await saveServersToSupabase(currentUser, finalServers);
           } else {
-            // Default starter server profiles
-            finalServers = [
-              {
-                id: 'srv_freshsmp',
-                name: 'FreshSMP',
-                pocketUser: currentUser,
-                accountId: '',
-                serverHost: 'play.freshsmp.fun',
-                serverPort: 25565,
-                serverVersion: 'auto',
-                authType: 'microsoft',
-                autoReconnect: true,
-                settings: DEFAULT_BOT_SETTINGS,
-                createdAt: Date.now() - 86400000 * 5,
-                connectionsCount: 0,
-              },
-              {
-                id: 'srv_donutsmp',
-                name: 'DonutSMP',
-                pocketUser: currentUser,
-                accountId: '',
-                serverHost: 'donutsmp.net',
-                serverPort: 25565,
-                serverVersion: 'auto',
-                authType: 'microsoft',
-                autoReconnect: true,
-                settings: DEFAULT_BOT_SETTINGS,
-                createdAt: Date.now() - 86400000 * 2,
-                connectionsCount: 0,
-              },
-            ];
+            // New accounts start with clean slate (0 server profiles)
+            finalServers = [];
             await saveServersToSupabase(currentUser, finalServers);
           }
 
