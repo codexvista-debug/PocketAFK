@@ -31,14 +31,21 @@ const DEFAULT_SETTINGS: BotSettings = {
 };
 
 const COMMON_VERSIONS = [
-  { label: '26.3', value: '26.3' },
-  { label: '26.2', value: '26.2' },
-  { label: '1.21.4', value: '1.21.4' },
+  { label: 'Auto Detect (Recommended)', value: 'auto' },
+  { label: '1.21.4 (Latest)', value: '1.21.4' },
+  { label: '1.21.3', value: '1.21.3' },
+  { label: '1.21.2', value: '1.21.2' },
   { label: '1.21.1', value: '1.21.1' },
+  { label: '1.21', value: '1.21' },
+  { label: '1.20.6', value: '1.20.6' },
   { label: '1.20.4', value: '1.20.4' },
   { label: '1.20.2', value: '1.20.2' },
+  { label: '1.20.1', value: '1.20.1' },
   { label: '1.19.4', value: '1.19.4' },
-  { label: 'Auto Detect', value: 'auto' },
+  { label: '1.18.2', value: '1.18.2' },
+  { label: '1.16.5', value: '1.16.5' },
+  { label: '1.12.2', value: '1.12.2' },
+  { label: '1.8.9', value: '1.8.9' },
 ];
 
 const POPULAR_SETUPS = [

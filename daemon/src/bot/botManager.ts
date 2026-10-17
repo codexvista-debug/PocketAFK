@@ -230,6 +230,7 @@ export class BotManager {
       case 'REQUEST_SYNC': {
         for (const bot of this.bots.values()) {
           const uptime = bot.connectedAt ? Math.floor((Date.now() - bot.connectedAt) / 1000) : 0;
+          const detectedVer = bot.bot?.version || (bot.bot as any)?._client?.version || (bot.config.version !== 'auto' ? bot.config.version : undefined);
           this.broadcastFn({
             type: 'BOT_STATE',
             payload: {
@@ -239,6 +240,7 @@ export class BotManager {
               state: bot.state,
               connectedAt: bot.connectedAt || 0,
               uptime,
+              version: detectedVer,
             }
           });
           bot.emitTelemetry();

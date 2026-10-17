@@ -48,6 +48,7 @@ export function useDaemonSocket(
   // Per-bot dictionaries to support multiple running server instances simultaneously
   const [botStates, setBotStates] = useState<Record<string, BotLifecycleState>>({});
   const [botStateReasons, setBotStateReasons] = useState<Record<string, string>>({});
+  const [botVersions, setBotVersions] = useState<Record<string, string>>({});
   const [telemetries, setTelemetries] = useState<Record<string, Telemetry>>({});
   const [messagesByBot, setMessagesByBot] = useState<Record<string, ChatMessage[]>>({});
   const [containerWindows, setContainerWindows] = useState<Record<string, ContainerWindow | null>>({});
@@ -127,7 +128,7 @@ export function useDaemonSocket(
               break;
 
             case 'BOT_STATE': {
-              const { botId, state, reason, connectedAt, uptime, username, accountId } = data.payload;
+              const { botId, state, reason, connectedAt, uptime, username, accountId, version } = data.payload;
               if (botId) {
                 setBotStates((prev) => {
                   const next: Record<string, BotLifecycleState> = { ...prev, [botId]: state };
@@ -143,7 +144,15 @@ export function useDaemonSocket(
                     return next;
                   });
                 }
-                if (uptime !== undefined || connectedAt !== undefined) {
+                if (version) {
+                  setBotVersions((prev) => {
+                    const next: Record<string, string> = { ...prev, [botId]: version };
+                    if (username) next[username] = version;
+                    if (accountId) next[accountId] = version;
+                    return next;
+                  });
+                }
+                if (uptime !== undefined || connectedAt !== undefined || version !== undefined) {
                   setTelemetries((prev) => {
                     const updated: Telemetry = {
                       ...(prev[botId] || {
@@ -159,6 +168,7 @@ export function useDaemonSocket(
                       }),
                       connectedAt: connectedAt ?? prev[botId]?.connectedAt,
                       uptime: uptime ?? prev[botId]?.uptime,
+                      version: version ?? prev[botId]?.version,
                     };
                     const next: Record<string, Telemetry> = { ...prev, [botId]: updated };
                     if (username) next[username] = updated;
@@ -188,6 +198,9 @@ export function useDaemonSocket(
               const t: Telemetry = data.payload;
               if (t.botId) {
                 setTelemetries((prev) => ({ ...prev, [t.botId]: t }));
+                if (t.version) {
+                  setBotVersions((prev) => ({ ...prev, [t.botId]: t.version! }));
+                }
               }
               break;
             }
@@ -353,6 +366,7 @@ export function useDaemonSocket(
     containerWindow: currentWindow,
     botStates,
     botStateReasons,
+    botVersions,
     telemetries,
     messagesByBot,
     daemonUrl,

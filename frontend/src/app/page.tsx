@@ -426,6 +426,7 @@ export default function Dashboard() {
     containerWindow,
     botStates,
     botStateReasons,
+    botVersions,
     daemonUrl,
     authToken,
     saveSettings,
@@ -3393,18 +3394,57 @@ export default function Dashboard() {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-[11px] font-bold text-slate-600">Java version</label>
-                            <select
-                              value={activeServer.serverVersion}
-                              onChange={(e) => handleSaveServer({ ...activeServer, serverVersion: e.target.value })}
-                              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
-                            >
-                              <option value="auto">Auto Detect</option>
-                              <option value="1.20.4">1.20.4</option>
-                              <option value="1.20.2">1.20.2</option>
-                              <option value="1.20.1">1.20.1</option>
-                              <option value="1.19.4">1.19.4</option>
-                            </select>
+                            {(() => {
+                              const activeAcc = resolveServerAccount(activeServer);
+                              const detectedVersion =
+                                botVersions[activeServer.id] ||
+                                telemetries[activeServer.id]?.version ||
+                                (activeAcc ? (
+                                  botVersions[activeAcc.id] ||
+                                  (activeAcc.ign ? botVersions[activeAcc.ign] : undefined) ||
+                                  botVersions[activeAcc.username] ||
+                                  telemetries[activeAcc.id]?.version ||
+                                  (activeAcc.ign ? telemetries[activeAcc.ign]?.version : undefined) ||
+                                  telemetries[activeAcc.username]?.version
+                                ) : undefined) ||
+                                (activeServer.id === activeServerId ? telemetry?.version : undefined);
+
+                              return (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[11px] font-bold text-slate-600">Java version</label>
+                                    {activeServer.serverVersion === 'auto' && detectedVersion && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200 animate-in fade-in duration-200">
+                                        Connected: {detectedVersion}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <select
+                                    value={activeServer.serverVersion}
+                                    onChange={(e) => handleSaveServer({ ...activeServer, serverVersion: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 font-medium"
+                                  >
+                                    <option value="auto">
+                                      Auto Detect {detectedVersion ? `(${detectedVersion})` : ''}
+                                    </option>
+                                    <option value="1.21.4">1.21.4 (Latest)</option>
+                                    <option value="1.21.3">1.21.3</option>
+                                    <option value="1.21.2">1.21.2</option>
+                                    <option value="1.21.1">1.21.1</option>
+                                    <option value="1.21">1.21</option>
+                                    <option value="1.20.6">1.20.6</option>
+                                    <option value="1.20.4">1.20.4</option>
+                                    <option value="1.20.2">1.20.2</option>
+                                    <option value="1.20.1">1.20.1</option>
+                                    <option value="1.19.4">1.19.4</option>
+                                    <option value="1.18.2">1.18.2</option>
+                                    <option value="1.16.5">1.16.5</option>
+                                    <option value="1.12.2">1.12.2</option>
+                                    <option value="1.8.9">1.8.9</option>
+                                  </select>
+                                </>
+                              );
+                            })()}
                           </div>
 
                           <div className="space-y-1">

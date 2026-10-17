@@ -161,12 +161,14 @@ export class PocketBotInstance {
   private setState(state: BotLifecycleState, reason?: string) {
     this.state = state;
     const uptime = this.connectedAt ? Math.floor((Date.now() - this.connectedAt) / 1000) : 0;
+    const detectedVer = this.bot?.version || (this.bot as any)?._client?.version || (this.config.version !== 'auto' ? this.config.version : undefined);
     this.broadcast({
       type: 'BOT_STATE',
       payload: {
         botId: this.config.id,
         username: this.config.username,
         accountId: this.config.accountId,
+        version: detectedVer,
         state: this.state,
         reason,
         connectedAt: this.connectedAt || 0,
@@ -507,10 +509,12 @@ export class PocketBotInstance {
     if (!this.bot || !this.bot.entity || !this.bot.entity.position || this.state !== 'SPAWNED') return;
 
     const pos = this.bot.entity.position;
+    const detectedVer = this.bot?.version || (this.bot as any)?._client?.version || (this.config.version !== 'auto' ? this.config.version : undefined);
     const payload: TelemetryPayload = {
       botId: this.config.id,
       accountUsername: this.bot?.username || this.config.username,
       connectedAt: this.connectedAt || 0,
+      version: detectedVer,
       health: this.bot.health || 20,
       maxHealth: 20,
       food: this.bot.food || 20,

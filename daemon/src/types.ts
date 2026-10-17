@@ -48,6 +48,7 @@ export interface TelemetryPayload {
   botId: string;
   accountUsername?: string;
   connectedAt?: number;
+  version?: string;
   health: number;
   maxHealth: number;
   food: number;
@@ -100,7 +101,7 @@ export type ClientMessage =
 // Daemon to Client Messages
 export type DaemonMessage =
   | { type: 'AUTH_RESULT'; payload: { success: boolean; message?: string } }
-  | { type: 'BOT_STATE'; payload: { botId: string; username?: string; accountId?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
+  | { type: 'BOT_STATE'; payload: { botId: string; username?: string; accountId?: string; version?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
   | { type: 'CHAT_MESSAGE'; payload: ChatMessagePayload }
   | { type: 'TELEMETRY'; payload: TelemetryPayload }
   | { type: 'CONTAINER_WINDOW'; payload: ContainerWindowPayload }
