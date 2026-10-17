@@ -229,18 +229,10 @@ echo -e "  ${BOLD}💡 Note:${NC} You can simply open ${GREEN}https://pocketafk.
 echo -e "  The website will ${BOLD}automatically detect${NC} this phone's tunnel!"
 echo -e "  ${GRAY}(To stop PocketAFK, press Ctrl+C anytime)${NC}\n"
 
-echo -e "  ${CYAN}📡 Live Daemon & Minecraft Activity Feed (Real-Time):${NC}"
-echo -e "${GRAY}─────────────────────────────────────────────────────────────────────────────${NC}"
-
-# Tail daemon.log in background so Termux shows live in-game events
-tail -n 15 -f daemon.log &
-TAIL_PID=$!
-
 # Trap exit
 cleanup() {
   echo -e "\n\n${YELLOW}[!] Stopping PocketAFK processes cleanly...${NC}"
   kill $HEARTBEAT_PID 2>/dev/null
-  kill $TAIL_PID 2>/dev/null
   kill $DAEMON_PID 2>/dev/null
   pkill -f "tsx src/index.ts" 2>/dev/null || true
   kill $TUNNEL_PID 2>/dev/null
