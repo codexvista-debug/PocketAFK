@@ -112,3 +112,26 @@ export interface ContainerWindow {
   slotsCount: number;
   slots: (ContainerSlot | null)[];
 }
+
+export type PlayerLogType =
+  | 'connecting'
+  | 'handshake'
+  | 'connected'
+  | 'spawned'
+  | 'kicked'
+  | 'error'
+  | 'disconnected'
+  | 'reconnecting'
+  | 'chat'
+  | 'info';
+
+export interface PlayerLogEntry {
+  id: string;
+  accountName: string;
+  serverHost: string;
+  timestamp: number;
+  type: PlayerLogType;
+  message: string;
+  details?: string;
+  status: 'info' | 'success' | 'warning' | 'error';
+}

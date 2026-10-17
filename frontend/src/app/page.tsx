@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDaemonSocket, AccountVerifiedData } from '../lib/useDaemonSocket';
-import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState, QuickCommandItem } from '../types';
+import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState, QuickCommandItem, PlayerLogEntry, PlayerLogType } from '../types';
 import { Terminal } from '../components/Terminal';
 import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
@@ -15,6 +15,7 @@ import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
 import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickCommandsModal';
+import { AccountLogsModal } from '../components/AccountLogsModal';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -28,6 +29,8 @@ import {
   loadAccountsFromSupabase,
   saveQuickCommandsToSupabase,
   loadQuickCommandsFromSupabase,
+  saveAccountLogsToSupabase,
+  loadAccountLogsFromSupabase,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -76,6 +79,7 @@ import {
   Copy,
   ArrowUpDown,
   Upload,
+  FileText,
 } from 'lucide-react';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
@@ -160,6 +164,111 @@ export default function Dashboard() {
   const [isContainerOpen, setIsContainerOpen] = useState(false);
   const [isQuickCommandsModalOpen, setIsQuickCommandsModalOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
+  const [selectedLogsAccount, setSelectedLogsAccount] = useState<MinecraftAccount | null>(null);
+  const [isAccountLogsOpen, setIsAccountLogsOpen] = useState(false);
+  const [accountLogsMap, setAccountLogsMap] = useState<Record<string, PlayerLogEntry[]>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('pocketafk_user') || 'guest';
+        const saved = localStorage.getItem(`pocketafk_player_logs_${u}`);
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {};
+  });
+
+  // Player Audit & Connection Logs Handlers
+  const addPlayerLog = useCallback(
+    (
+      accountName: string,
+      serverHost: string,
+      type: PlayerLogType,
+      message: string,
+      details?: string,
+      status: 'info' | 'success' | 'warning' | 'error' = 'info'
+    ) => {
+      if (!accountName) return;
+      const cleanName = accountName.replace(/^@/, '').trim();
+      const newEntry: PlayerLogEntry = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        accountName: cleanName,
+        serverHost: serverHost || 'Configured Server',
+        timestamp: Date.now(),
+        type,
+        message,
+        details,
+        status,
+      };
+
+      setAccountLogsMap((prev) => {
+        const currentList = prev[cleanName] || [];
+        if (
+          currentList.length > 0 &&
+          currentList[0].message === message &&
+          Date.now() - currentList[0].timestamp < 2000
+        ) {
+          return prev;
+        }
+        const updatedList = [newEntry, ...currentList].slice(0, 150);
+        const updatedMap = { ...prev, [cleanName]: updatedList };
+
+        if (typeof window !== 'undefined') {
+          const u = currentUser || 'guest';
+          try {
+            localStorage.setItem(`pocketafk_player_logs_${u}`, JSON.stringify(updatedMap));
+          } catch (e) {}
+        }
+
+        if (currentUser) {
+          saveAccountLogsToSupabase(currentUser, cleanName, updatedList).catch(() => {});
+        }
+
+        return updatedMap;
+      });
+    },
+    [currentUser]
+  );
+
+  const handleOpenAccountLogs = async (acc: MinecraftAccount) => {
+    setSelectedLogsAccount(acc);
+    setIsAccountLogsOpen(true);
+    const cleanName = (acc.ign || acc.expectedIgn || acc.username || '').replace(/^@/, '').trim();
+    if (currentUser && cleanName) {
+      try {
+        const remoteLogs = await loadAccountLogsFromSupabase(currentUser, cleanName);
+        if (remoteLogs && remoteLogs.length > 0) {
+          setAccountLogsMap((prev) => {
+            const current = prev[cleanName] || [];
+            const map = new Map<string, PlayerLogEntry>();
+            [...current, ...remoteLogs].forEach((l) => map.set(l.id, l));
+            const merged = Array.from(map.values())
+              .sort((a, b) => b.timestamp - a.timestamp)
+              .slice(0, 150);
+            return { ...prev, [cleanName]: merged };
+          });
+        }
+      } catch (err) {}
+    }
+  };
+
+  const handleClearAccountLogs = () => {
+    if (!selectedLogsAccount) return;
+    const cleanName = (selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '')
+      .replace(/^@/, '')
+      .trim();
+    setAccountLogsMap((prev) => {
+      const updated = { ...prev, [cleanName]: [] };
+      if (typeof window !== 'undefined') {
+        const u = currentUser || 'guest';
+        localStorage.setItem(`pocketafk_player_logs_${u}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+    if (currentUser && cleanName) {
+      saveAccountLogsToSupabase(currentUser, cleanName, []).catch(() => {});
+    }
+    showToast(`Logs cleared for @${cleanName}`, 'info');
+  };
 
   // In-app Microsoft OAuth Polling state
   const [isPollingMs, setIsPollingMs] = useState(false);
@@ -535,6 +644,103 @@ export default function Dashboard() {
       return changed ? next : prev;
     });
   }, [telemetry, telemetries, currentUser]);
+
+  // Real-time automatic audit logging on bot state transitions
+  const prevBotStateRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    Object.entries(botStates).forEach(([bId, st]) => {
+      const prevSt = prevBotStateRef.current[bId];
+      if (prevSt === st) return;
+      prevBotStateRef.current[bId] = st;
+
+      const srv = servers.find((s) => s.id === bId) || activeServer;
+      const acc = srv ? resolveServerAccount(srv) : activeAccount;
+      const cleanName = acc?.ign || acc?.username;
+      if (!cleanName || !srv) return;
+
+      if (st === 'CONNECTING') {
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'connecting',
+          `Initiating TCP connection to ${srv.serverHost}:${srv.serverPort}...`,
+          `Join delay: ${srv.settings?.joinDelay || 0}s`,
+          'info'
+        );
+      } else if (st === 'LOGGED_IN') {
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'handshake',
+          `Server accepted connection. Session authenticated with Mojang.`,
+          undefined,
+          'success'
+        );
+      } else if (st === 'SPAWNED') {
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'spawned',
+          `Spawned into world successfully on ${srv.serverHost}. AFK engine active.`,
+          undefined,
+          'success'
+        );
+      } else if (st === 'KICKED') {
+        const reason = botStateReasons?.[bId] || botStateReason || 'Kicked by remote host';
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'kicked',
+          `Kicked from server: ${reason}`,
+          undefined,
+          'error'
+        );
+      } else if (st === 'ERROR') {
+        const reason = botStateReasons?.[bId] || botStateReason || 'Socket connection error';
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'error',
+          `Connection error: ${reason}`,
+          undefined,
+          'error'
+        );
+      }
+    });
+  }, [botStates, botStateReasons, botStateReason, servers, activeServer, resolveServerAccount, activeAccount, addPlayerLog]);
+
+  // Real-time automatic audit logging on incoming messages / server disconnects / kicks
+  const lastLoggedMsgIdRef = useRef<string>('');
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const latest = messages[messages.length - 1];
+    if (!latest || latest.id === lastLoggedMsgIdRef.current) return;
+    lastLoggedMsgIdRef.current = latest.id;
+
+    const srv = activeServer;
+    const acc = srv ? resolveServerAccount(srv) : activeAccount;
+    const cleanName = latest.accountUsername || acc?.ign || acc?.username;
+    if (!cleanName || !srv) return;
+
+    if (latest.type === 'session_divider') {
+      addPlayerLog(cleanName, srv.serverHost, 'connecting', latest.raw, undefined, 'info');
+    } else if (latest.raw.includes('multiplayer.disconnect.duplicate_login')) {
+      addPlayerLog(
+        cleanName,
+        srv.serverHost,
+        'kicked',
+        'Kicked from server: duplicate_login (Another instance or session logged in)',
+        latest.raw,
+        'error'
+      );
+    } else if (latest.raw.toLowerCase().includes('kicked from server')) {
+      addPlayerLog(cleanName, srv.serverHost, 'kicked', latest.raw, undefined, 'error');
+    } else if (latest.type === 'error' || latest.raw.toLowerCase().includes('connection closed')) {
+      addPlayerLog(cleanName, srv.serverHost, 'error', latest.raw, undefined, 'error');
+    } else if (latest.raw.toLowerCase().includes('verified java account')) {
+      addPlayerLog(cleanName, srv.serverHost, 'handshake', latest.raw, undefined, 'success');
+    }
+  }, [messages, activeServer, activeAccount, resolveServerAccount, addPlayerLog]);
 
   // Automatically close Microsoft Authentication popup and dismiss Connecting toast once bot is connected
   useEffect(() => {
@@ -1208,6 +1414,14 @@ export default function Dashboard() {
       version: profile.serverVersion === 'auto' ? false : profile.serverVersion,
       settings: profile.settings || DEFAULT_BOT_SETTINGS,
     });
+    addPlayerLog(
+      cleanPlayerName,
+      profile.serverHost,
+      'connecting',
+      `Manual connection initiated: @${cleanPlayerName} -> ${profile.serverHost}:${profile.serverPort}`,
+      `Protocol: ${profile.serverVersion || 'auto'}`,
+      'info'
+    );
     showToast(`Connecting to ${profile.serverHost} as @${cleanPlayerName}...`, 'info');
   };
 
@@ -1215,6 +1429,17 @@ export default function Dashboard() {
     const srv = servers.find((s) => s.id === profileId);
     const acc = srv ? resolveServerAccount(srv) : activeAccount;
     const cleanPlayerName = acc?.ign || acc?.username;
+
+    if (cleanPlayerName && srv) {
+      addPlayerLog(
+        cleanPlayerName,
+        srv.serverHost,
+        'disconnected',
+        `Bot session terminated by user.`,
+        undefined,
+        'warning'
+      );
+    }
 
     // Remove from local sessionStartTimes
     setSessionStartTimes((prev) => {
@@ -1571,6 +1796,30 @@ export default function Dashboard() {
           onSave={handleSaveQuickCommands}
         />
       )}
+
+      {/* Player Connection & Audit Logs Modal */}
+      <AccountLogsModal
+        isOpen={isAccountLogsOpen}
+        onClose={() => {
+          setIsAccountLogsOpen(false);
+          setSelectedLogsAccount(null);
+        }}
+        account={selectedLogsAccount}
+        serverHost={activeServer?.serverHost}
+        logs={
+          selectedLogsAccount
+            ? accountLogsMap[(selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '').replace(/^@/, '').trim()] || []
+            : []
+        }
+        onClearLogs={handleClearAccountLogs}
+        isLiveConnected={
+          Boolean(
+            selectedLogsAccount &&
+            activeAccount?.id === selectedLogsAccount.id &&
+            (botState === 'SPAWNED' || botState === 'LOGGED_IN')
+          )
+        }
+      />
 
       {/* LOGGED OUT GATEWAY */}
       {!currentUser ? (
@@ -2273,6 +2522,17 @@ export default function Dashboard() {
                                           ) : (
                                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                                           )}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleOpenAccountLogs(acc);
+                                            }}
+                                            className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition cursor-pointer shadow-2xs ml-0.5 group"
+                                            title="View connection & audit logs for this account"
+                                          >
+                                            <FileText className="w-3 h-3 group-hover:scale-110 transition-transform text-slate-500 hover:text-emerald-600" />
+                                          </button>
                                         </div>
                                         {acc.authError ? (
                                           <p className="text-[10px] text-rose-600 font-medium leading-tight max-w-[220px] mt-0.5">
@@ -2519,6 +2779,17 @@ export default function Dashboard() {
                                             ) : (
                                               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                                             )}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenAccountLogs(acc);
+                                              }}
+                                              className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition cursor-pointer shadow-2xs ml-0.5 group"
+                                              title="View connection & audit logs for this account"
+                                            >
+                                              <FileText className="w-3 h-3 group-hover:scale-110 transition-transform text-slate-500 hover:text-emerald-600" />
+                                            </button>
                                           </div>
                                           {acc.authError && (
                                             <p className="text-[10px] text-rose-600 font-medium leading-tight max-w-[220px] mt-0.5">

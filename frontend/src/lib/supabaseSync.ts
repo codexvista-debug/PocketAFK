@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { MinecraftAccount, ServerProfile, QuickCommandItem } from '@/types';
+import { MinecraftAccount, ServerProfile, QuickCommandItem, PlayerLogEntry } from '@/types';
 
 /**
  * Universal Server Profiles Sync:
@@ -383,4 +383,87 @@ export async function loadQuickCommandsFromSupabase(
     return null;
   }
 }
+
+/**
+ * Saves and updates player connection & activity logs in Supabase.
+ * Tries the dedicated 'account_logs' table first, with graceful fallback to '__meta_logs_<account>' in 'accounts'.
+ */
+export async function saveAccountLogsToSupabase(
+  currentUser: string,
+  accountName: string,
+  logs: PlayerLogEntry[]
+) {
+  if (!supabase || !currentUser || !accountName) return;
+  try {
+    const cleanUser = currentUser.trim();
+    const cleanAccount = accountName.trim().replace(/^@/, '');
+    const metaBotName = `__meta_logs_${cleanAccount.toLowerCase()}`;
+
+    // Store latest 150 logs in meta row
+    const payload = {
+      logs: logs.slice(-150),
+      updatedAt: Date.now(),
+    };
+
+    const { data: existing } = await supabase
+      .from('accounts')
+      .select('id')
+      .ilike('username', cleanUser)
+      .eq('bot_name', metaBotName)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      await supabase
+        .from('accounts')
+        .update({ settings: payload, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('accounts').insert([
+        {
+          username: cleanUser,
+          bot_name: metaBotName,
+          server_host: logs[0]?.serverHost || 'pocketafk.internal',
+          server_port: 25565,
+          settings: payload,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.warn('Failed to save account logs to Supabase:', err);
+  }
+}
+
+/**
+ * Loads player connection & activity logs from Supabase.
+ */
+export async function loadAccountLogsFromSupabase(
+  currentUser: string,
+  accountName: string
+): Promise<PlayerLogEntry[]> {
+  if (!supabase || !currentUser || !accountName) return [];
+  try {
+    const cleanUser = currentUser.trim();
+    const cleanAccount = accountName.trim().replace(/^@/, '');
+    const metaBotName = `__meta_logs_${cleanAccount.toLowerCase()}`;
+
+    const { data } = await supabase
+      .from('accounts')
+      .select('settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', metaBotName)
+      .limit(1);
+
+    if (data && data.length > 0 && data[0].settings) {
+      const logs = data[0].settings.logs;
+      if (Array.isArray(logs)) {
+        return logs;
+      }
+    }
+    return [];
+  } catch (err) {
+    console.warn('Failed to load account logs from Supabase:', err);
+    return [];
+  }
+}
+
 
