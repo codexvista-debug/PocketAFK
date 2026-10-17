@@ -128,29 +128,14 @@ export function useDaemonSocket(
               break;
 
             case 'BOT_STATE': {
-              const { botId, state, reason, connectedAt, uptime, username, accountId, version } = data.payload;
+              const { botId, state, reason, connectedAt, uptime, username, version } = data.payload;
               if (botId) {
-                setBotStates((prev) => {
-                  const next: Record<string, BotLifecycleState> = { ...prev, [botId]: state };
-                  if (username) next[username] = state;
-                  if (accountId) next[accountId] = state;
-                  return next;
-                });
+                setBotStates((prev) => ({ ...prev, [botId]: state }));
                 if (reason !== undefined) {
-                  setBotStateReasons((prev) => {
-                    const next: Record<string, string> = { ...prev, [botId]: reason };
-                    if (username) next[username] = reason;
-                    if (accountId) next[accountId] = reason;
-                    return next;
-                  });
+                  setBotStateReasons((prev) => ({ ...prev, [botId]: reason }));
                 }
                 if (version) {
-                  setBotVersions((prev) => {
-                    const next: Record<string, string> = { ...prev, [botId]: version };
-                    if (username) next[username] = version;
-                    if (accountId) next[accountId] = version;
-                    return next;
-                  });
+                  setBotVersions((prev) => ({ ...prev, [botId]: version }));
                 }
                 if (uptime !== undefined || connectedAt !== undefined || version !== undefined) {
                   setTelemetries((prev) => {
@@ -166,14 +151,12 @@ export function useDaemonSocket(
                         gamemode: 'survival',
                         ping: 0,
                       }),
+                      accountUsername: username ?? prev[botId]?.accountUsername,
                       connectedAt: connectedAt ?? prev[botId]?.connectedAt,
                       uptime: uptime ?? prev[botId]?.uptime,
                       version: version ?? prev[botId]?.version,
                     };
-                    const next: Record<string, Telemetry> = { ...prev, [botId]: updated };
-                    if (username) next[username] = updated;
-                    if (accountId) next[accountId] = updated;
-                    return next;
+                    return { ...prev, [botId]: updated };
                   });
                 }
                 // Automatically dismiss Microsoft Auth modal once the bot connects or logs in!

@@ -628,14 +628,20 @@ export default function Dashboard() {
             // If no recorded start, or daemon started earlier than recorded, or more than 3 seconds off
             if (!currentStart || daemonStart < currentStart || Math.abs(currentStart - daemonStart) > 3000) {
               next[t.botId] = daemonStart;
-              if (t.accountUsername) {
-                next[t.accountUsername] = daemonStart;
-              }
               changed = true;
             }
           }
         }
       });
+
+      // Clean up any legacy non-server keys (e.g. username/account IDs from earlier versions)
+      const validServerIds = new Set(servers.map((s) => s.id));
+      for (const k of Object.keys(next)) {
+        if (!validServerIds.has(k)) {
+          delete next[k];
+          changed = true;
+        }
+      }
 
       if (changed && typeof window !== 'undefined') {
         const u = currentUser || 'guest';
@@ -2725,31 +2731,30 @@ export default function Dashboard() {
                                   activeServer.accountId === acc.ign ||
                                   activeServer.accountId === acc.username;
 
-                                const currentBotState: BotLifecycleState =
-                                  botStates[acc.id] ||
-                                  (acc.ign && botStates[acc.ign]) ||
-                                  (acc.username && botStates[acc.username]) ||
-                                  (isAssignedActive ? (botStates[activeServer.id] || botState) : undefined) ||
+                                const thisServerBotState: BotLifecycleState =
+                                  (activeServer.id === activeServerId ? botState : botStates[activeServer.id]) ||
+                                  botStates[activeServer.id] ||
                                   'DISCONNECTED';
+
+                                const currentBotState: BotLifecycleState = isAssignedActive
+                                  ? thisServerBotState
+                                  : 'DISCONNECTED';
+
+                                const otherRunningServer = servers.find(
+                                  (s) =>
+                                    s.id !== activeServer.id &&
+                                    (botStates[s.id] === 'SPAWNED' || botStates[s.id] === 'LOGGED_IN' || botStates[s.id] === 'CONNECTING') &&
+                                    (s.accountId === acc.id || s.accountId === acc.ign || s.accountId === acc.username || s.assignedAccountIds?.includes(acc.id))
+                                );
 
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
                                 const isBotConnecting = currentBotState === 'CONNECTING';
                                 const isBotActive = isBotOnline || isBotConnecting;
 
-                                const srvStart =
-                                  sessionStartTimes[activeServer.id] ||
-                                  sessionStartTimes[acc.id] ||
-                                  (acc.ign && sessionStartTimes[acc.ign]) ||
-                                  sessionStartTimes[acc.username] ||
-                                  sessionStartTimes[activeServer.serverHost] ||
-                                  acc.settings?.connected_at;
+                                const srvStart = sessionStartTimes[activeServer.id];
                                 const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
-                                const srvTel =
-                                  telemetries?.[activeServer.id] ||
-                                  (acc.ign && telemetries?.[acc.ign]) ||
-                                  telemetries?.[acc.id] ||
-                                  (telemetry?.botId === activeServer.id ? telemetry : null);
+                                const srvTel = telemetries?.[activeServer.id] || (telemetry?.botId === activeServer.id ? telemetry : null);
                                 const daemonUptime =
                                   srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
                                     ? srvTel.uptime
@@ -2833,34 +2838,44 @@ export default function Dashboard() {
                                           Failed (Retry)
                                         </button>
                                       ) : (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (!activeServer) return;
-                                            if (socketStatus !== 'AUTHENTICATED') {
-                                              showToast('Cannot toggle: Termux daemon is offline. Start daemon first.', 'error');
-                                              return;
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (!activeServer) return;
+                                              if (socketStatus !== 'AUTHENTICATED') {
+                                                showToast('Cannot toggle: Termux daemon is offline. Start daemon first.', 'error');
+                                                return;
+                                              }
+                                              if (isBotActive) {
+                                                handleStopServer(activeServer.id, acc);
+                                              } else {
+                                                const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
+                                                const updatedAssigned = Array.from(new Set([...currentAssigned, acc.id]));
+                                                const updated = { ...activeServer, accountId: acc.id, assignedAccountIds: updatedAssigned };
+                                                handleSaveServer(updated);
+                                                handleStartServer(updated, acc);
+                                              }
+                                            }}
+                                            className="group inline-flex items-center transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                                            title={
+                                              isBotActive
+                                                ? `Online • Click to disconnect @${acc.ign || acc.username}`
+                                                : `Offline • Click to connect @${acc.ign || acc.username}`
                                             }
-                                            if (isBotActive) {
-                                              handleStopServer(activeServer.id, acc);
-                                            } else {
-                                              const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
-                                              const updatedAssigned = Array.from(new Set([...currentAssigned, acc.id]));
-                                              const updated = { ...activeServer, accountId: acc.id, assignedAccountIds: updatedAssigned };
-                                              handleSaveServer(updated);
-                                              handleStartServer(updated, acc);
-                                            }
-                                          }}
-                                          className="group inline-flex items-center transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
-                                          title={
-                                            isBotActive
-                                              ? `Online • Click to disconnect @${acc.ign || acc.username}`
-                                              : `Offline • Click to connect @${acc.ign || acc.username}`
-                                          }
-                                        >
-                                          {getStatusBadge(currentBotState)}
-                                        </button>
+                                          >
+                                            {getStatusBadge(currentBotState)}
+                                          </button>
+                                          {!isBotActive && otherRunningServer && (
+                                            <span
+                                              className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full shadow-2xs"
+                                              title={`This account is currently active in server profile "${otherRunningServer.name}"`}
+                                            >
+                                              In {otherRunningServer.name}
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </td>
                                     <td className="p-3">
