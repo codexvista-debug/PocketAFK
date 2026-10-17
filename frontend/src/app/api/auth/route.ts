@@ -80,10 +80,17 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Username is already taken' }, { status: 400 });
         }
 
-        // Store cryptographically hashed password
-        const { error } = await supabase.from('users').insert([
-          { username: cleanUsername, password_hash: hashedPassword }
+        // Store cryptographically hashed password (with rank if column exists)
+        let { error } = await supabase.from('users').insert([
+          { username: cleanUsername, password_hash: hashedPassword, rank: 'iron' }
         ]);
+
+        if (error && (error.message?.includes('rank') || error.code === 'PGRST204')) {
+          const fallback = await supabase.from('users').insert([
+            { username: cleanUsername, password_hash: hashedPassword }
+          ]);
+          error = fallback.error;
+        }
 
         if (error) {
           return NextResponse.json({ error: error.message }, { status: 500 });

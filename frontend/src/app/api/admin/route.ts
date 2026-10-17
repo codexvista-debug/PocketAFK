@@ -495,10 +495,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `User '${cleanUsername}' already exists` }, { status: 400 });
       }
 
-      // Insert user
-      const { error: insErr } = await supabase.from('users').insert([
-        { username: cleanUsername, password_hash: hashedPassword },
+      // Insert user (with rank if column exists)
+      let { error: insErr } = await supabase.from('users').insert([
+        { username: cleanUsername, password_hash: hashedPassword, rank: cleanRank },
       ]);
+
+      if (insErr && (insErr.message?.includes('rank') || (insErr as any).code === 'PGRST204')) {
+        const fallback = await supabase.from('users').insert([
+          { username: cleanUsername, password_hash: hashedPassword },
+        ]);
+        insErr = fallback.error;
+      }
 
       if (insErr) {
         return NextResponse.json({ error: insErr.message }, { status: 500 });
