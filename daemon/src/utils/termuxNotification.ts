@@ -19,8 +19,7 @@ function getCachedUsername(): string {
 }
 
 function formatCompactUptime(sec: number): string {
-  if (sec <= 0) return '0s';
-  if (sec < 60) return `${sec}s`;
+  if (sec < 60) return '< 1m';
   const m = Math.floor(sec / 60);
   if (m < 60) return `${m}m`;
   const h = Math.floor(sec / 3600);
