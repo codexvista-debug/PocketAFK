@@ -122,13 +122,9 @@ export const Terminal: React.FC<TerminalProps> = ({
               <span className="font-extrabold text-slate-900 tracking-tight truncate text-xs">
                 {serverName || 'Live Game Console'}
               </span>
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Sync
-              </span>
             </div>
             {serverHost && (
-              <span className="text-[11px] text-slate-500 font-mono block truncate mt-0.5">
+              <span className="hidden sm:block text-[11px] text-slate-500 font-mono truncate mt-0.5">
                 {serverHost}{serverPort ? `:${serverPort}` : ''}
               </span>
             )}
