@@ -127,16 +127,25 @@ export function useDaemonSocket(
               break;
 
             case 'BOT_STATE': {
-              const { botId, state, reason, connectedAt, uptime } = data.payload;
+              const { botId, state, reason, connectedAt, uptime, username, accountId } = data.payload;
               if (botId) {
-                setBotStates((prev) => ({ ...prev, [botId]: state }));
+                setBotStates((prev) => {
+                  const next: Record<string, BotLifecycleState> = { ...prev, [botId]: state };
+                  if (username) next[username] = state;
+                  if (accountId) next[accountId] = state;
+                  return next;
+                });
                 if (reason !== undefined) {
-                  setBotStateReasons((prev) => ({ ...prev, [botId]: reason }));
+                  setBotStateReasons((prev) => {
+                    const next: Record<string, string> = { ...prev, [botId]: reason };
+                    if (username) next[username] = reason;
+                    if (accountId) next[accountId] = reason;
+                    return next;
+                  });
                 }
                 if (uptime !== undefined || connectedAt !== undefined) {
-                  setTelemetries((prev) => ({
-                    ...prev,
-                    [botId]: {
+                  setTelemetries((prev) => {
+                    const updated: Telemetry = {
                       ...(prev[botId] || {
                         botId,
                         health: 20,
@@ -150,8 +159,12 @@ export function useDaemonSocket(
                       }),
                       connectedAt: connectedAt ?? prev[botId]?.connectedAt,
                       uptime: uptime ?? prev[botId]?.uptime,
-                    },
-                  }));
+                    };
+                    const next: Record<string, Telemetry> = { ...prev, [botId]: updated };
+                    if (username) next[username] = updated;
+                    if (accountId) next[accountId] = updated;
+                    return next;
+                  });
                 }
                 // Automatically dismiss Microsoft Auth modal once the bot connects or logs in!
                 if (state === 'LOGGED_IN' || state === 'SPAWNED') {
@@ -263,12 +276,25 @@ export function useDaemonSocket(
   }, [enabled]);
 
   const startBot = useCallback((config: any) => {
+    if (config?.id) {
+      setBotStates((prev) => {
+        const next: Record<string, BotLifecycleState> = { ...prev, [config.id]: 'CONNECTING' as BotLifecycleState };
+        if (config.username) next[config.username] = 'CONNECTING';
+        if (config.accountId) next[config.accountId] = 'CONNECTING';
+        return next;
+      });
+    }
     return sendJson({ type: 'START_BOT', payload: config });
   }, [sendJson]);
 
-  const stopBot = useCallback((botId: string) => {
-    setBotStates((prev) => ({ ...prev, [botId]: 'DISCONNECTED' }));
-    return sendJson({ type: 'STOP_BOT', payload: { botId } });
+  const stopBot = useCallback((botId: string, accountId?: string, username?: string) => {
+    setBotStates((prev) => {
+      const next: Record<string, BotLifecycleState> = { ...prev, [botId]: 'DISCONNECTED' as BotLifecycleState };
+      if (accountId) next[accountId] = 'DISCONNECTED';
+      if (username) next[username] = 'DISCONNECTED';
+      return next;
+    });
+    return sendJson({ type: 'STOP_BOT', payload: { botId, accountId, username } });
   }, [sendJson]);
 
   const restartBot = useCallback((botId: string) => {

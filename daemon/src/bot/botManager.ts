@@ -54,11 +54,17 @@ export class BotManager {
       this.bots.delete(idOrName);
     }
 
-    // Match by ID, username, or active bot IGN
+    // Match by ID, username, accountId, or active bot IGN
     for (const [bId, instance] of Array.from(this.bots.entries())) {
       const cfgUser = instance.config?.username?.toLowerCase();
+      const cfgAccId = instance.config?.accountId?.toLowerCase();
       const botUser = instance.bot?.username?.toLowerCase();
-      if (bId.toLowerCase() === target || cfgUser === target || botUser === target) {
+      if (
+        bId.toLowerCase() === target ||
+        cfgUser === target ||
+        botUser === target ||
+        (cfgAccId && cfgAccId === target)
+      ) {
         instance.stop();
         this.bots.delete(bId);
       }
@@ -116,7 +122,9 @@ export class BotManager {
         break;
 
       case 'STOP_BOT':
-        this.stopBot(msg.payload.botId || (msg.payload as any).username || (msg.payload as any).ign);
+        this.stopBot(msg.payload.botId || (msg.payload as any).username || (msg.payload as any).accountId || (msg.payload as any).ign);
+        if (msg.payload.accountId) this.stopBot(msg.payload.accountId);
+        if (msg.payload.username) this.stopBot(msg.payload.username);
         break;
 
       case 'RESTART_BOT': {
@@ -226,6 +234,8 @@ export class BotManager {
             type: 'BOT_STATE',
             payload: {
               botId: bot.config.id,
+              username: bot.config.username,
+              accountId: bot.config.accountId,
               state: bot.state,
               connectedAt: bot.connectedAt || 0,
               uptime,

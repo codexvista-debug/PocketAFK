@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import mineflayer, { Bot } from 'mineflayer';
+const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
 
@@ -65,6 +66,8 @@ export class PocketBotInstance {
       const possibleTokenDirs = [
         path.resolve(process.cwd(), '..', 'tokens'),
         path.resolve(process.cwd(), 'profiles'),
+        path.join(minecraftFolderPath, 'nmp-cache'),
+        path.resolve(process.env.HOME || '', '.minecraft', 'nmp-cache'),
         path.resolve(process.cwd(), '..', 'VistaAFK', 'tokens'),
         path.resolve(process.cwd(), '..', 'VistaAFK', 'daemon', 'tokens'),
         path.resolve(process.env.HOME || '', 'tokens'),
@@ -162,6 +165,8 @@ export class PocketBotInstance {
       type: 'BOT_STATE',
       payload: {
         botId: this.config.id,
+        username: this.config.username,
+        accountId: this.config.accountId,
         state: this.state,
         reason,
         connectedAt: this.connectedAt || 0,

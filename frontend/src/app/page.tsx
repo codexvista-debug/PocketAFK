@@ -1371,8 +1371,12 @@ export default function Dashboard() {
   // Bot Lifecycle Controls
   const handleStartServer = (profile: ServerProfile, targetAcc?: MinecraftAccount | null) => {
     if (!currentUser) return;
+    if (socketStatus !== 'AUTHENTICATED') {
+      showToast('Cannot connect: Termux daemon is offline or not authenticated. Start Termux daemon first.', 'error');
+      return;
+    }
     const assignedAcc = targetAcc || resolveServerAccount(profile);
-    const cleanPlayerName = assignedAcc?.ign || assignedAcc?.username || profile.name;
+    const cleanPlayerName = (assignedAcc?.ign || assignedAcc?.username || profile.name).replace(/^@/, '').trim();
     const now = Date.now();
 
     // Optimistically record start time locally
@@ -1408,6 +1412,7 @@ export default function Dashboard() {
     startBot({
       id: profile.id,
       username: cleanPlayerName,
+      accountId: assignedAcc?.id,
       authType: 'microsoft',
       host: profile.serverHost,
       port: profile.serverPort,
@@ -1425,10 +1430,10 @@ export default function Dashboard() {
     showToast(`Connecting to ${profile.serverHost} as @${cleanPlayerName}...`, 'info');
   };
 
-  const handleStopServer = (profileId: string) => {
-    const srv = servers.find((s) => s.id === profileId);
-    const acc = srv ? resolveServerAccount(srv) : activeAccount;
-    const cleanPlayerName = acc?.ign || acc?.username;
+  const handleStopServer = (profileId: string, targetAcc?: MinecraftAccount | null) => {
+    const srv = servers.find((s) => s.id === profileId) || activeServer;
+    const acc = targetAcc || (srv ? resolveServerAccount(srv) : activeAccount);
+    const cleanPlayerName = (acc?.ign || acc?.username || '').replace(/^@/, '').trim();
 
     if (cleanPlayerName && srv) {
       addPlayerLog(
@@ -1460,8 +1465,8 @@ export default function Dashboard() {
       recordAccountConnectionStop(currentUser, cleanPlayerName).catch(() => {});
     }
 
-    stopBot(profileId);
-    showToast('Bot connection stopped.', 'info');
+    stopBot(profileId, acc?.id, cleanPlayerName);
+    showToast(`Bot connection stopped${cleanPlayerName ? ` (@${cleanPlayerName})` : ''}.`, 'info');
   };
 
   // Connect Selected / Disconnect Selected
@@ -1472,15 +1477,21 @@ export default function Dashboard() {
       showToast('Please select an account to connect.', 'error');
       return;
     }
-    // Update activeServer's assigned accountId
-    const updatedProfile = { ...activeServer, accountId: target.id };
+    const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
+    const updatedAssigned = Array.from(new Set([...currentAssigned, target.id]));
+    const updatedProfile: ServerProfile = {
+      ...activeServer,
+      accountId: target.id,
+      assignedAccountIds: updatedAssigned,
+    };
     handleSaveServer(updatedProfile);
     handleStartServer(updatedProfile, target);
   };
 
   const handleDisconnectSelected = () => {
     if (!activeServer) return;
-    handleStopServer(activeServer.id);
+    const target = accounts.find((a) => selectedAccountIds.includes(a.id)) || activeAccount;
+    handleStopServer(activeServer.id, target);
   };
 
   // Accounts assigned to current Server Profile (strictly filtered to existing accounts)
@@ -2718,19 +2729,37 @@ export default function Dashboard() {
                             ) : (
                               assignedAccounts.map((acc) => {
                                 const isChecked = selectedAccountIds.includes(acc.id);
-                                const isAssignedActive = activeAccount?.id === acc.id;
-                                const currentBotState = isAssignedActive ? (botStates[activeServer.id] || botState) : (botStates[acc.id] || 'DISCONNECTED');
+                                const isAssignedActive =
+                                  activeAccount?.id === acc.id ||
+                                  activeServer.accountId === acc.id ||
+                                  activeServer.accountId === acc.ign ||
+                                  activeServer.accountId === acc.username;
+
+                                const currentBotState: BotLifecycleState =
+                                  botStates[acc.id] ||
+                                  (acc.ign && botStates[acc.ign]) ||
+                                  (acc.username && botStates[acc.username]) ||
+                                  (isAssignedActive ? (botStates[activeServer.id] || botState) : undefined) ||
+                                  'DISCONNECTED';
+
                                 const isPinned = pinnedAccountIds.includes(acc.id);
-                                const isBotOnline = isAssignedActive && (currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN');
+                                const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
+                                const isBotConnecting = currentBotState === 'CONNECTING';
+                                const isBotActive = isBotOnline || isBotConnecting;
+
                                 const srvStart =
                                   sessionStartTimes[activeServer.id] ||
                                   sessionStartTimes[acc.id] ||
-                                  sessionStartTimes[acc.ign || ''] ||
+                                  (acc.ign && sessionStartTimes[acc.ign]) ||
                                   sessionStartTimes[acc.username] ||
                                   sessionStartTimes[activeServer.serverHost] ||
                                   acc.settings?.connected_at;
                                 const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
-                                const srvTel = telemetries?.[activeServer.id] || (telemetry?.botId === activeServer.id ? telemetry : null);
+                                const srvTel =
+                                  telemetries?.[activeServer.id] ||
+                                  (acc.ign && telemetries?.[acc.ign]) ||
+                                  telemetries?.[acc.id] ||
+                                  (telemetry?.botId === activeServer.id ? telemetry : null);
                                 const daemonUptime =
                                   srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
                                     ? srvTel.uptime
@@ -2801,12 +2830,50 @@ export default function Dashboard() {
                                     </td>
                                     <td className="p-3">
                                       {acc.authError ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartMicrosoftLogin(acc);
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition cursor-pointer shadow-2xs"
+                                          title="Verification failed - Click to re-authenticate with Microsoft"
+                                        >
                                           <AlertTriangle className="w-3 h-3 text-rose-600" />
-                                          Failed
-                                        </span>
+                                          Failed (Retry)
+                                        </button>
                                       ) : (
-                                        getStatusBadge(currentBotState)
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!activeServer) return;
+                                            if (socketStatus !== 'AUTHENTICATED') {
+                                              showToast('Cannot toggle: Termux daemon is offline. Start daemon first.', 'error');
+                                              return;
+                                            }
+                                            if (isBotActive) {
+                                              handleStopServer(activeServer.id, acc);
+                                            } else {
+                                              const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
+                                              const updatedAssigned = Array.from(new Set([...currentAssigned, acc.id]));
+                                              const updated = { ...activeServer, accountId: acc.id, assignedAccountIds: updatedAssigned };
+                                              handleSaveServer(updated);
+                                              handleStartServer(updated, acc);
+                                            }
+                                          }}
+                                          className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-full transition-all duration-150 hover:bg-slate-100 hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                                          title={
+                                            isBotActive
+                                              ? `Status: ${currentBotState} • Click to disconnect @${acc.ign || acc.username}`
+                                              : `Status: Offline • Click to connect @${acc.ign || acc.username} to ${activeServer.name}`
+                                          }
+                                        >
+                                          {getStatusBadge(currentBotState)}
+                                          <span className="text-[10px] font-mono text-slate-400 group-hover:text-emerald-700 transition-colors hidden sm:inline opacity-70 group-hover:opacity-100">
+                                            {isBotActive ? '✕ Disconnect' : '▶ Connect'}
+                                          </span>
+                                        </button>
                                       )}
                                     </td>
                                     <td className="p-3">
@@ -2851,9 +2918,9 @@ export default function Dashboard() {
                                           <Pin className="w-3.5 h-3.5" />
                                         </button>
 
-                                        {isAssignedActive && isActiveServerRunning ? (
+                                        {isBotActive ? (
                                           <button
-                                            onClick={() => handleStopServer(activeServer.id)}
+                                            onClick={() => handleStopServer(activeServer.id, acc)}
                                             className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition cursor-pointer"
                                             title="Disconnect bot"
                                           >
@@ -2862,7 +2929,9 @@ export default function Dashboard() {
                                         ) : (
                                           <button
                                             onClick={() => {
-                                              const updated = { ...activeServer, accountId: acc.id };
+                                              const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
+                                              const updatedAssigned = Array.from(new Set([...currentAssigned, acc.id]));
+                                              const updated = { ...activeServer, accountId: acc.id, assignedAccountIds: updatedAssigned };
                                               handleSaveServer(updated);
                                               handleStartServer(updated, acc);
                                             }}

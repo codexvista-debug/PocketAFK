@@ -16,6 +16,7 @@ export interface BotSettings {
 export interface BotConfig {
   id: string;
   username: string;
+  accountId?: string;
   authType: 'microsoft' | 'offline';
   host: string;
   port: number;
@@ -86,7 +87,7 @@ export interface ContainerWindowPayload {
 export type ClientMessage =
   | { type: 'AUTH'; payload: { token: string } }
   | { type: 'START_BOT'; payload: BotConfig }
-  | { type: 'STOP_BOT'; payload: { botId: string } }
+  | { type: 'STOP_BOT'; payload: { botId: string; accountId?: string; username?: string } }
   | { type: 'RESTART_BOT'; payload: { botId: string } }
   | { type: 'RESTART_DAEMON'; payload?: { reason?: string } }
   | { type: 'SEND_CHAT'; payload: { botId: string; message: string; targetAccount?: string } }
@@ -99,7 +100,7 @@ export type ClientMessage =
 // Daemon to Client Messages
 export type DaemonMessage =
   | { type: 'AUTH_RESULT'; payload: { success: boolean; message?: string } }
-  | { type: 'BOT_STATE'; payload: { botId: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
+  | { type: 'BOT_STATE'; payload: { botId: string; username?: string; accountId?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
   | { type: 'CHAT_MESSAGE'; payload: ChatMessagePayload }
   | { type: 'TELEMETRY'; payload: TelemetryPayload }
   | { type: 'CONTAINER_WINDOW'; payload: ContainerWindowPayload }
