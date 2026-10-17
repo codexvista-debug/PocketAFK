@@ -120,8 +120,14 @@ fi
 
 # 2. Start PocketAFK Node.js Daemon with auto-restart supervisor
 echo -e "\n${CYAN}[2/4]${NC} ☕ ${BOLD}Starting Mineflayer Java Core (Node.js LTS)...${NC}"
-pkill -f "tsx src/index.ts" 2>/dev/null || true
-pkill -f "cloudflared tunnel" 2>/dev/null || true
+pkill -9 -f "cloudflared" 2>/dev/null || true
+pkill -9 -f "tsx src/index.ts" 2>/dev/null || true
+pkill -9 -f "pocketafk_heartbeat" 2>/dev/null || true
+pkill -9 -f "curl.*tunnel" 2>/dev/null || true
+if [ -f "$HOME/.pocketafk_heartbeat.pid" ]; then
+  kill -9 "$(cat "$HOME/.pocketafk_heartbeat.pid")" 2>/dev/null || true
+  rm -f "$HOME/.pocketafk_heartbeat.pid"
+fi
 sleep 1
 
 # Write dedicated daemon owner to .env
@@ -187,7 +193,7 @@ AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}&user=${APP_USER}"
 echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
 SYNC_RESP=$(curl -s -X POST "$DASHBOARD_SYNC_URL" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\"}" 2>/dev/null)
+  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"register\"}" 2>/dev/null)
 
 if echo "$SYNC_RESP" | grep -q "Unauthorized"; then
   echo -e "      ${RED}✗ AUTHENTICATION FAILED: Secret key does not match user @${APP_USER}.${NC}"
@@ -201,17 +207,27 @@ else
   echo -e "      ${YELLOW}✓ Live sync broadcasted.${NC}"
 fi
 
-# 5. Start background heartbeat to keep tunnel alive in dashboard (every 20s)
+# 5. Start background heartbeat to keep tunnel alive in dashboard (every 15s)
 run_heartbeat_loop() {
-  while true; do
-    sleep 20
-    curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
-      -H "Content-Type: application/json" \
-      -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" >/dev/null 2>&1 || true
-  done
+  exec -a pocketafk_heartbeat bash -c '
+    APP_USER="$1"
+    WSS_URL="$2"
+    APP_SECRET="$3"
+    DASHBOARD_SYNC_URL="$4"
+    while true; do
+      sleep 15
+      RESP=$(curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
+        -H "Content-Type: application/json" \
+        -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" 2>/dev/null)
+      if echo "$RESP" | grep -q "\"stale\":true"; then
+        exit 0
+      fi
+    done
+  ' _ "$APP_USER" "$WSS_URL" "$APP_SECRET" "$DASHBOARD_SYNC_URL"
 }
 run_heartbeat_loop &
 HEARTBEAT_PID=$!
+echo "$HEARTBEAT_PID" > "$HOME/.pocketafk_heartbeat.pid"
 
 # Print Fancy Summary Card
 echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
@@ -230,11 +246,14 @@ echo -e "  ${GRAY}(To stop PocketAFK, press Ctrl+C anytime)${NC}\n"
 # Trap exit
 cleanup() {
   echo -e "\n\n${YELLOW}[!] Stopping PocketAFK processes cleanly...${NC}"
-  kill $HEARTBEAT_PID 2>/dev/null
-  kill $DAEMON_PID 2>/dev/null
-  pkill -f "tsx src/index.ts" 2>/dev/null || true
-  kill $TUNNEL_PID 2>/dev/null
-  pkill -f "cloudflared tunnel" 2>/dev/null || true
+  kill -9 $HEARTBEAT_PID 2>/dev/null || true
+  pkill -9 -f "pocketafk_heartbeat" 2>/dev/null || true
+  pkill -9 -f "curl.*tunnel" 2>/dev/null || true
+  rm -f "$HOME/.pocketafk_heartbeat.pid" 2>/dev/null || true
+  kill $DAEMON_PID 2>/dev/null || true
+  pkill -9 -f "tsx src/index.ts" 2>/dev/null || true
+  kill $TUNNEL_PID 2>/dev/null || true
+  pkill -9 -f "cloudflared" 2>/dev/null || true
 
   # Notify dashboard immediately that daemon has disconnected
   echo -e "      ${YELLOW}Syncing offline status to dashboard...${NC}"

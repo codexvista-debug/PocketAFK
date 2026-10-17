@@ -851,9 +851,10 @@ export default function Dashboard() {
 
     syncTunnel();
 
-    // If socket is not authenticated, poll /api/tunnel every 3 seconds so the phone's 1-click startup automatically links!
-    if (currentUser && socketStatus !== 'AUTHENTICATED') {
-      pollInterval = setInterval(syncTunnel, 3000);
+    // Fast dynamic polling: poll every 2s when connecting/disconnected so 1-click Termux links immediately, and every 6s when authenticated so phone restarts are picked up smoothly
+    if (currentUser) {
+      const pollMs = socketStatus === 'AUTHENTICATED' ? 6000 : 2000;
+      pollInterval = setInterval(syncTunnel, pollMs);
     }
 
     return () => {
@@ -861,6 +862,22 @@ export default function Dashboard() {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings, reconnectDaemon]);
+
+  // Whenever user opens the Termux Daemon Bridge modal, fetch fresh tunnel from API immediately
+  useEffect(() => {
+    if (isSettingsOpen && currentUser) {
+      fetch(`/api/tunnel?username=${encodeURIComponent(currentUser)}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((data) => {
+          const targetUrl = (data?.url || data?.tunnel_url || '').trim();
+          const targetToken = (data?.token || secretCode || authToken || '').trim();
+          if (targetUrl && targetUrl.startsWith('wss://') && targetUrl !== daemonUrl) {
+            saveSettings(targetUrl, targetToken);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isSettingsOpen, currentUser, secretCode, authToken, daemonUrl, saveSettings]);
 
   // Load Notes & Pinned state
   useEffect(() => {

@@ -28,7 +28,14 @@ export async function GET(req: NextRequest) {
   // 2. Fallback to Supabase if connected
   if (supabase) {
     try {
-      const { data } = await supabase.from('tunnels').select('*').ilike('username', username).maybeSingle();
+      const { data } = await supabase
+        .from('tunnels')
+        .select('*')
+        .ilike('username', username)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       if (data && data.daemon_url) {
         const updatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
         if (Date.now() - updatedAt < TUNNEL_TIMEOUT_MS) {
@@ -139,6 +146,35 @@ export async function POST(req: NextRequest) {
     let cleanUrl = url.trim();
     if (cleanUrl.startsWith('https://')) {
       cleanUrl = cleanUrl.replace('https://', 'wss://');
+    }
+
+    // Protection against zombie heartbeats:
+    // A heartbeat MUST NOT overwrite a different active tunnel URL!
+    if (action === 'heartbeat') {
+      let activeUrl = userTunnels.get(cleanUsername)?.url;
+      if (!activeUrl && supabase) {
+        try {
+          const { data } = await supabase
+            .from('tunnels')
+            .select('daemon_url')
+            .ilike('username', cleanUsername)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (data?.daemon_url) {
+            activeUrl = data.daemon_url;
+          }
+        } catch (e) {}
+      }
+
+      if (activeUrl && activeUrl !== cleanUrl) {
+        // Stale zombie heartbeat trying to overwrite a different active tunnel!
+        return NextResponse.json({
+          success: false,
+          stale: true,
+          message: `Stale heartbeat ignored: user @${cleanUsername} is active on ${activeUrl}`,
+        }, { status: 409 });
+      }
     }
 
     const record = {

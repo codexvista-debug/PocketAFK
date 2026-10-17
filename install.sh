@@ -55,6 +55,18 @@ else
   echo -e "\n\033[1;34m[3/3]\033[0m ⚙️  Modules verified."
 fi
 
-# 4. Launch daemon & tunnel
+# 4. Clean up any previous background instances
+pkill -9 -f "cloudflared" 2>/dev/null || true
+pkill -9 -f "tsx src/index.ts" 2>/dev/null || true
+pkill -9 -f "pocketafk_heartbeat" 2>/dev/null || true
+pkill -9 -f "curl.*tunnel" 2>/dev/null || true
+if [ -f "$HOME/.pocketafk_heartbeat.pid" ]; then
+  kill -9 "$(cat "$HOME/.pocketafk_heartbeat.pid")" 2>/dev/null || true
+  rm -f "$HOME/.pocketafk_heartbeat.pid"
+fi
+rm -f "$HOME/.pocketafk_accounts.json" 2>/dev/null || true
+sleep 1
+
+# 5. Launch daemon & tunnel
 chmod +x start.sh 2>/dev/null || true
-bash start.sh "$1"
+bash start.sh "$1" "$2"
