@@ -436,7 +436,7 @@ export default function Dashboard() {
 
       if (alreadyLinked) {
         showToast(
-          `Account '@${data.ign}' is already linked! Your browser is still logged into this account. Click 'Sign Out of Microsoft' in the sign-in modal or use an Incognito tab to link a different account.`,
+          `Account '@${data.ign}' is already linked! Please enter the Microsoft email for your other Minecraft account.`,
           'error'
         );
         return cleanAccounts;

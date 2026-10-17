@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       if (email && email.trim()) {
         verificationUri += `&login_hint=${encodeURIComponent(email.trim())}`;
       }
-      verificationUri += `&prompt=select_account`;
+      verificationUri += `&prompt=login`;
     }
 
     return NextResponse.json({

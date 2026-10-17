@@ -12,6 +12,7 @@ import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens, computeNameHas
 export class BotManager {
   private bots: Map<string, PocketBotInstance> = new Map();
   private broadcastFn: (msg: DaemonMessage) => void;
+  private currentVerificationId: number = 0;
 
   constructor(broadcastFn: (msg: DaemonMessage) => void) {
     this.broadcastFn = (msg: DaemonMessage) => {
@@ -99,6 +100,7 @@ export class BotManager {
   }
 
   public async verifyAccount(accountId: string, email?: string) {
+    const verificationId = ++this.currentVerificationId;
     const isNew = !email || email === 'new_account' || email.startsWith('acc_');
     const authKey = isNew ? `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` : email;
     console.log(chalk.cyan(`[Auth] Initiating Microsoft Device Verification for ${authKey} (Account ID: ${accountId})...`));
@@ -114,13 +116,15 @@ export class BotManager {
       const options = {
         authTitle: Titles.MinecraftNintendoSwitch,
         deviceType: 'Nintendo',
-        flow: 'live' as const
+        flow: 'live' as const,
+        forceRefresh: isNew ? true : false
       };
 
       const flow = new Authflow(authKey, profilesFolder, options, (data: any) => {
+        if (verificationId !== this.currentVerificationId) return;
         console.log(chalk.yellow(`[Auth Code] Code for ${authKey}: ${data.user_code}`));
         const directUri = data.user_code
-          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}&prompt=select_account`
+          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}&prompt=login`
           : (data.verification_uri || 'https://www.microsoft.com/link');
         this.broadcastFn({
           type: 'MS_AUTH_CODE',
@@ -134,6 +138,10 @@ export class BotManager {
       });
 
       const res = await flow.getMinecraftJavaToken({ fetchProfile: true });
+      if (verificationId !== this.currentVerificationId) {
+        console.log(chalk.yellow(`[Auth] Discarding outdated verification result for ${authKey}`));
+        return;
+      }
       const realIgn = res?.profile?.name;
       if (!realIgn) {
         throw new Error('This Microsoft account does not have a Minecraft Java profile.');
@@ -157,6 +165,7 @@ export class BotManager {
 
       console.log(chalk.green(`[Auth Success] Verified as Java IGN: ${realIgn} (90-day session saved)`));
     } catch (err: any) {
+      if (verificationId !== this.currentVerificationId) return;
       console.error(chalk.red(`[Auth Error] Failed to verify: ${err.message}`));
       this.broadcastFn({
         type: 'AUTH_RESULT',

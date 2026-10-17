@@ -28,10 +28,12 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
   if (!authData) return null;
 
-  // Ensure prompt=select_account is always present so Microsoft never auto-confirms an already-active session
+  // Ensure prompt=login is always present so Microsoft never auto-confirms an already-active session
   let forceAccountUrl = authData.url || 'https://www.microsoft.com/link';
   if (!forceAccountUrl.includes('prompt=')) {
-    forceAccountUrl += (forceAccountUrl.includes('?') ? '&' : '?') + 'prompt=select_account';
+    forceAccountUrl += (forceAccountUrl.includes('?') ? '&' : '?') + 'prompt=login';
+  } else if (forceAccountUrl.includes('prompt=select_account')) {
+    forceAccountUrl = forceAccountUrl.replace('prompt=select_account', 'prompt=login');
   }
 
   const handleCopyCode = () => {
@@ -118,7 +120,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
               className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
             >
               <ExternalLink className="w-4 h-4" />
-              Open Microsoft Login Page
+              Open Microsoft Sign-In (Private Login)
             </a>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -144,13 +146,13 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
           </div>
 
           {/* Multi-Account Advice Box */}
-          <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 text-left space-y-1.5">
-            <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Adding a 2nd or 3rd Account?</span>
+          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-left space-y-1.5">
+            <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
+              <KeyRound className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Private Multi-Account Authentication</span>
             </div>
-            <p className="text-[11px] text-amber-800 leading-relaxed">
-              If your browser automatically logs you into an already-linked account, click <b>Sign Out of Microsoft</b> above or paste the link into an <b>Incognito / Private tab</b> so you can enter the credentials for your new Minecraft account!
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Every sign-in forces a fresh login prompt (<code>prompt=login</code>). When Microsoft opens, sign in with the <b>different Microsoft email</b> that owns your second or third Minecraft account.
             </p>
           </div>
         </div>
