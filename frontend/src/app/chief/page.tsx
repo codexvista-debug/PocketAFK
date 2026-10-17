@@ -36,6 +36,8 @@ import {
   WifiOff,
   Smartphone,
   Globe,
+  BarChart3,
+  LogOut,
 } from 'lucide-react';
 import { RANKS, RANK_ORDER, UserRank } from '@/lib/ranks';
 
@@ -101,7 +103,7 @@ export default function ChiefAdminPage() {
   const [tunnels, setTunnels] = useState<AdminTunnelItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'users' | 'accounts' | 'overview'>('users');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'accounts'>('stats');
 
   // Search & Filter States
   const [userSearch, setUserSearch] = useState<string>('');
@@ -496,6 +498,19 @@ export default function ChiefAdminPage() {
     return `${s}s`;
   };
 
+  // Host distribution for Total Stats
+  const hostStats = useMemo(() => {
+    const map = new Map<string, { total: number; online: number }>();
+    accounts.forEach((acc) => {
+      const host = (acc.serverHost || 'Unknown Server').toLowerCase().trim();
+      const curr = map.get(host) || { total: 0, online: 0 };
+      curr.total += 1;
+      if (acc.isConnected) curr.online += 1;
+      map.set(host, curr);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
+  }, [accounts]);
+
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 font-sans flex flex-col md:flex-row">
       {/* LEFT SIDEBAR (Matching Dashboard Style) */}
@@ -532,7 +547,34 @@ export default function ChiefAdminPage() {
             Admin Sections
           </div>
 
-          {/* Tab 1: Users & Ranks */}
+          {/* Tab 1: Total Stats */}
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              activeTab === 'stats'
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-1 rounded-lg ${activeTab === 'stats' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                <BarChart3 className="w-3.5 h-3.5" />
+              </div>
+              <span>Total Stats</span>
+            </div>
+            {stats.totalConnected > 0 ? (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-600">
+                Overview
+              </span>
+            )}
+          </button>
+
+          {/* Tab 2: Users & Ranks */}
           <button
             onClick={() => setActiveTab('users')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -554,7 +596,7 @@ export default function ChiefAdminPage() {
             </span>
           </button>
 
-          {/* Tab 2: MC Accounts & Connections */}
+          {/* Tab 3: MC Accounts & Connections */}
           <button
             onClick={() => setActiveTab('accounts')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -619,27 +661,30 @@ export default function ChiefAdminPage() {
           </div>
         </div>
 
-        {/* Sidebar Footer with Admin Profile & Return to App */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2 shrink-0">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">
-                C
-              </div>
-              <span className="font-black text-xs text-slate-900">@Chief</span>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-              Root Panfi
+        {/* Desktop Bottom User Pill (matching Dashboard) */}
+        <div className="flex p-3 border-t border-slate-200 bg-slate-50/50 items-center justify-between gap-1 mt-auto shrink-0">
+          <div className="flex items-center gap-2 truncate min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-xs font-bold text-slate-800 font-mono truncate">
+              @Chief
             </span>
           </div>
-
-          <Link
-            href="/"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs cursor-pointer group"
-          >
-            <span>Back to Dashboard</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </Link>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 shrink-0 bg-sky-50 text-sky-800 border-sky-200 shadow-2xs font-mono"
+              title="Chief Administrator"
+            >
+              <span>💎</span>
+              <span>DIAMOND</span>
+            </span>
+            <Link
+              href="/"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              title="Exit to Dashboard"
+            >
+              <LogOut className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </aside>
 
@@ -650,42 +695,34 @@ export default function ChiefAdminPage() {
           {/* Breadcrumb Left */}
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-              {activeTab === 'users' ? <Users className="w-4 h-4" /> : <Server className="w-4 h-4" />}
+              {activeTab === 'stats' ? (
+                <BarChart3 className="w-4 h-4" />
+              ) : activeTab === 'users' ? (
+                <Users className="w-4 h-4" />
+              ) : (
+                <Server className="w-4 h-4" />
+              )}
             </div>
             <span className="text-xs font-bold text-slate-500">Chief Admin</span>
             <span className="text-slate-300">/</span>
             <span className="text-xs font-black text-emerald-800 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
-              {activeTab === 'users' ? 'Users & Ranks' : 'Minecraft Accounts & Connections'}
+              {activeTab === 'stats'
+                ? 'Total Stats & Overview'
+                : activeTab === 'users'
+                ? 'Users & Ranks'
+                : 'Minecraft Accounts & Connections'}
             </span>
           </div>
 
           {/* Header Actions Right */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => fetchData(false)}
-              disabled={refreshing}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-              title="Refresh Supabase data"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-600' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
-
-            <button
               onClick={() => setIsCreateUserOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-sm hover:shadow-emerald-500/25 active:scale-95 flex items-center gap-2 cursor-pointer ring-2 ring-emerald-500/20"
             >
-              <UserPlus className="w-3.5 h-3.5" />
+              <UserPlus className="w-4 h-4" />
               <span>Add User</span>
             </button>
-
-            <Link
-              href="/"
-              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
-            >
-              <span className="hidden sm:inline">Dashboard</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
-            </Link>
           </div>
         </header>
 
@@ -714,77 +751,274 @@ export default function ChiefAdminPage() {
             </div>
           )}
 
-          {/* 4 Overview Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Users */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Users</span>
-                <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
-                  <Users className="w-4 h-4" />
+        {/* TAB 0: TOTAL STATS */}
+        {activeTab === 'stats' && (
+          <div className="space-y-6">
+            {/* 4 Overview Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Users */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Users</span>
+                  <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900">{stats.totalUsers}</span>
+                  <span className="text-xs text-slate-400 font-medium">accounts in Supabase</span>
                 </div>
               </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900">{stats.totalUsers}</span>
-                <span className="text-xs text-slate-400 font-medium">accounts in Supabase</span>
+
+              {/* Minecraft Accounts */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Minecraft Accounts</span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <Server className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900">{stats.totalAccounts}</span>
+                  <span className="text-xs text-slate-400 font-medium">linked across users</span>
+                </div>
+              </div>
+
+              {/* Active Connections */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Connections</span>
+                  <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-emerald-600 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    {stats.totalConnected}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">online bots</span>
+                </div>
+              </div>
+
+              {/* Rank Breakdown */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Rank Breakdown</span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
+                    Iron: {stats.rankBreakdown?.iron || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">
+                    Gold: {stats.rankBreakdown?.gold || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800">
+                    Dia: {stats.rankBreakdown?.diamond || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
+                    Emr: {stats.rankBreakdown?.emerald || 0}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Minecraft Accounts */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Minecraft Accounts</span>
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-                  <Server className="w-4 h-4" />
+            {/* Rank Distribution & Server Distribution */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Detailed Rank Quotas & Distribution */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Rank Allocation</h3>
+                    <p className="text-[11px] text-slate-500">User limits & bot capacity tier breakdown</p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 font-mono">
+                    {stats.totalUsers} TOTAL
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { key: 'iron', name: 'Iron Tier', maxBots: 1, color: 'bg-slate-400', count: stats.rankBreakdown?.iron || 0 },
+                    { key: 'gold', name: 'Gold Tier', maxBots: 3, color: 'bg-amber-400', count: stats.rankBreakdown?.gold || 0 },
+                    { key: 'diamond', name: 'Diamond Tier', maxBots: 6, color: 'bg-sky-400', count: stats.rankBreakdown?.diamond || 0 },
+                    { key: 'emerald', name: 'Emerald Tier', maxBots: 10, color: 'bg-emerald-500', count: stats.rankBreakdown?.emerald || 0 },
+                  ].map((tier) => {
+                    const pct = stats.totalUsers > 0 ? Math.round((tier.count / stats.totalUsers) * 100) : 0;
+                    return (
+                      <div key={tier.key} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${tier.color}`} />
+                            {tier.name}
+                            <span className="text-[10px] text-slate-400 font-normal">({tier.maxBots} bot limit)</span>
+                          </span>
+                          <span className="font-mono font-bold text-slate-900">
+                            {tier.count} <span className="text-slate-400 font-normal text-[11px]">({pct}%)</span>
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div className={`h-full ${tier.color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900">{stats.totalAccounts}</span>
-                <span className="text-xs text-slate-400 font-medium">linked across users</span>
+
+              {/* Server Host Distribution */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Server Distribution</h3>
+                    <p className="text-[11px] text-slate-500">Configured Minecraft servers across accounts</p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 font-mono">
+                    {stats.totalConnected} ONLINE
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {hostStats.length === 0 ? (
+                    <div className="text-center py-6 text-slate-400 text-xs italic">
+                      No server accounts configured yet.
+                    </div>
+                  ) : (
+                    hostStats.slice(0, 5).map(([host, data]) => (
+                      <div key={host} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <div className="flex items-center gap-2 truncate min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            🎮
+                          </div>
+                          <span className="text-xs font-mono font-bold text-slate-800 truncate" title={host}>
+                            {host}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white border border-slate-200 text-slate-600">
+                            {data.total} {data.total === 1 ? 'account' : 'accounts'}
+                          </span>
+                          {data.online > 0 && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {data.online} live
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Active Connections */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+            {/* Termux Daemon Tunnels Overview */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Connections</span>
-                <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
-                  <Activity className="w-4 h-4" />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                    <Radio className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                      Termux Bridges & Cloudflare Tunnels
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Android daemon connections routing mineflayer instances</p>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-black text-emerald-600 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  {stats.totalConnected}
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 font-mono">
+                  {tunnels.filter((t) => t.isRecent).length} / {tunnels.length} Active
                 </span>
-                <span className="text-xs text-slate-400 font-medium">online bots</span>
               </div>
-            </div>
 
-            {/* Rank Distribution */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Rank Breakdown</span>
-                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
-                  Iron: {stats.rankBreakdown?.iron || 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">
-                  Gold: {stats.rankBreakdown?.gold || 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800">
-                  Dia: {stats.rankBreakdown?.diamond || 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
-                  Emr: {stats.rankBreakdown?.emerald || 0}
-                </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {tunnels.length === 0 ? (
+                  <div className="col-span-full py-4 text-center text-slate-400 text-xs italic">
+                    No phone daemons registered yet.
+                  </div>
+                ) : (
+                  tunnels.map((tun) => {
+                    const isLive = Boolean(tun.isRecent && tun.url);
+                    const lastSyncSec = tun.updatedAt ? Math.max(0, Math.floor((nowTick - tun.updatedAt) / 1000)) : 0;
+                    return (
+                      <div
+                        key={tun.username}
+                        className={`p-3 rounded-xl border transition ${
+                          isLive
+                            ? 'bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-200 shadow-2xs'
+                            : 'bg-slate-50/80 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-xs text-slate-900">@{tun.username}</span>
+                            {isLive ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Live Daemon
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 text-slate-600">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {tun.activeBots} {tun.activeBots === 1 ? 'bot' : 'bots'}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between gap-1 text-[11px] font-mono bg-white/90 px-2 py-1 rounded-lg border border-slate-200/80">
+                          <span className="truncate text-slate-700 select-all" title={tun.url}>
+                            {tun.url || 'No active tunnel'}
+                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {tun.url && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(tun.url);
+                                  showToast(`Copied tunnel for @${tun.username}`, 'info');
+                                }}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer shrink-0"
+                                title="Copy tunnel URL"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+                            {tun.url && (
+                              <button
+                                onClick={() => handleDisconnectTunnel(tun.username)}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition cursor-pointer"
+                                title="Disconnect / clear daemon tunnel"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-slate-400" />
+                            Android Termux
+                          </span>
+                          <span>
+                            {isLive
+                              ? `Heartbeat ${formatUptime(lastSyncSec)} ago`
+                              : tun.updatedAt
+                              ? `Offline (${formatUptime(lastSyncSec)} ago)`
+                              : 'Offline'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
+        )}
 
         {/* TAB 1: USERS & RANKS */}
         {activeTab === 'users' && (
@@ -977,120 +1211,6 @@ export default function ChiefAdminPage() {
         {/* TAB 2: MINECRAFT ACCOUNTS & LIVE CONNECTIONS */}
         {activeTab === 'accounts' && (
           <div className="space-y-4">
-            {/* Live Phone Daemons & Cloudflare Tunnels (Termux Core) Overview Cards */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center font-bold">
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                      Phone Daemons & Cloudflare Tunnels (Termux Core)
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
-                        {tunnels.filter((t) => t.isRecent).length} Online
-                      </span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500">Live SSL WebSocket bridges connecting Android Termux devices to PocketAFK</p>
-                  </div>
-                </div>
-
-                <div className="text-[11px] text-slate-500 flex items-center gap-2">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Legit Owner Dedicated
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-slate-300" /> Offline / Standby
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {tunnels.length === 0 ? (
-                  <div className="col-span-full py-4 text-center text-slate-400 text-xs italic">
-                    No phone daemons registered yet. Users can start their daemon via the 1-click Termux command.
-                  </div>
-                ) : (
-                  tunnels.map((tun) => {
-                    const isLive = Boolean(tun.isRecent && tun.url);
-                    const lastSyncSec = tun.updatedAt ? Math.max(0, Math.floor((nowTick - tun.updatedAt) / 1000)) : 0;
-                    return (
-                      <div
-                        key={tun.username}
-                        className={`p-3 rounded-xl border transition ${
-                          isLive
-                            ? 'bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-200 shadow-2xs'
-                            : 'bg-slate-50/80 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-xs text-slate-900">@{tun.username}</span>
-                            {isLive ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Live Daemon
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 text-slate-600">
-                                Inactive (Offline)
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {tun.activeBots} {tun.activeBots === 1 ? 'bot' : 'bots'} running
-                          </span>
-                        </div>
-
-                        <div className="mt-2 flex items-center justify-between gap-1 text-[11px] font-mono bg-white/90 px-2 py-1 rounded-lg border border-slate-200/80">
-                          <span className="truncate text-slate-700 select-all" title={tun.url}>
-                            {tun.url || 'No active tunnel'}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {tun.url && (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(tun.url);
-                                  showToast(`Copied tunnel for @${tun.username}`, 'info');
-                                }}
-                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
-                                title="Copy tunnel URL"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            )}
-                            {tun.url && (
-                              <button
-                                onClick={() => handleDisconnectTunnel(tun.username)}
-                                className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition cursor-pointer"
-                                title="Disconnect / clear daemon tunnel"
-                              >
-                                Clear
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Smartphone className="w-3 h-3 text-slate-400" />
-                            Android Termux
-                          </span>
-                          <span>
-                            {isLive
-                              ? `Heartbeat ${formatUptime(lastSyncSec)} ago`
-                              : tun.updatedAt
-                              ? `Offline (last heartbeat ${formatUptime(lastSyncSec)} ago)`
-                              : 'Offline'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
             {/* Filter Bar */}
             <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
               <div className="relative w-full sm:w-96">
