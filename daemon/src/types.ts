@@ -196,6 +196,14 @@ export type ClientMessage =
   | { type: 'REQUEST_SYNC'; payload?: { botId?: string } }
   | { type: 'PING' };
 
+export interface ActivityLog {
+  id: string;
+  botId: string;
+  timestamp: number;
+  type: 'status' | 'connect' | 'spawn' | 'command' | 'survival' | 'anti_afk' | 'disconnect' | 'reconnect' | 'chat' | 'control';
+  message: string;
+}
+
 // Daemon to Client Messages
 export type DaemonMessage =
   | { type: 'AUTH_RESULT'; payload: { success: boolean; message?: string } }
@@ -206,5 +214,6 @@ export type DaemonMessage =
   | { type: 'WINDOW_CLOSE'; payload: { botId: string; windowId: number } }
   | { type: 'MS_AUTH_CODE'; payload: { botId: string; userCode: string; url: string; message: string } }
   | { type: 'ACCOUNT_VERIFIED'; payload: { botId: string; email: string; ign: string; uuid?: string } }
+  | { type: 'ACTIVITY_LOG'; payload: ActivityLog }
   | { type: 'PONG'; payload: { timestamp: number } }
   | { type: 'SERVER_INFO'; payload: { version: string; activeBots: string[] } };

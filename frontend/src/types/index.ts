@@ -232,3 +232,12 @@ export interface PlayerLogEntry {
   details?: string;
   status: 'info' | 'success' | 'warning' | 'error';
 }
+
+export interface ActivityLog {
+  id: string;
+  botId: string;
+  timestamp: number;
+  type: 'status' | 'connect' | 'spawn' | 'command' | 'survival' | 'anti_afk' | 'disconnect' | 'reconnect' | 'chat' | 'control';
+  message: string;
+}
+

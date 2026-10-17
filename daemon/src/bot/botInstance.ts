@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import mineflayer, { Bot } from 'mineflayer';
 const minecraftFolderPath = require('minecraft-folder-path');
-import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity, MinimapPlayer, MinimapMob } from '../types';
+import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity, MinimapPlayer, MinimapMob, ActivityLog } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
 import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens } from './tokenManager';
 import { sampleTerrainGrid } from '../terrainMapper';
@@ -32,10 +32,32 @@ export class PocketBotInstance {
   private terrainGridCache: any = null;
   private terrainGridSampledAt: number = 0;
   private terrainGridCenter: { x: number; y: number; z: number } | null = null;
+  private lastActivityMsg: string = '';
+  private lastActivityTime: number = 0;
 
   constructor(config: BotConfig, broadcast: MessageBroadcastFn) {
     this.config = config;
     this.broadcast = broadcast;
+  }
+
+  public emitActivity(type: ActivityLog['type'], message: string) {
+    const now = Date.now();
+    if (message === this.lastActivityMsg && (now - this.lastActivityTime) < 2500) {
+      return;
+    }
+    this.lastActivityMsg = message;
+    this.lastActivityTime = now;
+
+    this.broadcast({
+      type: 'ACTIVITY_LOG',
+      payload: {
+        id: Math.random().toString(36).substring(2, 9),
+        botId: this.config.id,
+        timestamp: now,
+        type,
+        message,
+      }
+    });
   }
 
   public async start() {
@@ -50,6 +72,7 @@ export class PocketBotInstance {
       this.reconnectTimer = null;
     }
     this.setState('CONNECTING');
+    this.emitActivity('connect', `Connecting to ${this.config.host}:${this.config.port || 25565}...`);
 
     this.logConsole({
       type: 'session_divider',
@@ -208,10 +231,14 @@ export class PocketBotInstance {
       this.reconnectAttempts = 0;
       this.wasKicked = false;
       if (!this.connectedAt) this.connectedAt = Date.now();
+      const dim = this.bot?.game.dimension || 'overworld';
+      const pos = this.bot?.entity?.position;
+      const coordsStr = pos ? `[${Math.round(pos.x)}, ${Math.round(pos.y)}, ${Math.round(pos.z)}]` : '';
+      this.emitActivity('spawn', `🟢 Spawned in ${dim} at ${coordsStr}`);
       this.logConsole({
         type: 'session_divider',
-        raw: `[PocketAFK] Spawned in world! Dimension: ${this.bot?.game.dimension || 'overworld'}`,
-        formattedText: `<span style="color:#55FFFF">[PocketAFK] Spawned in world! Dimension: <b>${this.bot?.game.dimension || 'overworld'}</b></span>`
+        raw: `[PocketAFK] Spawned in world! Dimension: ${dim}`,
+        formattedText: `<span style="color:#55FFFF">[PocketAFK] Spawned in world! Dimension: <b>${dim}</b></span>`
       });
 
       this.startAntiAfk();
@@ -241,6 +268,7 @@ export class PocketBotInstance {
     // Many servers kick or freeze the bot if resource packs are not accepted
     if (this.config.settings.acceptResourcePacks) {
       (this.bot as any)._client?.on('resource_pack_send', (data: any) => {
+        this.emitActivity('status', '📦 Accepted server custom resource pack');
         this.logConsole({
           type: 'system',
           raw: `[Server] Resource pack offered. Automatically accepting...`,
@@ -321,6 +349,7 @@ export class PocketBotInstance {
 
     // Respawn / Sub-server Transfer (BungeeCord / Velocity)
     this.bot.on('respawn', () => {
+      this.emitActivity('spawn', '♻️ Respawned in world');
       this.logConsole({
         type: 'session_divider',
         raw: `[PocketAFK] Transferred / Respawned in world! Dimension: ${this.bot?.game?.dimension || 'overworld'}`,
@@ -338,6 +367,7 @@ export class PocketBotInstance {
       const analysis = this.analyzeKick(reason);
 
       this.setState('KICKED', analysis.uiReason);
+      this.emitActivity('disconnect', `❌ Kicked: ${stripMinecraftCodes(analysis.cleanMessage)}`);
       this.logConsole({
         type: 'error',
         raw: `[PocketAFK] Kicked: ${analysis.cleanMessage}`,
@@ -367,6 +397,7 @@ export class PocketBotInstance {
 
       const reasonStr = typeof reason === 'string' ? reason : String(reason || 'Socket closed');
       this.setState('DISCONNECTED', reasonStr);
+      this.emitActivity('disconnect', `❌ Connection closed (${reasonStr})`);
       this.logConsole({
         type: 'error',
         raw: `[PocketAFK] Connection closed: ${reasonStr}`,
@@ -403,6 +434,7 @@ export class PocketBotInstance {
 
     // Death handler
     this.bot.on('death', () => {
+      this.emitActivity('status', '☠️ Bot died in world! Respawning...');
       this.logConsole({
         type: 'death',
         raw: `[PocketAFK] Bot died!`,
@@ -502,6 +534,8 @@ export class PocketBotInstance {
   private startAntiAfk() {
     if (this.antiAfkInterval) clearInterval(this.antiAfkInterval);
     if (!this.config.settings.antiAfk) return;
+
+    this.emitActivity('status', '🛡️ Anti-AFK routine active');
 
     const intervalSec = this.config.settings.antiAfkInterval || 10;
     this.antiAfkInterval = setInterval(async () => {
@@ -942,6 +976,11 @@ export class PocketBotInstance {
   public chat(message: string) {
     if (!this.bot) return;
     this.bot.chat(message);
+    if (message.startsWith('/')) {
+      this.emitActivity('command', `⚡ Executed command: ${message}`);
+    } else {
+      this.emitActivity('chat', `💬 Sent chat: "${message}"`);
+    }
   }
 
   public updateSettings(newSettings: Partial<typeof this.config.settings>) {
@@ -1143,6 +1182,7 @@ export class PocketBotInstance {
     const delaySec = Math.round(delay / 1000);
 
     this.setState('RECONNECTING', `Reconnecting in ${delaySec}s (Attempt ${this.reconnectAttempts}/8)...`);
+    this.emitActivity('reconnect', `♻️ Auto-reconnecting in ${delaySec}s (Attempt ${this.reconnectAttempts}/8)...`);
     this.logConsole({
       type: 'session_divider',
       raw: `--- Reconnecting in ${delaySec}s (Attempt ${this.reconnectAttempts}/8) ---`,

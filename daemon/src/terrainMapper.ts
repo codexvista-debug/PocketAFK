@@ -255,7 +255,22 @@ export function formatName(str?: string): string {
 // Reusable vector for fast 0-allocation sampling
 const probeVec = new Vec3(0, 0, 0);
 
-export function sampleTerrainGrid(bot: any, radius = 14): TerrainGridData | null {
+// Safe block getter that never throws even if chunk boundary is crossed
+function safeBlockAt(bot: any, x: number, y: number, z: number): any {
+  try {
+    if (!bot || !bot.blockAt) return null;
+    if (bot.world && typeof bot.world.getColumn === 'function') {
+      const col = bot.world.getColumn(x >> 4, z >> 4);
+      if (!col) return null;
+    }
+    probeVec.set(x, y, z);
+    return bot.blockAt(probeVec, false);
+  } catch {
+    return null;
+  }
+}
+
+export function sampleTerrainGrid(bot: any, radius = 18): TerrainGridData | null {
   if (!bot || !bot.entity || !bot.entity.position) {
     return null;
   }
@@ -268,7 +283,7 @@ export function sampleTerrainGrid(bot: any, radius = 14): TerrainGridData | null
   // 1. Current Biome
   let currentBiome: string | undefined = undefined;
   try {
-    const curBlock = bot.blockAt ? bot.blockAt(pos) : null;
+    const curBlock = safeBlockAt(bot, bx, by, bz);
     if (curBlock?.biome?.name) {
       currentBiome = formatName(curBlock.biome.name);
     } else if ((bot.world as any)?.getBiome) {
@@ -281,19 +296,20 @@ export function sampleTerrainGrid(bot: any, radius = 14): TerrainGridData | null
   // 2. Current Land Block (what bot is standing on)
   let currentLandBlock: string | undefined = undefined;
   try {
-    probeVec.set(bx, by, bz);
-    let standingOn = bot.blockAt ? bot.blockAt(probeVec) : null;
+    let standingOn = safeBlockAt(bot, bx, by, bz);
     if (!standingOn || standingOn.name === 'air' || standingOn.name === 'cave_air') {
-      probeVec.set(bx, by - 1, bz);
-      standingOn = bot.blockAt ? bot.blockAt(probeVec) : null;
+      standingOn = safeBlockAt(bot, bx, by - 1, bz);
     }
-    if (standingOn && standingOn.name !== 'air') {
+    if (!standingOn || standingOn.name === 'air' || standingOn.name === 'cave_air') {
+      standingOn = safeBlockAt(bot, bx, by - 2, bz);
+    }
+    if (standingOn && standingOn.name && standingOn.name !== 'air' && standingOn.name !== 'cave_air') {
       currentLandBlock = formatName(standingOn.name);
     }
   } catch (e) {}
 
   // 3. Grid Sample
-  const size = radius * 2 + 1; // e.g. 14*2 + 1 = 29
+  const size = radius * 2 + 1;
   const totalCells = size * size;
   const cells: number[] = new Array(totalCells).fill(0);
   const heights: number[] = new Array(totalCells).fill(0);
@@ -306,52 +322,47 @@ export function sampleTerrainGrid(bot: any, radius = 14): TerrainGridData | null
   paletteMap.set('cave_air', 0);
   paletteMap.set('void_air', 0);
 
-  try {
-    for (let rz = 0; rz < size; rz++) {
-      const dz = rz - radius;
-      const wz = bz + dz;
+  for (let rz = 0; rz < size; rz++) {
+    const dz = rz - radius;
+    const wz = bz + dz;
 
-      for (let rx = 0; rx < size; rx++) {
-        const dx = rx - radius;
-        const wx = bx + dx;
-        const cellIndex = rz * size + rx;
+    for (let rx = 0; rx < size; rx++) {
+      const dx = rx - radius;
+      const wx = bx + dx;
+      const cellIndex = rz * size + rx;
 
-        // Scan downwards from by + 5 down to by - 8
-        let foundBlock: any = null;
-        let foundY = by;
+      // Scan downwards from by + 5 down to by - 14 (covers eye level, farm machines, terrain, and sub-surface)
+      let foundBlock: any = null;
+      let foundY = by;
 
-        for (let wy = by + 5; wy >= by - 8; wy--) {
-          probeVec.set(wx, wy, wz);
-          const b = bot.blockAt(probeVec);
-          if (b && b.name !== 'air' && b.name !== 'cave_air' && b.name !== 'void_air') {
-            foundBlock = b;
-            foundY = wy;
-            break;
-          }
-        }
-
-        if (foundBlock) {
-          const bname = foundBlock.name;
-          let palId = paletteMap.get(bname);
-          if (palId === undefined) {
-            palId = palette.length;
-            paletteMap.set(bname, palId);
-            palette.push({
-              id: palId,
-              name: formatName(bname),
-              color: getBlockColor(bname),
-            });
-          }
-          cells[cellIndex] = palId;
-          heights[cellIndex] = Math.max(-10, Math.min(10, foundY - by));
-        } else {
-          cells[cellIndex] = 0;
-          heights[cellIndex] = 0;
+      for (let wy = by + 5; wy >= by - 14; wy--) {
+        const b = safeBlockAt(bot, wx, wy, wz);
+        if (b && b.name && b.name !== 'air' && b.name !== 'cave_air' && b.name !== 'void_air') {
+          foundBlock = b;
+          foundY = wy;
+          break;
         }
       }
+
+      if (foundBlock) {
+        const bname = foundBlock.name;
+        let palId = paletteMap.get(bname);
+        if (palId === undefined) {
+          palId = palette.length;
+          paletteMap.set(bname, palId);
+          palette.push({
+            id: palId,
+            name: formatName(bname),
+            color: getBlockColor(bname),
+          });
+        }
+        cells[cellIndex] = palId;
+        heights[cellIndex] = Math.max(-10, Math.min(10, foundY - by));
+      } else {
+        cells[cellIndex] = 0;
+        heights[cellIndex] = 0;
+      }
     }
-  } catch (err) {
-    // Graceful fallback if world blocks unavailable during world transition
   }
 
   // 4. Landscape Environment & Sky Clearance Analysis

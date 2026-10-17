@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BotLifecycleState, ChatMessage, ContainerWindow, Telemetry, BotSettings } from '../types';
+import { BotLifecycleState, ChatMessage, ContainerWindow, Telemetry, BotSettings, ActivityLog } from '../types';
 
 export type SocketStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'AUTHENTICATED' | 'AUTH_ERROR';
 
@@ -54,6 +54,7 @@ export function useDaemonSocket(
   const [botVersions, setBotVersions] = useState<Record<string, string>>({});
   const [telemetries, setTelemetries] = useState<Record<string, Telemetry>>({});
   const [messagesByBot, setMessagesByBot] = useState<Record<string, ChatMessage[]>>({});
+  const [activityLogs, setActivityLogs] = useState<Record<string, ActivityLog[]>>({});
   const [containerWindows, setContainerWindows] = useState<Record<string, ContainerWindow | null>>({});
   const [msAuthData, setMsAuthData] = useState<MsAuthData | null>(null);
 
@@ -273,6 +274,24 @@ export function useDaemonSocket(
               break;
             }
 
+            case 'ACTIVITY_LOG': {
+              const log: ActivityLog = data.payload;
+              if (log.botId) {
+                setActivityLogs((prev) => {
+                  const cur = prev[log.botId] || [];
+                  const last = cur[cur.length - 1];
+                  if (last && last.message === log.message && Math.abs(log.timestamp - last.timestamp) < 2000) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    [log.botId]: [...cur.slice(-200), log]
+                  };
+                });
+              }
+              break;
+            }
+
             case 'MS_AUTH_CODE': {
               setMsAuthData(data.payload);
               break;
@@ -297,6 +316,7 @@ export function useDaemonSocket(
         setBotStates({});
         setBotStateReasons({});
         setTelemetries({});
+        setActivityLogs({});
         setContainerWindows({});
         setMsAuthData(null);
         if (pingIntervalRef.current) {
@@ -479,6 +499,14 @@ export function useDaemonSocket(
         .slice(-250)
     : [];
 
+  const currentActivityLogs: ActivityLog[] = currentBotId
+    ? Object.entries(activityLogs)
+        .filter(([bId]) => bId === currentBotId || bId.startsWith(`${currentBotId}__`))
+        .flatMap(([, logs]) => logs)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-150)
+    : [];
+
   const currentWindow: ContainerWindow | null = isDaemonAuthenticated
     ? ((currentBotId && containerWindows[currentBotId]) ||
        Object.entries(containerWindows).find(([k, w]) => k.startsWith(`${currentBotId}__`) && w !== null)?.[1] ||
@@ -491,6 +519,8 @@ export function useDaemonSocket(
     botStateReason: currentBotReason,
     telemetry: currentTelemetry,
     messages: currentMessages,
+    activityLogs,
+    currentActivityLogs,
     containerWindow: currentWindow,
     botStates: isDaemonAuthenticated ? botStates : {},
     botStateReasons: isDaemonAuthenticated ? botStateReasons : {},
