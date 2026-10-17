@@ -135,19 +135,8 @@ export async function POST(req: NextRequest) {
             .eq('id', user.id);
         }
 
-        // Fetch rank from users row or fallback to accounts __meta_rank__
-        let rank = (user as any).rank || 'iron';
-        if (!rank || rank === 'iron') {
-          const { data: meta } = await supabase
-            .from('accounts')
-            .select('settings')
-            .ilike('username', cleanUsername)
-            .eq('bot_name', '__meta_rank__')
-            .maybeSingle();
-          if (meta?.settings?.rank) {
-            rank = meta.settings.rank;
-          }
-        }
+        // Fetch rank directly from public.users row
+        const rank = (user as any).rank || (cleanUsername.toLowerCase() === 'chief' ? 'diamond' : 'iron');
 
         return NextResponse.json({
           success: true,

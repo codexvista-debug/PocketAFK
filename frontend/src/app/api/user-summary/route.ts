@@ -28,9 +28,6 @@ export async function GET(req: NextRequest) {
             const ign = row.bot_name.trim();
             // Skip metadata rows
             if (ign.startsWith('__')) {
-              if (ign === '__meta_rank__' && row.settings?.rank) {
-                userRank = String(row.settings.rank).toLowerCase().trim();
-              }
               return;
             }
             // Ignore raw emails, keep real IGNs
@@ -41,7 +38,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Check users table for authoritative rank if available
+      // Authoritative rank pulled directly from public.users table
       try {
         const { data: userRow } = await supabase
           .from('users')
@@ -50,6 +47,8 @@ export async function GET(req: NextRequest) {
           .maybeSingle();
         if (userRow?.rank) {
           userRank = String(userRow.rank).toLowerCase().trim();
+        } else if (cleanUser.toLowerCase() === 'chief') {
+          userRank = 'diamond';
         }
       } catch (e) {}
     }

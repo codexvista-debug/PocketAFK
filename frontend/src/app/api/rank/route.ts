@@ -5,85 +5,48 @@ import { RANKS, UserRank, getRankConfig } from '@/lib/ranks';
 export const dynamic = 'force-dynamic';
 
 async function fetchUserRankFromSupabase(cleanUser: string): Promise<UserRank> {
-  if (!supabase) return 'iron';
+  if (!supabase) return cleanUser.toLowerCase() === 'chief' ? 'diamond' : 'iron';
 
-  // 1. Try checking users table (if rank column exists)
+  // Pull rank directly from public.users table
   try {
     const { data: userRow } = await supabase
       .from('users')
-      .select('*')
+      .select('rank')
       .ilike('username', cleanUser)
       .maybeSingle();
 
-    if (userRow && (userRow as any).rank) {
-      const dbRank = String((userRow as any).rank).toLowerCase().trim() as UserRank;
+    if (userRow?.rank) {
+      const dbRank = String(userRow.rank).toLowerCase().trim() as UserRank;
       if (RANKS[dbRank]) return dbRank;
     }
-  } catch {
-    // Column might not exist yet
+  } catch (err) {
+    console.error('Error fetching rank from public.users:', err);
   }
 
-  // 2. Fallback check: accounts table metadata row (__meta_rank__)
-  try {
-    const { data: metaRows } = await supabase
-      .from('accounts')
-      .select('settings')
-      .ilike('username', cleanUser)
-      .eq('bot_name', '__meta_rank__')
-      .limit(1);
-
-    if (metaRows && metaRows.length > 0) {
-      const metaRank = metaRows[0].settings?.rank?.toLowerCase()?.trim() as UserRank;
-      if (metaRank && RANKS[metaRank]) return metaRank;
-    }
-  } catch {
-    // Ignore error
-  }
-
-  return 'iron';
+  return cleanUser.toLowerCase() === 'chief' ? 'diamond' : 'iron';
 }
 
 async function persistUserRankInSupabase(cleanUser: string, rank: UserRank) {
   if (!supabase) return;
 
-  // 1. Try updating users table directly
+  // Persist rank directly in public.users table
   try {
     await supabase
       .from('users')
-      .update({ rank } as any)
+      .update({ rank })
       .ilike('username', cleanUser);
-  } catch {
-    // users table might not have 'rank' column yet
+  } catch (err) {
+    console.error('Failed to persist rank in public.users:', err);
   }
 
-  // 2. Persist in accounts table metadata row (__meta_rank__)
+  // Clean up any legacy __meta_rank__ row from accounts table
   try {
-    const { data: existing } = await supabase
+    await supabase
       .from('accounts')
-      .select('id')
+      .delete()
       .ilike('username', cleanUser)
-      .eq('bot_name', '__meta_rank__')
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      await supabase
-        .from('accounts')
-        .update({ settings: { rank } })
-        .eq('id', existing[0].id);
-    } else {
-      await supabase.from('accounts').insert([
-        {
-          username: cleanUser,
-          bot_name: '__meta_rank__',
-          server_host: 'pocketafk.internal',
-          server_port: 25565,
-          settings: { rank },
-        },
-      ]);
-    }
-  } catch (e) {
-    console.warn('Failed to persist rank metadata in accounts table:', e);
-  }
+      .eq('bot_name', '__meta_rank__');
+  } catch {}
 }
 
 export async function GET(req: NextRequest) {

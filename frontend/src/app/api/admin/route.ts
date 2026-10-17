@@ -104,19 +104,13 @@ export async function GET(req: NextRequest) {
     });
 
     // 4. Separate metadata rows from real Minecraft accounts & verify legitimacy
-    const rankMap = new Map<string, UserRank>();
     const realAccounts: AccountItem[] = [];
 
     (allAccounts || []).forEach((row) => {
       const lowerOwner = (row.username || '').toLowerCase().trim();
       const botName = (row.bot_name || '').trim();
 
-      if (botName === '__meta_rank__') {
-        const metaRank = row.settings?.rank?.toLowerCase()?.trim() as UserRank;
-        if (metaRank && RANKS[metaRank]) {
-          rankMap.set(lowerOwner, metaRank);
-        }
-      } else if (!botName.startsWith('__')) {
+      if (!botName.startsWith('__')) {
         const userTunnel = tunnelMap.get(lowerOwner);
         // Authoritative liveness: Phone daemon must have sent heartbeat within 65 seconds
         const isTunnelLive = Boolean(userTunnel?.url && Date.now() - userTunnel.updatedAt < 65000);
@@ -223,11 +217,9 @@ export async function GET(req: NextRequest) {
     // 5. Build user summary list
     const userList: UserSummaryItem[] = (users || []).map((u) => {
       const lowerU = (u.username || '').toLowerCase().trim();
-      let rank: UserRank = 'iron';
+      let rank: UserRank = lowerU === 'chief' ? 'diamond' : 'iron';
       if ((u as any).rank && RANKS[(u as any).rank?.toLowerCase() as UserRank]) {
         rank = (u as any).rank.toLowerCase() as UserRank;
-      } else if (rankMap.has(lowerU)) {
-        rank = rankMap.get(lowerU)!;
       }
 
       const userAccounts = realAccounts.filter((a) => a.owner.toLowerCase().trim() === lowerU);
@@ -400,38 +392,25 @@ export async function POST(req: NextRequest) {
 
       const cleanUser = username.trim();
 
-      // Try updating users table column directly
+      // Update public.users table column directly
+      const { error: updateErr } = await supabase
+        .from('users')
+        .update({ rank: cleanRank })
+        .ilike('username', cleanUser);
+
+      if (updateErr) {
+        console.error('Failed to update rank in public.users:', updateErr);
+        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      // Cleanup any legacy __meta_rank__ row from accounts table
       try {
         await supabase
-          .from('users')
-          .update({ rank: cleanRank } as any)
-          .ilike('username', cleanUser);
-      } catch {}
-
-      // Persist in __meta_rank__ row
-      const { data: existing } = await supabase
-        .from('accounts')
-        .select('id')
-        .ilike('username', cleanUser)
-        .eq('bot_name', '__meta_rank__')
-        .limit(1);
-
-      if (existing && existing.length > 0) {
-        await supabase
           .from('accounts')
-          .update({ settings: { rank: cleanRank }, updated_at: new Date().toISOString() })
-          .eq('id', existing[0].id);
-      } else {
-        await supabase.from('accounts').insert([
-          {
-            username: cleanUser,
-            bot_name: '__meta_rank__',
-            server_host: 'pocketafk.internal',
-            server_port: 25565,
-            settings: { rank: cleanRank },
-          },
-        ]);
-      }
+          .delete()
+          .ilike('username', cleanUser)
+          .eq('bot_name', '__meta_rank__');
+      } catch {}
 
       return NextResponse.json({ success: true, message: `Rank for ${cleanUser} changed to ${RANKS[cleanRank].name}` });
     }
@@ -495,33 +474,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `User '${cleanUsername}' already exists` }, { status: 400 });
       }
 
-      // Insert user (with rank if column exists)
-      let { error: insErr } = await supabase.from('users').insert([
+      // Insert user with rank directly into public.users
+      const { error: insErr } = await supabase.from('users').insert([
         { username: cleanUsername, password_hash: hashedPassword, rank: cleanRank },
       ]);
 
-      if (insErr && (insErr.message?.includes('rank') || (insErr as any).code === 'PGRST204')) {
-        const fallback = await supabase.from('users').insert([
-          { username: cleanUsername, password_hash: hashedPassword },
-        ]);
-        insErr = fallback.error;
-      }
-
       if (insErr) {
         return NextResponse.json({ error: insErr.message }, { status: 500 });
-      }
-
-      // Set rank in metadata
-      if (cleanRank !== 'iron') {
-        await supabase.from('accounts').insert([
-          {
-            username: cleanUsername,
-            bot_name: '__meta_rank__',
-            server_host: 'pocketafk.internal',
-            server_port: 25565,
-            settings: { rank: cleanRank },
-          },
-        ]);
       }
 
       return NextResponse.json({
