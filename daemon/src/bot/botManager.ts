@@ -7,6 +7,7 @@ const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, ClientMessage, DaemonMessage } from '../types';
 import { PocketBotInstance } from './botInstance';
 import { updateTermuxNotification, clearTermuxNotification } from '../utils/termuxNotification';
+import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens, computeNameHash } from './tokenManager';
 
 export class BotManager {
   private bots: Map<string, PocketBotInstance> = new Map();
@@ -100,25 +101,7 @@ export class BotManager {
   public async verifyAccount(accountId: string, email: string) {
     console.log(chalk.cyan(`[Auth] Initiating Microsoft Device Verification for ${email}...`));
     try {
-      const profilesFolder = path.resolve(process.cwd(), 'tokens');
-      if (!fs.existsSync(profilesFolder)) {
-        try { fs.mkdirSync(profilesFolder, { recursive: true }); } catch (e) {}
-      }
-
-      // Also migrate any existing tokens from nmp-cache into tokens/
-      const nmpCache = path.join(minecraftFolderPath, 'nmp-cache');
-      if (fs.existsSync(nmpCache)) {
-        try {
-          const files = fs.readdirSync(nmpCache);
-          for (const f of files) {
-            const src = path.join(nmpCache, f);
-            const dst = path.join(profilesFolder, f);
-            if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
-              fs.copyFileSync(src, dst);
-            }
-          }
-        } catch (e) {}
-      }
+      const profilesFolder = getAndSyncTokenFolder();
 
       const options = {
         authTitle: Titles.MinecraftNintendoSwitch,
@@ -146,25 +129,10 @@ export class BotManager {
       const realIgn = res?.profile?.name || email;
       const playerUuid = res?.profile?.id;
 
-      // Duplicate tokens under hash(realIgn) so when Mineflayer launches as realIgn,
-      // prismarine-auth immediately finds the cache and never prompts for login again!
-      const emailHash = crypto.createHash('sha1').update(email ?? '', 'binary').digest('hex').substring(0, 6);
-      const ignHash = crypto.createHash('sha1').update(realIgn ?? '', 'binary').digest('hex').substring(0, 6);
-
-      if (emailHash !== ignHash) {
-        try {
-          const files = fs.readdirSync(profilesFolder);
-          for (const f of files) {
-            if (f.startsWith(`${emailHash}_`)) {
-              const targetFileName = f.replace(`${emailHash}_`, `${ignHash}_`);
-              const src = path.join(profilesFolder, f);
-              const dst = path.join(profilesFolder, targetFileName);
-              fs.copyFileSync(src, dst);
-              console.log(chalk.green(`[Auth Cache] Mirrored token cache from ${f} -> ${targetFileName}`));
-            }
-          }
-        } catch (e) {}
-      }
+      // Ensure 90-day rolling token aliases are created for both realIgn and email
+      ensureTokenAliases(profilesFolder, email, realIgn);
+      ensureTokenAliases(profilesFolder, realIgn, email);
+      backupTokens(profilesFolder);
 
       this.broadcastFn({
         type: 'ACCOUNT_VERIFIED',
@@ -176,7 +144,7 @@ export class BotManager {
         }
       });
 
-      console.log(chalk.green(`[Auth Success] Verified ${email} as Java IGN: ${realIgn}`));
+      console.log(chalk.green(`[Auth Success] Verified ${email} as Java IGN: ${realIgn} (90-day session saved)`));
     } catch (err: any) {
       console.error(chalk.red(`[Auth Error] Failed to verify ${email}: ${err.message}`));
     }
@@ -311,6 +279,28 @@ export class BotManager {
 
       case 'VERIFY_ACCOUNT': {
         this.verifyAccount(msg.payload.accountId, msg.payload.email);
+        break;
+      }
+
+      case 'IMPORT_ACCOUNT_TOKENS': {
+        const { ign, tokenCache } = msg.payload || {};
+        if (ign && tokenCache) {
+          const profilesFolder = getAndSyncTokenFolder();
+          const ignHash = computeNameHash(ign);
+          const lowerHash = computeNameHash(ign.toLowerCase());
+
+          if (tokenCache.live) {
+            fs.writeFileSync(path.join(profilesFolder, `${ignHash}_live-cache.json`), JSON.stringify(tokenCache.live));
+            fs.writeFileSync(path.join(profilesFolder, `${lowerHash}_live-cache.json`), JSON.stringify(tokenCache.live));
+          }
+          if (tokenCache.mca) {
+            fs.writeFileSync(path.join(profilesFolder, `${ignHash}_mca-cache.json`), JSON.stringify(tokenCache.mca));
+            fs.writeFileSync(path.join(profilesFolder, `${lowerHash}_mca-cache.json`), JSON.stringify(tokenCache.mca));
+          }
+          ensureTokenAliases(profilesFolder, ign);
+          backupTokens(profilesFolder);
+          console.log(chalk.green(`[Auth] Imported 90-day Microsoft token session for @${ign}`));
+        }
         break;
       }
 

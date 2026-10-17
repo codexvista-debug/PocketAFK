@@ -268,6 +268,26 @@ export async function POST(req: NextRequest) {
       status: 'success',
       ign: mcProfile.name,
       uuid: mcProfile.id,
+      tokenCache: {
+        live: {
+          token: {
+            token_type: 'bearer',
+            expires_in: tokenData.expires_in || 86400,
+            scope: SCOPE,
+            access_token: accessToken,
+            refresh_token: tokenData.refresh_token,
+            user_id: tokenData.user_id,
+          },
+        },
+        mca: {
+          token: mcToken,
+          expire: Date.now() + 86400000,
+          profile: {
+            id: mcProfile.id,
+            name: mcProfile.name,
+          },
+        },
+      },
     });
   } catch (err: any) {
     console.error('[MinecraftAuth POST] Exception:', err);

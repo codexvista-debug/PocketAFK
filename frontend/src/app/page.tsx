@@ -464,6 +464,7 @@ export default function Dashboard() {
     closeWindow,
     updateSettings,
     verifyAccount,
+    importAccountTokens,
     clearMessages,
     msAuthData,
     clearMsAuth,
@@ -879,6 +880,25 @@ export default function Dashboard() {
     }
   }, [isSettingsOpen, currentUser, secretCode, authToken, daemonUrl, saveSettings]);
 
+  // Sync any pending cached Microsoft account tokens to Termux daemon as soon as daemon connects
+  useEffect(() => {
+    if (socketStatus === 'AUTHENTICATED' && typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('pocketafk_token_cache_')) {
+            const ign = key.replace('pocketafk_token_cache_', '');
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const tokenCache = JSON.parse(raw);
+              importAccountTokens(ign, tokenCache);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }, [socketStatus, importAccountTokens]);
+
   // Load Notes & Pinned state
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1171,6 +1191,13 @@ export default function Dashboard() {
 
             const finalIgn = pollData.ign;
             const finalUuid = pollData.uuid || '';
+
+            if (pollData.tokenCache) {
+              try {
+                localStorage.setItem(`pocketafk_token_cache_${finalIgn.toLowerCase()}`, JSON.stringify(pollData.tokenCache));
+                importAccountTokens(finalIgn, pollData.tokenCache);
+              } catch (e) {}
+            }
 
             // Check if user targeted a specific account or expected IGN
             const expectedName =

@@ -99,6 +99,7 @@ export type ClientMessage =
   | { type: 'CLOSE_WINDOW'; payload: { botId: string; windowId: number } }
   | { type: 'UPDATE_SETTINGS'; payload: { botId: string; settings: Partial<BotSettings> } }
   | { type: 'VERIFY_ACCOUNT'; payload: { accountId: string; email: string } }
+  | { type: 'IMPORT_ACCOUNT_TOKENS'; payload: { ign: string; tokenCache: any } }
   | { type: 'REQUEST_SYNC'; payload?: { botId?: string } };
 
 // Daemon to Client Messages

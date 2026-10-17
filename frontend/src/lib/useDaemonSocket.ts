@@ -391,6 +391,11 @@ export function useDaemonSocket(
     return sendJson({ type: 'VERIFY_ACCOUNT', payload: { accountId, email } });
   }, [sendJson]);
 
+  const importAccountTokens = useCallback((ign: string, tokenCache: any) => {
+    if (!ign || !tokenCache) return false;
+    return sendJson({ type: 'IMPORT_ACCOUNT_TOKENS', payload: { ign, tokenCache } });
+  }, [sendJson]);
+
   const clearMessages = useCallback((botId?: string) => {
     if (botId) {
       setMessagesByBot((prev) => {
@@ -464,6 +469,7 @@ export function useDaemonSocket(
     closeWindow,
     updateSettings,
     verifyAccount,
+    importAccountTokens,
     clearMessages,
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),

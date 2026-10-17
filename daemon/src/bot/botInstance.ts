@@ -5,6 +5,7 @@ import mineflayer, { Bot } from 'mineflayer';
 const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
+import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens } from './tokenManager';
 
 export type MessageBroadcastFn = (message: any) => void;
 
@@ -65,41 +66,9 @@ export class PocketBotInstance {
         ? this.config.username.split('@')[0]
         : this.config.username;
 
-      // Central tokens directory: share tokens across Termux, VistaAFK, and home directory
-      const tokenFolder = path.resolve(process.cwd(), 'tokens');
-      if (!fs.existsSync(tokenFolder)) {
-        try { fs.mkdirSync(tokenFolder, { recursive: true }); } catch (e) {}
-      }
-
-      const possibleTokenDirs = [
-        path.resolve(process.cwd(), '..', 'tokens'),
-        path.resolve(process.cwd(), 'profiles'),
-        path.join(minecraftFolderPath, 'nmp-cache'),
-        path.resolve(process.env.HOME || '', '.minecraft', 'nmp-cache'),
-        path.resolve(process.cwd(), '..', 'VistaAFK', 'tokens'),
-        path.resolve(process.cwd(), '..', 'VistaAFK', 'daemon', 'tokens'),
-        path.resolve(process.env.HOME || '', 'tokens'),
-        path.resolve(process.env.HOME || '', 'VistaAFK', 'tokens'),
-        path.resolve(process.env.HOME || '', 'VistaAFK', 'daemon', 'tokens'),
-        path.resolve(process.env.HOME || '', 'PocketAFK', 'tokens'),
-        path.resolve(process.env.HOME || '', 'PocketAFK', 'daemon', 'tokens'),
-      ];
-
-      for (const srcDir of possibleTokenDirs) {
-        if (fs.existsSync(srcDir) && srcDir !== tokenFolder) {
-          try {
-            const files = fs.readdirSync(srcDir);
-            for (const f of files) {
-              const srcFile = path.join(srcDir, f);
-              const dstFile = path.join(tokenFolder, f);
-              if (!fs.existsSync(dstFile) && fs.statSync(srcFile).isFile()) {
-                fs.copyFileSync(srcFile, dstFile);
-                console.log(`[PocketAFK] Shared existing OAuth token from ${srcDir}: ${f}`);
-              }
-            }
-          } catch (e) {}
-        }
-      }
+      // Central persistent tokens directory & 90-day rolling OAuth aliasing
+      const tokenFolder = getAndSyncTokenFolder();
+      ensureTokenAliases(tokenFolder, cleanUsername);
 
       // Always official Microsoft Java mode (100% compatible with real public Minecraft servers)
       const authMode: 'microsoft' = 'microsoft';
@@ -211,26 +180,13 @@ export class PocketBotInstance {
         }
       });
 
-      // Mirror token cache under hash(realIgn) so future logins under verified IGN never prompt
+      // Mirror token cache under realIgn and cleanUsername and back up to persistent Android storage
       const cleanUsername = this.config.username.includes('@')
         ? this.config.username.split('@')[0]
         : this.config.username;
-      const configuredHash = crypto.createHash('sha1').update(cleanUsername ?? '', 'binary').digest('hex').substring(0, 6);
-      const ignHash = crypto.createHash('sha1').update(realIgn ?? '', 'binary').digest('hex').substring(0, 6);
-      if (configuredHash !== ignHash) {
-        try {
-          const tokenFolder = path.resolve(process.cwd(), 'tokens');
-          const files = fs.readdirSync(tokenFolder);
-          for (const f of files) {
-            if (f.startsWith(`${configuredHash}_`)) {
-              const targetFileName = f.replace(`${configuredHash}_`, `${ignHash}_`);
-              const src = path.join(tokenFolder, f);
-              const dst = path.join(tokenFolder, targetFileName);
-              fs.copyFileSync(src, dst);
-            }
-          }
-        } catch (e) {}
-      }
+      const tokenFolder = getAndSyncTokenFolder();
+      ensureTokenAliases(tokenFolder, cleanUsername, realIgn);
+      backupTokens(tokenFolder);
 
       this.logConsole({
         type: 'system',
