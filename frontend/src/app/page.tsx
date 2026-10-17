@@ -2079,20 +2079,31 @@ export default function Dashboard() {
           <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs">
             {/* Logo Bar */}
             <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMainView('profile');
+                  setActiveSubTab('connect');
+                  if (servers.length > 0 && !activeServerId) {
+                    setActiveServerId(servers[0].id);
+                  }
+                }}
+                className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
+                title="Go to PocketAFK Dashboard"
+              >
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
                   ⛏
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
+                    <span className="font-black text-sm text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors">PocketAFK</span>
                     <span className={`w-2 h-2 rounded-full ring-2 ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 ring-emerald-500/30 animate-pulse' : 'bg-rose-500 ring-rose-500/30'}`} />
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-slate-500 font-mono font-medium">v2.4 Java Core</span>
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* Top Navigation Items */}

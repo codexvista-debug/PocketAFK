@@ -497,34 +497,178 @@ export default function ChiefAdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Main Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-black shadow-sm ring-2 ring-emerald-500/20">
-              <ShieldCheck className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-50/50 text-slate-900 font-sans flex flex-col md:flex-row">
+      {/* LEFT SIDEBAR (Matching Dashboard Style) */}
+      <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs z-20 md:sticky md:top-0 md:h-screen">
+        {/* Logo Bar - Clickable directly to Dashboard */}
+        <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
+            title="Return to PocketAFK Dashboard"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
+              ⛏
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-black tracking-tight text-slate-900">PocketAFK Chief Admin</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Root Panel
+                <span className="font-black text-sm text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors">
+                  PocketAFK
                 </span>
+                <span className="w-2 h-2 rounded-full ring-2 bg-emerald-500 ring-emerald-500/30 animate-pulse" />
               </div>
-              <p className="text-xs text-slate-500">Live Supabase Database & Bot Orchestration Control</p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-emerald-700 font-mono font-bold uppercase tracking-wider">Chief Admin</span>
+                <span className="text-slate-300">•</span>
+                <span className="text-[10px] text-slate-400 font-mono">v2.4 Core</span>
+              </div>
             </div>
+          </Link>
+        </div>
+
+        {/* Sidebar Navigation */}
+        <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-1">
+            Admin Sections
           </div>
 
-          <div className="flex items-center gap-2.5">
+          {/* Tab 1: Users & Ranks */}
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              activeTab === 'users'
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-1 rounded-lg ${activeTab === 'users' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                <Users className="w-3.5 h-3.5" />
+              </div>
+              <span>Users & Ranks</span>
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              activeTab === 'users' ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {users.length}
+            </span>
+          </button>
+
+          {/* Tab 2: MC Accounts & Connections */}
+          <button
+            onClick={() => setActiveTab('accounts')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              activeTab === 'accounts'
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-1 rounded-lg ${activeTab === 'accounts' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                <Server className="w-3.5 h-3.5" />
+              </div>
+              <span>MC Accounts</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {stats.totalConnected > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title={`${stats.totalConnected} online`} />
+              )}
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'accounts' ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {accounts.length}
+              </span>
+            </div>
+          </button>
+
+          {/* Live Orchestration Quick Panel */}
+          <div className="pt-4 mt-4 border-t border-slate-100 px-1 space-y-2">
+            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2">
+              Live Overview
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                  <Activity className="w-3 h-3 text-emerald-600" />
+                  Active Bots
+                </span>
+                <span className="font-mono font-bold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {stats.totalConnected}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                  <Radio className="w-3 h-3 text-purple-600" />
+                  Termux Daemons
+                </span>
+                <span className="font-mono font-bold text-purple-600">
+                  {tunnels.filter((t) => t.isRecent).length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
+                  <ShieldCheck className="w-3 h-3 text-sky-600" />
+                  Supabase Sync
+                </span>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded">
+                  Connected
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Footer with Admin Profile & Return to App */}
+        <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2 shrink-0">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-black">
+                C
+              </div>
+              <span className="font-black text-xs text-slate-900">@Chief</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+              Root Panfi
+            </span>
+          </div>
+
+          <Link
+            href="/"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs cursor-pointer group"
+          >
+            <span>Back to Dashboard</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+      </aside>
+
+      {/* RIGHT MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+        {/* Header Bar */}
+        <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-10 shadow-2xs">
+          {/* Breadcrumb Left */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+              {activeTab === 'users' ? <Users className="w-4 h-4" /> : <Server className="w-4 h-4" />}
+            </div>
+            <span className="text-xs font-bold text-slate-500">Chief Admin</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-xs font-black text-emerald-800 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
+              {activeTab === 'users' ? 'Users & Ranks' : 'Minecraft Accounts & Connections'}
+            </span>
+          </div>
+
+          {/* Header Actions Right */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => fetchData(false)}
               disabled={refreshing}
               className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
-              title="Refresh all data"
+              title="Refresh Supabase data"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-emerald-600' : ''}`} />
-              <span>Refresh</span>
+              <span className="hidden sm:inline">Refresh</span>
             </button>
 
             <button
@@ -537,138 +681,110 @@ export default function ChiefAdminPage() {
 
             <Link
               href="/"
-              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
             >
-              <span>Back to App</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Dashboard</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
             </Link>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Toast Alert */}
-        {toast && (
-          <div
-            className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-semibold shadow-md animate-in fade-in slide-in-from-top-2 ${
-              toast.type === 'success'
-                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                : toast.type === 'error'
-                ? 'bg-rose-50 text-rose-900 border-rose-200'
-                : 'bg-sky-50 text-sky-900 border-sky-200'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-              {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-600" />}
-              {toast.type === 'info' && <Activity className="w-4 h-4 text-sky-600" />}
-              <span>{toast.message}</span>
+        {/* Scrollable Main Content */}
+        <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Toast Alert */}
+          {toast && (
+            <div
+              className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-semibold shadow-md animate-in fade-in slide-in-from-top-2 ${
+                toast.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                  : toast.type === 'error'
+                  ? 'bg-rose-50 text-rose-900 border-rose-200'
+                  : 'bg-sky-50 text-sky-900 border-sky-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-600" />}
+                {toast.type === 'info' && <Activity className="w-4 h-4 text-sky-600" />}
+                <span>{toast.message}</span>
+              </div>
+              <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100 cursor-pointer">
+                ✕
+              </button>
             </div>
-            <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100 cursor-pointer">
-              ✕
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* 4 Overview Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Users */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Users</span>
-              <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
-                <Users className="w-4 h-4" />
+          {/* 4 Overview Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Users */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Users</span>
+                <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
+                  <Users className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-slate-900">{stats.totalUsers}</span>
+                <span className="text-xs text-slate-400 font-medium">accounts in Supabase</span>
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">{stats.totalUsers}</span>
-              <span className="text-xs text-slate-400 font-medium">accounts in Supabase</span>
-            </div>
-          </div>
 
-          {/* Minecraft Accounts */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Minecraft Accounts</span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-                <Server className="w-4 h-4" />
+            {/* Minecraft Accounts */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Minecraft Accounts</span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <Server className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-slate-900">{stats.totalAccounts}</span>
+                <span className="text-xs text-slate-400 font-medium">linked across users</span>
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">{stats.totalAccounts}</span>
-              <span className="text-xs text-slate-400 font-medium">linked across users</span>
-            </div>
-          </div>
 
-          {/* Active Connections */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Connections</span>
-              <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
-                <Activity className="w-4 h-4" />
+            {/* Active Connections */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Connections</span>
+                <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
+                  <Activity className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {stats.totalConnected}
+                </span>
+                <span className="text-xs text-slate-400 font-medium">online bots</span>
               </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-emerald-600 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                {stats.totalConnected}
-              </span>
-              <span className="text-xs text-slate-400 font-medium">online bots</span>
-            </div>
-          </div>
 
-          {/* Rank Distribution */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Rank Breakdown</span>
-              <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
+            {/* Rank Distribution */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Rank Breakdown</span>
+                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
+                  Iron: {stats.rankBreakdown?.iron || 0}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">
+                  Gold: {stats.rankBreakdown?.gold || 0}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800">
+                  Dia: {stats.rankBreakdown?.diamond || 0}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
+                  Emr: {stats.rankBreakdown?.emerald || 0}
+                </span>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
-                Iron: {stats.rankBreakdown?.iron || 0}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">
-                Gold: {stats.rankBreakdown?.gold || 0}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800">
-                Dia: {stats.rankBreakdown?.diamond || 0}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
-                Emr: {stats.rankBreakdown?.emerald || 0}
-              </span>
-            </div>
           </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'users'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Users & Ranks ({users.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('accounts')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-              activeTab === 'accounts'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
-            }`}
-          >
-            <Server className="w-3.5 h-3.5" />
-            <span>Minecraft Accounts & Connections ({accounts.length})</span>
-          </button>
-        </div>
 
         {/* TAB 1: USERS & RANKS */}
         {activeTab === 'users' && (
@@ -1256,6 +1372,7 @@ export default function ChiefAdminPage() {
           </div>
         )}
       </main>
+      </div>
 
       {/* MODAL: RESET PASSWORD */}
       {resetPasswordUser && (
