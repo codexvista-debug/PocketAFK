@@ -17,7 +17,7 @@ import {
   Terminal,
   Filter,
 } from 'lucide-react';
-import { MinecraftAccount, PlayerLogEntry, PlayerLogType } from '../types';
+import { MinecraftAccount, PlayerLogEntry, PlayerLogType, ActivityLog } from '../types';
 
 interface AccountLogsModalProps {
   isOpen: boolean;
@@ -25,6 +25,7 @@ interface AccountLogsModalProps {
   account: MinecraftAccount | null;
   serverHost?: string;
   logs: PlayerLogEntry[];
+  activityLogs?: ActivityLog[];
   onClearLogs: () => void;
   isLiveConnected?: boolean;
 }
@@ -35,26 +36,76 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
   account,
   serverHost,
   logs,
+  activityLogs = [],
   onClearLogs,
   isLiveConnected = false,
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'connection' | 'errors' | 'chat'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'activity' | 'connection' | 'errors' | 'chat'>('all');
   const [copied, setCopied] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
   const cleanPlayerName = account?.ign || account?.expectedIgn || account?.username || 'Unknown';
   const avatarKey = (account?.uuid || account?.ign || account?.username || 'Steve').split('@')[0];
 
+  const unifiedLogs = useMemo(() => {
+    type UnifiedLogItem = {
+      id: string;
+      timestamp: number;
+      type: string;
+      message: string;
+      details?: string;
+      serverHost: string;
+      status: string;
+      isActivity?: boolean;
+    };
+
+    const combined: UnifiedLogItem[] = [];
+
+    // 1. Existing stored player audit logs
+    (logs || []).forEach((l) => {
+      combined.push({
+        id: l.id,
+        timestamp: l.timestamp,
+        type: l.type,
+        message: l.message,
+        details: l.details,
+        serverHost: l.serverHost || serverHost || '',
+        status: l.status,
+        isActivity: false,
+      });
+    });
+
+    // 2. Real-time live bot activity logs from daemon
+    (activityLogs || []).forEach((act) => {
+      combined.push({
+        id: act.id,
+        timestamp: act.timestamp,
+        type: act.type,
+        message: act.message,
+        details: undefined,
+        serverHost: serverHost || '',
+        status: act.type === 'disconnect' ? 'error' : act.type === 'reconnect' ? 'warning' : 'success',
+        isActivity: true,
+      });
+    });
+
+    // Sort newest first
+    return combined.sort((a, b) => b.timestamp - a.timestamp);
+  }, [logs, activityLogs, serverHost]);
+
   const filteredLogs = useMemo(() => {
-    return logs
+    return unifiedLogs
       .filter((entry) => {
         // Tab filter
+        if (activeTab === 'activity') {
+          return entry.isActivity || ['anti_afk', 'survival', 'command', 'status'].includes(entry.type);
+        }
         if (activeTab === 'connection') {
-          return ['connecting', 'handshake', 'connected', 'spawned', 'reconnecting', 'disconnected'].includes(entry.type);
+          return ['connecting', 'handshake', 'connected', 'spawned', 'spawn', 'connect', 'reconnecting', 'reconnect', 'disconnected', 'disconnect'].includes(entry.type);
         }
         if (activeTab === 'errors') {
-          return entry.type === 'error' || entry.type === 'kicked' || entry.status === 'error';
+          return entry.type === 'error' || entry.type === 'kicked' || entry.type === 'disconnect' || entry.status === 'error';
         }
         if (activeTab === 'chat') {
           return entry.type === 'chat';
@@ -71,7 +122,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
           entry.serverHost.toLowerCase().includes(q)
         );
       });
-  }, [logs, activeTab, filterQuery]);
+  }, [unifiedLogs, activeTab, filterQuery]);
 
   if (!isOpen || !account) return null;
 
@@ -86,13 +137,14 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
     }
   };
 
-  const getTypeBadge = (type: PlayerLogType, status: string) => {
+  const getTypeBadge = (type: string, status: string) => {
     switch (type) {
+      case 'spawn':
       case 'spawned':
       case 'connected':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            ✓ SPAWNED
+            🟢 SPAWNED
           </span>
         );
       case 'handshake':
@@ -101,14 +153,35 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
             HANDSHAKE
           </span>
         );
+      case 'connect':
       case 'connecting':
       case 'reconnecting':
+      case 'reconnect':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
             CONNECTING
           </span>
         );
+      case 'anti_afk':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+            🛡️ ANTI-AFK
+          </span>
+        );
+      case 'survival':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            ⚔️ SURVIVAL
+          </span>
+        );
+      case 'command':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+            ⚡ COMMAND
+          </span>
+        );
       case 'kicked':
+      case 'disconnect':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
             ⚠ KICKED
@@ -123,13 +196,13 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'chat':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
-            CHAT
+            💬 CHAT
           </span>
         );
       default:
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-            INFO
+            ACTIVITY
           </span>
         );
     }
@@ -200,13 +273,23 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              All Logs ({logs.length})
+              All Logs ({unifiedLogs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+                activeTab === 'activity'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Live Activity
             </button>
             <button
               onClick={() => setActiveTab('connection')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                 activeTab === 'connection'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  ? 'bg-sky-600 text-white shadow-2xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -355,7 +438,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
           <div className="flex items-center gap-2 text-slate-500">
             <span className="font-semibold text-slate-700">{filteredLogs.length}</span>
             <span>of</span>
-            <span className="font-semibold text-slate-700">{logs.length}</span>
+            <span className="font-semibold text-slate-700">{unifiedLogs.length}</span>
             <span>logged events</span>
           </div>
 

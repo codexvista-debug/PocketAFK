@@ -102,7 +102,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
 };
 
 type MainView = 'profile' | 'servers' | 'accounts';
-type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings' | 'logs';
+type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function purgeLocalUserData(username: string) {
   if (typeof window === 'undefined' || !username) return;
@@ -142,6 +142,13 @@ function purgeLocalUserData(username: string) {
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
   } catch (e) {}
+}
+
+function sanitizeAccounts(list: MinecraftAccount[]): MinecraftAccount[] {
+  return (list || []).filter((a) => {
+    const n = (a.ign || a.username || '').toLowerCase();
+    return n !== 'new_account' && a.id !== 'new_account';
+  });
 }
 
 export default function Dashboard() {
@@ -375,26 +382,33 @@ export default function Dashboard() {
 
   // Handle Account Verification callback from daemon
   const handleAccountVerified = useCallback((data: AccountVerifiedData) => {
+    if (!data.ign || data.ign.toLowerCase() === 'new_account') {
+      showToast('Verification failed: No valid Minecraft Java profile found.', 'error');
+      return;
+    }
+
     setAccounts((prevAccounts) => {
-      // Find the account targeted by botId or username/email
-      const targetAcc = prevAccounts.find(
+      const cleanAccounts = sanitizeAccounts(prevAccounts);
+
+      // Find the account targeted by botId or username/email (if explicitly targeting an existing account)
+      const targetAcc = cleanAccounts.find(
         (acc) =>
-          acc.id === data.botId ||
-          acc.username.toLowerCase() === data.email.toLowerCase() ||
-          (acc.expectedIgn && acc.expectedIgn.toLowerCase() === data.email.toLowerCase())
+          acc.id !== 'new_account' &&
+          ((data.botId && data.botId !== 'new_account' && acc.id === data.botId) ||
+           (data.email && data.email !== 'new_account' && acc.username.toLowerCase() === data.email.toLowerCase()) ||
+           (data.email && data.email !== 'new_account' && acc.expectedIgn && acc.expectedIgn.toLowerCase() === data.email.toLowerCase()))
       );
 
       // Expected Minecraft IGN
-      const expectedName =
-        targetAcc?.expectedIgn ||
-        (targetAcc && !targetAcc.username.includes('@') ? targetAcc.username : null);
+      const rawExpected = targetAcc?.expectedIgn || (targetAcc && !targetAcc.username.includes('@') ? targetAcc.username : null);
+      const expectedName = rawExpected && rawExpected.toLowerCase() !== 'new_account' ? rawExpected : null;
 
       // ACCOUNT MISMATCH GUARD: Check if targeted account was expecting a different name
       if (expectedName && expectedName.toLowerCase() !== data.ign.toLowerCase()) {
         const errorText = `Account mismatch: Authenticated as '${data.ign}', but expected '${expectedName}'. Verification aborted.`;
         showToast(errorText, 'error');
 
-        const updatedWithMismatch = prevAccounts.map((acc) => {
+        const updatedWithMismatch = cleanAccounts.map((acc) => {
           if (acc.id === targetAcc?.id) {
             return {
               ...acc,
@@ -413,7 +427,7 @@ export default function Dashboard() {
       }
 
       // DUPLICATE GUARD: Prevent duplicate linked accounts
-      const alreadyLinked = prevAccounts.find(
+      const alreadyLinked = cleanAccounts.find(
         (acc) =>
           acc.id !== targetAcc?.id &&
           ((acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase()) ||
@@ -421,40 +435,23 @@ export default function Dashboard() {
       );
 
       if (alreadyLinked) {
-        showToast(`Account '@${data.ign}' is already linked to your profile!`, 'error');
-        if (targetAcc) {
-          const updatedWithDup = prevAccounts.map((acc) => {
-            if (acc.id === targetAcc.id) {
-              return {
-                ...acc,
-                verified: false,
-                authError: `Verification failed: Microsoft account '@${data.ign}' is already linked.`,
-              };
-            }
-            return acc;
-          });
-          const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(userKey, JSON.stringify(updatedWithDup));
-          }
-          return updatedWithDup;
-        }
-        return prevAccounts;
+        showToast(`Account '@${data.ign}' is already linked! To link a different account, sign in with another Microsoft account.`, 'error');
+        return cleanAccounts;
       }
 
       let nextAccounts: MinecraftAccount[];
-      const exists = prevAccounts.some(
+      const exists = cleanAccounts.some(
         (acc) =>
-          acc.id === data.botId ||
+          (data.botId && data.botId !== 'new_account' && acc.id === data.botId) ||
           (acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase()) ||
-          acc.username.toLowerCase() === data.email.toLowerCase()
+          (data.email && data.email !== 'new_account' && acc.username.toLowerCase() === data.email.toLowerCase())
       );
 
       if (exists) {
-        nextAccounts = prevAccounts.map((acc) => {
+        nextAccounts = cleanAccounts.map((acc) => {
           if (
-            acc.username.toLowerCase() === data.email.toLowerCase() ||
-            acc.id === data.botId ||
+            (data.email && data.email !== 'new_account' && acc.username.toLowerCase() === data.email.toLowerCase()) ||
+            (data.botId && data.botId !== 'new_account' && acc.id === data.botId) ||
             (acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase())
           ) {
             return {
@@ -478,7 +475,7 @@ export default function Dashboard() {
           verified: true,
           addedAt: Date.now(),
         };
-        nextAccounts = [...prevAccounts, newAcc];
+        nextAccounts = [...cleanAccounts, newAcc];
       }
 
       showToast(`Successfully linked official Java account @${data.ign}!`, 'success');
@@ -490,6 +487,7 @@ export default function Dashboard() {
 
       if (currentUser) {
         syncAllToSupabase(currentUser, nextAccounts, servers);
+        deleteAccountFromSupabase(currentUser, 'new_account').catch(() => {});
       }
 
       return nextAccounts;
@@ -529,12 +527,6 @@ export default function Dashboard() {
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
 
-  const [cardLogTab, setCardLogTab] = useState<'activity' | 'chat'>('activity');
-  const [isLogsExpanded, setIsLogsExpanded] = useState<boolean>(true);
-  const [logCategoryFilter, setLogCategoryFilter] = useState<string>('all');
-  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
-  const activityLogsContainerRef = useRef<HTMLDivElement>(null);
-  const cardChatContainerRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = useCallback(() => {
     if (currentUser) {
@@ -1131,7 +1123,7 @@ export default function Dashboard() {
 
       try {
         const storedAcc = localStorage.getItem(accKey);
-        if (storedAcc) localAccs = JSON.parse(storedAcc);
+        if (storedAcc) localAccs = sanitizeAccounts(JSON.parse(storedAcc));
         const storedSrv = localStorage.getItem(srvKey);
         if (storedSrv) localSrvs = JSON.parse(storedSrv);
       } catch (e) {}
@@ -1199,8 +1191,12 @@ export default function Dashboard() {
           // Handle Universal Accounts:
           if (remoteAccounts !== null && Array.isArray(remoteAccounts)) {
             // Authoritative accounts from Supabase!
-            setAccounts(remoteAccounts);
-            localStorage.setItem(accKey, JSON.stringify(remoteAccounts));
+            const sanitized = sanitizeAccounts(remoteAccounts);
+            if (remoteAccounts.some((a) => a.id === 'new_account' || (a.ign || a.username || '').toLowerCase() === 'new_account')) {
+              deleteAccountFromSupabase(currentUser, 'new_account').catch(() => {});
+            }
+            setAccounts(sanitized);
+            localStorage.setItem(accKey, JSON.stringify(sanitized));
           } else {
             setAccounts([]);
             localStorage.setItem(accKey, JSON.stringify([]));
@@ -1256,10 +1252,11 @@ export default function Dashboard() {
     // This stores tokens directly on the phone so the user NEVER has to log in twice!
     if (socketStatus === 'AUTHENTICATED') {
       const targetId = typeof target === 'object' && target ? target.id : `acc_${Math.random().toString(36).substring(2, 9)}`;
-      const targetEmail =
+      const rawTargetEmail =
         typeof target === 'string'
           ? target
-          : (target?.expectedIgn || target?.ign || (!target?.username?.includes('@') ? target?.username : null) || 'new_account');
+          : (target?.expectedIgn || target?.ign || (!target?.username?.includes('@') ? target?.username : null) || '');
+      const targetEmail = rawTargetEmail.toLowerCase() === 'new_account' ? '' : rawTargetEmail;
 
       showToast('Requesting Microsoft sign-in via Termux daemon...', 'info');
       verifyAccount(targetId, targetEmail);
@@ -1277,8 +1274,9 @@ export default function Dashboard() {
         throw new Error(data.error || 'Failed to initiate Microsoft login');
       }
 
+      const fallbackTargetId = typeof target === 'object' && target ? target.id : `acc_${Math.random().toString(36).substring(2, 9)}`;
       setApiMsAuthData({
-        botId: typeof target === 'object' && target ? target.id : 'new_account',
+        botId: fallbackTargetId,
         userCode: data.userCode,
         url: data.verificationUri,
         deviceCode: data.deviceCode,
@@ -1314,10 +1312,11 @@ export default function Dashboard() {
             }
 
             // Check if user targeted a specific account or expected IGN
-            const expectedName =
+            const rawExpectedName =
               typeof target === 'string'
                 ? target
                 : (target?.expectedIgn || target?.ign || (!target?.username?.includes('@') ? target?.username : null));
+            const expectedName = rawExpectedName && rawExpectedName.toLowerCase() !== 'new_account' ? rawExpectedName : undefined;
 
             // ACCOUNT MISMATCH GUARD: Check if authenticated user matches expected target
             if (expectedName && expectedName.toLowerCase() !== finalIgn.toLowerCase()) {
@@ -1842,41 +1841,27 @@ export default function Dashboard() {
     });
   }, [messages, isAllReceiversSelected, effectiveReceiverIds, serverProfileAccounts]);
 
-  const displayActivities = useMemo(() => {
-    if (!activeServer) return [];
-    const relevantBotIds = new Set<string>([
-      activeServer.id,
-      ...serverProfileAccounts.map((a) => `${activeServer.id}__${a.id}`),
-      ...serverProfileAccounts.map((a) => a.id),
-      ...serverProfileAccounts.map((a) => (a.ign || a.username || '').toLowerCase()).filter(Boolean),
-    ]);
-
-    const matchingLogs = Object.entries(activityLogs || {})
+  const selectedAccountActivityLogs = useMemo(() => {
+    if (!selectedLogsAccount) return [];
+    const accIgn = (selectedLogsAccount.ign || selectedLogsAccount.username || '').toLowerCase();
+    const accId = selectedLogsAccount.id;
+    const matching = Object.entries(activityLogs || {})
       .filter(([bId]) => {
         const lower = bId.toLowerCase();
-        if (relevantBotIds.has(bId) || relevantBotIds.has(lower)) return true;
-        if (lower.startsWith(`${activeServer.id.toLowerCase()}__`)) return true;
-        return false;
+        return (
+          bId === accId ||
+          lower === accIgn ||
+          lower.endsWith(`__${accId.toLowerCase()}`) ||
+          (activeServer && lower.startsWith(`${activeServer.id.toLowerCase()}__`) && lower.includes(accId.toLowerCase()))
+        );
       })
       .flatMap(([, l]) => l);
 
-    const combined = [...matchingLogs, ...(currentActivityLogs || [])];
+    const combined = [...matching, ...(currentActivityLogs || [])];
     const unique = new Map<string, ActivityLog>();
     combined.forEach((l) => unique.set(l.id, l));
     return Array.from(unique.values()).sort((a, b) => a.timestamp - b.timestamp);
-  }, [activityLogs, activeServer, serverProfileAccounts, currentActivityLogs]);
-
-  useEffect(() => {
-    if (activityLogsContainerRef.current) {
-      activityLogsContainerRef.current.scrollTop = activityLogsContainerRef.current.scrollHeight;
-    }
-  }, [displayActivities, cardLogTab, isLogsExpanded]);
-
-  useEffect(() => {
-    if (cardChatContainerRef.current) {
-      cardChatContainerRef.current.scrollTop = cardChatContainerRef.current.scrollHeight;
-    }
-  }, [filteredChatMessages, cardLogTab, isLogsExpanded]);
+  }, [selectedLogsAccount, activityLogs, currentActivityLogs, activeServer]);
 
   const handleSendChatMessage = (msg: string, senderId?: string) => {
     if (!activeServer) return;
@@ -2091,12 +2076,16 @@ export default function Dashboard() {
             ? accountLogsMap[(selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '').replace(/^@/, '').trim()] || []
             : []
         }
+        activityLogs={selectedAccountActivityLogs}
         onClearLogs={handleClearAccountLogs}
         isLiveConnected={
           Boolean(
             selectedLogsAccount &&
-            activeAccount?.id === selectedLogsAccount.id &&
-            (botState === 'SPAWNED' || botState === 'LOGGED_IN')
+            (activeAccount?.id === selectedLogsAccount.id ||
+             (activeServer && (botStates[`${activeServer.id}__${selectedLogsAccount.id}`] === 'SPAWNED' || botStates[`${activeServer.id}__${selectedLogsAccount.id}`] === 'LOGGED_IN')) ||
+             botStates[selectedLogsAccount.id] === 'SPAWNED' ||
+             botStates[selectedLogsAccount.id] === 'LOGGED_IN' ||
+             (isActiveServerRunning && assignedAccounts[0]?.id === selectedLogsAccount.id))
           )
         }
       />
@@ -2362,25 +2351,6 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('logs')}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                            activeSubTab === 'logs'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <FileText className={`w-3.5 h-3.5 ${activeSubTab === 'logs' ? 'text-emerald-600' : 'text-slate-400'}`} />
-                            <span>Player Logs</span>
-                          </div>
-                          {displayActivities.length > 0 && (
-                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              {displayActivities.length}
-                            </span>
-                          )}
-                        </button>
-
-                        <button
                           onClick={() => setActiveSubTab('settings')}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'settings'
@@ -2446,7 +2416,6 @@ export default function Dashboard() {
                       activeSubTab === 'movement' ? 'bg-amber-50 text-amber-800 border-amber-300' :
                       activeSubTab === 'inventory' ? 'bg-purple-50 text-purple-800 border-purple-300' :
                       activeSubTab === 'pov' ? 'bg-rose-50 text-rose-800 border-rose-300' :
-                      activeSubTab === 'logs' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
                       'bg-slate-100 text-slate-800 border-slate-300'
                     }`}>
                       {activeSubTab}
@@ -3319,94 +3288,6 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                      {/* In-Card Live Player Activity Logs & Raw Bedrock Chat (Matches VistaAFK) */}
-                      <div className="bg-[#0a0f1d] border-2 border-slate-800 rounded-2xl p-3 sm:p-3.5 text-xs shadow-inner">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-                          <div className="flex items-center space-x-1.5">
-                            <span className={`h-2 w-2 rounded-full mr-1 ${isActiveServerRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                            <button
-                              type="button"
-                              onClick={() => setCardLogTab('activity')}
-                              className={`px-2.5 py-1 rounded-lg font-mono font-bold text-[11px] tracking-wider uppercase transition cursor-pointer flex items-center space-x-1.5 ${
-                                cardLogTab === 'activity'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              <span>Activity ({displayActivities.length})</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCardLogTab('chat')}
-                              className={`px-2.5 py-1 rounded-lg font-mono font-bold text-[11px] tracking-wider uppercase transition cursor-pointer flex items-center space-x-1.5 ${
-                                cardLogTab === 'chat'
-                                  ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 shadow-xs'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              <MessageSquare className="h-3.5 w-3.5 inline" />
-                              <span>Chat ({filteredChatMessages.length})</span>
-                            </button>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              type="button"
-                              onClick={() => setIsLogsExpanded(!isLogsExpanded)}
-                              className="text-slate-400 hover:text-white transition p-1 cursor-pointer rounded-md hover:bg-slate-800/60"
-                              title={isLogsExpanded ? 'Collapse logs' : 'Expand logs'}
-                            >
-                              {isLogsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Terminal Stream Content */}
-                        {isLogsExpanded && (
-                          cardLogTab === 'activity' ? (
-                            <div
-                              ref={activityLogsContainerRef}
-                              className="mt-2.5 space-y-1.5 max-h-48 overflow-y-auto font-mono text-[11px] leading-tight pr-1.5 scrollbar-thin scroll-smooth"
-                            >
-                              {displayActivities.length === 0 ? (
-                                <div className="text-slate-500 py-4 text-center text-xs italic">
-                                  {isActiveServerRunning
-                                    ? 'Bot is active in world. Waiting for next player activity...'
-                                    : 'Bot is offline. Connect to start streaming live activity logs.'}
-                                </div>
-                              ) : (
-                                displayActivities.map((act) => (
-                                  <div key={act.id} className="flex min-w-0 items-start gap-2 text-slate-300 py-0.5 border-b border-slate-900/60 last:border-b-0">
-                                    <span className="text-slate-500 shrink-0 text-[10px] font-mono pt-0.5">
-                                      {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                                    </span>
-                                    <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] text-slate-200">{act.message}</span>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              ref={cardChatContainerRef}
-                              className="mt-2.5 p-2 bg-[#050811] border border-slate-800 rounded-xl max-h-48 overflow-y-auto space-y-1 scrollbar-thin scroll-smooth font-sans text-xs shadow-inner"
-                            >
-                              {filteredChatMessages.length === 0 ? (
-                                <div className="text-slate-500 py-4 text-center text-xs italic font-sans">
-                                  {isActiveServerRunning
-                                    ? 'Awaiting in-game chat messages...'
-                                    : 'Bot is offline. Connect to stream chat.'}
-                                </div>
-                              ) : (
-                                filteredChatMessages.slice(-60).map((msg, idx) => (
-                                  <div key={msg.timestamp ? `${msg.timestamp}-${idx}` : idx} className="pt-0.5 first:pt-0">
-                                    <MinecraftChatMessage message={msg} showTimestamp={true} compact={true} />
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
-
                       {/* Available Accounts to Add (+) to this Server Profile */}
                       {availableAccounts.length > 0 && (
                         <div className="space-y-2 pt-2">
@@ -4045,161 +3926,6 @@ export default function Dashboard() {
                         >
                           Manage dangerous settings
                         </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SUB-TAB 7: PLAYER LOGS */}
-                  {activeSubTab === 'logs' && (
-                    <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-black text-slate-900">Player Activity Logs</h2>
-                            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              {displayActivities.length} Events
-                            </span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                              isActiveServerRunning
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-slate-100 text-slate-500 border border-slate-200'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isActiveServerRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                              <span>{isActiveServerRunning ? 'Streaming Live' : 'Offline'}</span>
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Real-time connection, spawn, anti-AFK, survival automations, and Bedrock/Java activity stream for {activeServer.name}.
-                          </p>
-                        </div>
-
-                        {/* Search & Clear actions */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="text"
-                              value={logSearchQuery}
-                              onChange={(e) => setLogSearchQuery(e.target.value)}
-                              placeholder="Search logs..."
-                              className="w-44 sm:w-56 bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-2xs"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (activityLogsContainerRef.current) {
-                                activityLogsContainerRef.current.scrollTop = activityLogsContainerRef.current.scrollHeight;
-                              }
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer"
-                            title="Scroll to latest event"
-                          >
-                            Jump to Latest
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Filter Pills */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {[
-                          { id: 'all', label: 'All Activities' },
-                          { id: 'connect', label: 'Connections & Auth' },
-                          { id: 'spawn', label: 'Spawns & World' },
-                          { id: 'survival', label: 'Farming & Survival' },
-                          { id: 'command', label: 'Commands' },
-                          { id: 'status', label: 'Status & Anti-AFK' },
-                        ].map((cat) => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => setLogCategoryFilter(cat.id)}
-                            className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
-                              logCategoryFilter === cat.id
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs'
-                            }`}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Dedicated High-Capacity Dark Terminal Card */}
-                      <div className="bg-[#0a0f1d] border-2 border-slate-800 rounded-2xl p-4 shadow-2xl flex flex-col h-[calc(100vh-280px)] min-h-[480px]">
-                        <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono text-slate-400">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="font-bold text-slate-200">Terminal Stream: @{activeServer.name}</span>
-                            <span className="text-slate-500 font-normal">({activeServer.serverHost}:{activeServer.serverPort})</span>
-                          </div>
-                          <span className="text-[11px] text-slate-500">Live Auto-Scroll</span>
-                        </div>
-
-                        <div
-                          ref={activityLogsContainerRef}
-                          className="flex-1 overflow-y-auto mt-3 space-y-1 font-mono text-xs leading-relaxed pr-2 scrollbar-thin scroll-smooth divide-y divide-slate-900/60"
-                        >
-                          {(() => {
-                            const filtered = displayActivities.filter((act) => {
-                              if (logCategoryFilter !== 'all') {
-                                if (logCategoryFilter === 'connect' && act.type !== 'connect' && act.type !== 'disconnect' && act.type !== 'reconnect') return false;
-                                if (logCategoryFilter === 'spawn' && act.type !== 'spawn') return false;
-                                if (logCategoryFilter === 'survival' && act.type !== 'survival') return false;
-                                if (logCategoryFilter === 'command' && act.type !== 'command') return false;
-                                if (logCategoryFilter === 'status' && act.type !== 'status' && act.type !== 'anti_afk') return false;
-                              }
-                              if (logSearchQuery.trim()) {
-                                const q = logSearchQuery.toLowerCase();
-                                return act.message.toLowerCase().includes(q) || act.type.toLowerCase().includes(q);
-                              }
-                              return true;
-                            });
-
-                            if (filtered.length === 0) {
-                              return (
-                                <div className="h-full flex flex-col items-center justify-center text-center py-16 text-slate-500 space-y-2">
-                                  <FileText className="w-8 h-8 text-slate-600" />
-                                  <p className="font-sans text-sm font-bold text-slate-400">No activity events found</p>
-                                  <p className="text-xs text-slate-500 max-w-sm">
-                                    {isActiveServerRunning
-                                      ? 'Streaming live in-game events... Waiting for bot activity.'
-                                      : 'Bot is currently offline. Connect bot from the Connect tab to begin recording.'}
-                                  </p>
-                                </div>
-                              );
-                            }
-
-                            return filtered.map((act) => {
-                              const timeStr = new Date(act.timestamp).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              });
-                              return (
-                                <div key={act.id} className="pt-1.5 first:pt-0 flex items-start gap-3 hover:bg-slate-900/30 px-1 py-0.5 rounded transition">
-                                  <span className="text-slate-500 shrink-0 font-mono text-[11px] pt-0.5">{timeStr}</span>
-                                  <span className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-bold shrink-0 ${
-                                    act.type === 'connect' || act.type === 'spawn'
-                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/80'
-                                      : act.type === 'disconnect'
-                                      ? 'bg-red-950 text-red-400 border border-red-800/80'
-                                      : act.type === 'command'
-                                      ? 'bg-purple-950 text-purple-300 border border-purple-800/80'
-                                      : act.type === 'survival'
-                                      ? 'bg-amber-950 text-amber-300 border border-amber-800/80'
-                                      : 'bg-slate-900 text-slate-300 border border-slate-700/80'
-                                  }`}>
-                                    {act.type}
-                                  </span>
-                                  <span className="flex-1 break-words [overflow-wrap:anywhere] text-slate-200">
-                                    {act.message}
-                                  </span>
-                                </div>
-                              );
-                            });
-                          })()}
-                        </div>
                       </div>
                     </div>
                   )}

@@ -98,10 +98,18 @@ export class BotManager {
     updateTermuxNotification(this.getAllBots());
   }
 
-  public async verifyAccount(accountId: string, email: string) {
-    console.log(chalk.cyan(`[Auth] Initiating Microsoft Device Verification for ${email}...`));
+  public async verifyAccount(accountId: string, email?: string) {
+    const isNew = !email || email === 'new_account' || email.startsWith('acc_');
+    const authKey = isNew ? `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` : email;
+    console.log(chalk.cyan(`[Auth] Initiating Microsoft Device Verification for ${authKey} (Account ID: ${accountId})...`));
     try {
       const profilesFolder = getAndSyncTokenFolder();
+
+      // Clean up any bogus 'new_account' directory if present
+      const staleNewAccFolder = path.join(profilesFolder, 'new_account');
+      if (fs.existsSync(staleNewAccFolder)) {
+        try { fs.rmSync(staleNewAccFolder, { recursive: true, force: true }); } catch (e) {}
+      }
 
       const options = {
         authTitle: Titles.MinecraftNintendoSwitch,
@@ -109,10 +117,10 @@ export class BotManager {
         flow: 'live' as const
       };
 
-      const flow = new Authflow(email, profilesFolder, options, (data: any) => {
-        console.log(chalk.yellow(`[Auth Code] Code for ${email}: ${data.user_code}`));
+      const flow = new Authflow(authKey, profilesFolder, options, (data: any) => {
+        console.log(chalk.yellow(`[Auth Code] Code for ${authKey}: ${data.user_code}`));
         const directUri = data.user_code
-          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}&prompt=select_account`
+          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}`
           : (data.verification_uri || 'https://www.microsoft.com/link');
         this.broadcastFn({
           type: 'MS_AUTH_CODE',
@@ -126,27 +134,34 @@ export class BotManager {
       });
 
       const res = await flow.getMinecraftJavaToken({ fetchProfile: true });
-      const realIgn = res?.profile?.name || email;
+      const realIgn = res?.profile?.name;
+      if (!realIgn) {
+        throw new Error('This Microsoft account does not have a Minecraft Java profile.');
+      }
       const playerUuid = res?.profile?.id;
 
-      // Ensure 90-day rolling token aliases are created for both realIgn and email
-      ensureTokenAliases(profilesFolder, email, realIgn);
-      ensureTokenAliases(profilesFolder, realIgn, email);
+      // Ensure 90-day rolling token aliases are created for both realIgn and authKey
+      ensureTokenAliases(profilesFolder, authKey, realIgn);
+      ensureTokenAliases(profilesFolder, realIgn, authKey);
       backupTokens(profilesFolder);
 
       this.broadcastFn({
         type: 'ACCOUNT_VERIFIED',
         payload: {
           botId: accountId,
-          email: email,
+          email: isNew ? realIgn : (email || realIgn),
           ign: realIgn,
           uuid: playerUuid
         }
       });
 
-      console.log(chalk.green(`[Auth Success] Verified ${email} as Java IGN: ${realIgn} (90-day session saved)`));
+      console.log(chalk.green(`[Auth Success] Verified as Java IGN: ${realIgn} (90-day session saved)`));
     } catch (err: any) {
-      console.error(chalk.red(`[Auth Error] Failed to verify ${email}: ${err.message}`));
+      console.error(chalk.red(`[Auth Error] Failed to verify: ${err.message}`));
+      this.broadcastFn({
+        type: 'AUTH_RESULT',
+        payload: { success: false, message: err.message || 'Microsoft authentication failed' }
+      });
     }
   }
 
