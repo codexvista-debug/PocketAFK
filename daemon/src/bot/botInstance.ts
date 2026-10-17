@@ -19,6 +19,8 @@ export class PocketBotInstance {
   private telemetryInterval: NodeJS.Timeout | null = null;
   private lastAttackTime: number = 0;
   private isDestroyed: boolean = false;
+  private wasKicked: boolean = false;
+  private reconnectAttempts: number = 0;
   private currentWindow: any = null;
   public connectedAt: number = 0;
 
@@ -33,6 +35,11 @@ export class PocketBotInstance {
     }
 
     this.isDestroyed = false;
+    this.wasKicked = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.setState('CONNECTING');
 
     this.logConsole({
@@ -213,6 +220,8 @@ export class PocketBotInstance {
     // Spawn event (Bot appears in world)
     this.bot.once('spawn', () => {
       this.setState('SPAWNED');
+      this.reconnectAttempts = 0;
+      this.wasKicked = false;
       if (!this.connectedAt) this.connectedAt = Date.now();
       this.logConsole({
         type: 'session_divider',
@@ -322,24 +331,43 @@ export class PocketBotInstance {
 
     // Kicked handler
     this.bot.on('kicked', (reason: any) => {
-      const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
-      this.setState('KICKED', reasonStr);
+      this.wasKicked = true;
+      const analysis = this.analyzeKick(reason);
+
+      this.setState('KICKED', analysis.uiReason);
       this.logConsole({
         type: 'error',
-        raw: `[PocketAFK] Kicked from server: ${reasonStr}`,
-        formattedText: `<span style="color:#FF5555"><b>[PocketAFK] Kicked:</b> ${stripMinecraftCodes(reasonStr)}</span>`
+        raw: `[PocketAFK] Kicked: ${analysis.cleanMessage}`,
+        formattedText: `<span style="color:#FF5555"><b>[PocketAFK] Kicked:</b> ${stripMinecraftCodes(analysis.cleanMessage)}</span>`
       });
+
       this.cleanup();
-      this.scheduleReconnect();
+
+      if (analysis.shouldReconnect) {
+        this.scheduleReconnect(analysis.suggestedDelayMs);
+      } else {
+        this.logConsole({
+          type: 'system',
+          raw: `[PocketAFK] Auto-reconnect paused for safety (${analysis.uiReason}). Click Connect to retry.`,
+          formattedText: `<span style="color:#FFAA00">[PocketAFK] Auto-reconnect paused: <b>${stripMinecraftCodes(analysis.uiReason)}</b>. Click Connect when ready.</span>`
+        });
+      }
     });
 
     // Disconnect / End handler
     this.bot.on('end', (reason: string) => {
-      this.setState('DISCONNECTED', reason);
+      // If end was preceded by kicked, do not overwrite the kick reason or state, and do not trigger duplicate reconnect!
+      if (this.wasKicked) {
+        this.cleanup();
+        return;
+      }
+
+      const reasonStr = typeof reason === 'string' ? reason : String(reason || 'Socket closed');
+      this.setState('DISCONNECTED', reasonStr);
       this.logConsole({
         type: 'error',
-        raw: `[PocketAFK] Connection closed: ${reason}`,
-        formattedText: `<span style="color:#AAAAAA">[PocketAFK] Connection closed (${reason})</span>`
+        raw: `[PocketAFK] Connection closed: ${reasonStr}`,
+        formattedText: `<span style="color:#AAAAAA">[PocketAFK] Connection closed (${reasonStr})</span>`
       });
       this.cleanup();
       this.scheduleReconnect();
@@ -659,20 +687,175 @@ export class PocketBotInstance {
     });
   }
 
-  private scheduleReconnect() {
+  private extractKickText(reason: any): string {
+    if (!reason) return '';
+    if (typeof reason === 'string') {
+      try {
+        const parsed = JSON.parse(reason);
+        return this.extractKickText(parsed);
+      } catch {
+        return reason;
+      }
+    }
+    if (typeof reason === 'object') {
+      if (typeof reason.toMotd === 'function') {
+        try { return stripMinecraftCodes(reason.toMotd()); } catch {}
+      }
+      if (typeof reason.toAnsi === 'function') {
+        try { return stripMinecraftCodes(reason.toAnsi()); } catch {}
+      }
+      let text = reason.text || reason.value || '';
+      if (Array.isArray(reason.extra)) {
+        text += reason.extra.map((e: any) => this.extractKickText(e)).join('');
+      }
+      if (Array.isArray(reason.with)) {
+        text += reason.with.map((w: any) => this.extractKickText(w)).join(' ');
+      }
+      if (reason.translate) {
+        text += ` ${reason.translate}`;
+      }
+      if (!text && typeof reason.toString === 'function' && reason.toString !== Object.prototype.toString) {
+        text = reason.toString();
+      }
+      return text || JSON.stringify(reason);
+    }
+    return String(reason);
+  }
+
+  private analyzeKick(reason: any): {
+    shouldReconnect: boolean;
+    cleanMessage: string;
+    uiReason: string;
+    suggestedDelayMs?: number;
+  } {
+    const rawText = this.extractKickText(reason);
+    const cleanText = stripMinecraftCodes(rawText).trim();
+    const lower = cleanText.toLowerCase();
+
+    // 1. Duplicate login / Logged in from another location
+    // Real player logged in from PC client or another device.
+    if (
+      lower.includes('another location') ||
+      lower.includes('somewhere else') ||
+      lower.includes('duplicate login') ||
+      lower.includes('already connected') ||
+      lower.includes('already playing') ||
+      lower.includes('duplicate_login') ||
+      lower.includes('another device')
+    ) {
+      return {
+        shouldReconnect: false,
+        cleanMessage: 'Logged in from another location. Auto-reconnect paused so you can play without interruption.',
+        uiReason: 'Logged in from another location (Paused so you can play)',
+      };
+    }
+
+    // 2. Bans / Blacklist / Suspensions
+    if (
+      lower.includes('banned') ||
+      lower.includes('blacklisted') ||
+      lower.includes('suspended') ||
+      lower.includes('permanently blocked') ||
+      lower.includes('temporarily blocked')
+    ) {
+      const displayReason = cleanText.length > 60 ? cleanText.slice(0, 60) + '...' : cleanText;
+      return {
+        shouldReconnect: false,
+        cleanMessage: `Account banned/suspended: ${cleanText}`,
+        uiReason: displayReason || 'Banned from server',
+      };
+    }
+
+    // 3. Whitelist
+    if (
+      lower.includes('whitelist') ||
+      lower.includes('white-list') ||
+      lower.includes('not whitelisted')
+    ) {
+      return {
+        shouldReconnect: false,
+        cleanMessage: 'You are not whitelisted on this server.',
+        uiReason: 'Not on server whitelist',
+      };
+    }
+
+    // 4. Invalid session / Auth failures
+    if (
+      lower.includes('invalid session') ||
+      lower.includes('unverified username') ||
+      lower.includes('failed to verify username') ||
+      lower.includes('restart your game') ||
+      lower.includes('authentication servers')
+    ) {
+      return {
+        shouldReconnect: false,
+        cleanMessage: 'Minecraft session token expired or invalid. Please re-authenticate your Microsoft account.',
+        uiReason: 'Session invalid (Re-auth required)',
+      };
+    }
+
+    // 5. Server is full (Wait 30s before retrying)
+    if (lower.includes('server is full') || lower.includes('server full')) {
+      return {
+        shouldReconnect: true,
+        suggestedDelayMs: 30000,
+        cleanMessage: 'Server is currently full. Will retry in 30 seconds.',
+        uiReason: 'Server full (Retrying in 30s)',
+      };
+    }
+
+    // 6. Rate limited / connecting too fast (Wait 45s before retrying)
+    if (
+      lower.includes('too fast') ||
+      lower.includes('too many login') ||
+      lower.includes('rate limit') ||
+      lower.includes('spamming')
+    ) {
+      return {
+        shouldReconnect: true,
+        suggestedDelayMs: 45000,
+        cleanMessage: 'Connection rate-limited by server. Backing off for 45 seconds.',
+        uiReason: 'Rate limited (Retrying in 45s)',
+      };
+    }
+
+    // 7. Generic kick (AFK, server reboot, timeout, etc.)
+    return {
+      shouldReconnect: true,
+      cleanMessage: cleanText || 'Kicked from server',
+      uiReason: cleanText.length > 50 ? cleanText.slice(0, 50) + '...' : (cleanText || 'Kicked from server'),
+    };
+  }
+
+  private scheduleReconnect(forcedDelay?: number) {
     if (this.isDestroyed || !this.config.settings.autoReconnect) return;
 
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    
-    // Add 1-3 seconds jitter to avoid rapid disconnect bans
-    const jitter = Math.floor(Math.random() * 2000);
-    const delay = (this.config.settings.autoReconnectDelay || 5000) + jitter;
+    if (this.reconnectAttempts >= 8) {
+      this.setState('DISCONNECTED', 'Max reconnect attempts reached (Paused)');
+      this.logConsole({
+        type: 'error',
+        raw: `[PocketAFK] Stopped auto-reconnecting after 8 consecutive failed attempts. Click Connect to retry.`,
+        formattedText: `<span style="color:#FF5555">[PocketAFK] Stopped auto-reconnecting after 8 failed attempts. Click Connect to retry.</span>`
+      });
+      return;
+    }
 
-    this.setState('RECONNECTING', `Reconnecting in ${Math.round(delay / 1000)}s...`);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+    this.reconnectAttempts++;
+
+    // Add 1-2.5 seconds jitter to avoid rapid disconnect bans
+    const jitter = Math.floor(Math.random() * 2000);
+    const baseDelay = forcedDelay || (this.config.settings.autoReconnectDelay || 5000);
+    const backoffMultiplier = Math.pow(1.3, Math.min(this.reconnectAttempts - 1, 5));
+    const delay = Math.round(baseDelay * backoffMultiplier) + jitter;
+    const delaySec = Math.round(delay / 1000);
+
+    this.setState('RECONNECTING', `Reconnecting in ${delaySec}s (Attempt ${this.reconnectAttempts}/8)...`);
     this.logConsole({
       type: 'session_divider',
-      raw: `--- Reconnecting in ${Math.round(delay / 1000)}s ---`,
-      formattedText: `<span style="color:#FFAA00">--- Reconnecting in ${Math.round(delay / 1000)}s ---</span>`
+      raw: `--- Reconnecting in ${delaySec}s (Attempt ${this.reconnectAttempts}/8) ---`,
+      formattedText: `<span style="color:#FFAA00">--- Reconnecting in <b>${delaySec}s</b> (Attempt ${this.reconnectAttempts}/8) ---</span>`
     });
 
     this.reconnectTimer = setTimeout(() => {
@@ -695,7 +878,12 @@ export class PocketBotInstance {
 
   public stop() {
     this.isDestroyed = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.wasKicked = false;
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.cleanup();
 
     if (this.bot) {

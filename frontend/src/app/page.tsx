@@ -2782,6 +2782,11 @@ export default function Dashboard() {
                                   (isAssignedActive ? ((activeServer.id === activeServerId ? botState : botStates[activeServer.id]) || botStates[activeServer.id]) : undefined) ||
                                   'DISCONNECTED';
 
+                                const currentBotReason: string =
+                                  botStateReasons[botKey] ||
+                                  (isAssignedActive ? ((activeServer.id === activeServerId ? botStateReason : botStateReasons[activeServer.id]) || botStateReasons[activeServer.id]) : undefined) ||
+                                  '';
+
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
                                 const isBotConnecting = currentBotState === 'CONNECTING';
@@ -2876,7 +2881,7 @@ export default function Dashboard() {
                                           Failed (Retry)
                                         </button>
                                       ) : (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-col gap-1 items-start">
                                           <button
                                             type="button"
                                             onClick={(e) => {
@@ -2900,11 +2905,21 @@ export default function Dashboard() {
                                             title={
                                               isBotActive
                                                 ? `Online • Click to disconnect @${acc.ign || acc.username}`
+                                                : currentBotReason
+                                                ? `${currentBotState}: ${currentBotReason} • Click to connect`
                                                 : `Offline • Click to connect @${acc.ign || acc.username}`
                                             }
                                           >
                                             {getStatusBadge(currentBotState)}
                                           </button>
+                                          {currentBotReason && (currentBotState === 'KICKED' || currentBotState === 'ERROR' || currentBotState === 'RECONNECTING') && (
+                                            <span
+                                              className="text-[10px] text-rose-600 font-semibold max-w-[190px] truncate block leading-tight"
+                                              title={currentBotReason}
+                                            >
+                                              {currentBotReason}
+                                            </span>
+                                          )}
                                         </div>
                                       )}
                                     </td>
