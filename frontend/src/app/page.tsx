@@ -442,7 +442,7 @@ export default function Dashboard() {
     clearMessages,
     msAuthData,
     clearMsAuth,
-  } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser));
+  } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
 
   // Helper to resolve an account for a server profile
   const resolveServerAccount = useCallback(
@@ -781,21 +781,31 @@ export default function Dashboard() {
 
       const urlParams = new URLSearchParams(window.location.search);
       const queryTunnel = urlParams.get('tunnel');
+      const queryUser = urlParams.get('user');
+
       if (queryTunnel && queryTunnel.startsWith('wss://')) {
+        // Prevent cross-user linking if the instant link is tagged for a different user
+        if (queryUser && currentUser && queryUser.trim().toLowerCase() !== currentUser.trim().toLowerCase()) {
+          console.warn(`[PocketAFK] Ignoring tunnel param for @${queryUser} because logged in as @${currentUser}`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
         saveSettings(queryTunnel, authToken);
         setAutoSynced(true);
         window.history.replaceState({}, document.title, window.location.pathname);
         return;
       }
 
+      if (!currentUser) return;
+
       try {
-        const res = await fetch(`/api/tunnel?username=${encodeURIComponent(effectiveUser)}`, { cache: 'no-store' });
+        const res = await fetch(`/api/tunnel?username=${encodeURIComponent(currentUser)}`, { cache: 'no-store' });
         if (res.ok && isMounted) {
           const data = await res.json();
           const targetUrl = (data?.url || data?.tunnel_url || '').trim();
           if (targetUrl && targetUrl.startsWith('wss://')) {
             if (targetUrl !== daemonUrl) {
-              console.log('[PocketAFK] Auto-syncing discovered daemon tunnel:', targetUrl);
+              console.log(`[PocketAFK] Auto-syncing discovered daemon tunnel for @${currentUser}:`, targetUrl);
               saveSettings(targetUrl, authToken);
               setAutoSynced(true);
             }
@@ -809,7 +819,7 @@ export default function Dashboard() {
     syncTunnel();
 
     // If socket is not authenticated, poll /api/tunnel every 3 seconds so the phone's 1-click startup automatically links!
-    if (socketStatus !== 'AUTHENTICATED') {
+    if (currentUser && socketStatus !== 'AUTHENTICATED') {
       pollInterval = setInterval(syncTunnel, 3000);
     }
 
@@ -817,7 +827,7 @@ export default function Dashboard() {
       isMounted = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [currentUser, effectiveUser, authToken, daemonUrl, socketStatus, saveSettings]);
+  }, [currentUser, authToken, daemonUrl, socketStatus, saveSettings]);
 
   // Load Notes & Pinned state
   useEffect(() => {
@@ -1633,6 +1643,8 @@ export default function Dashboard() {
     setCurrentUser(null);
     setSecretCode('');
     localStorage.removeItem('pocketafk_user');
+    saveSettings('', '');
+    setToast(null);
   };
 
   const handleLoginSuccess = (user: string, secret?: string) => {

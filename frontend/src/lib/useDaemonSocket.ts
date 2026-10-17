@@ -22,13 +22,15 @@ export interface AccountVerifiedData {
 export function useDaemonSocket(
   activeBotId?: string | null,
   onAccountVerified?: (data: AccountVerifiedData) => void,
-  enabled: boolean = true
+  enabled: boolean = true,
+  currentUser?: string | null
 ) {
   const [daemonUrl, setDaemonUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pocketafk_daemon_url');
+      const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+      const stored = localStorage.getItem(`pocketafk_daemon_url_${u}`);
       if (stored && (stored.includes('localhost') || stored.includes('127.0.0.1'))) {
-        localStorage.removeItem('pocketafk_daemon_url');
+        localStorage.removeItem(`pocketafk_daemon_url_${u}`);
         return '';
       }
       if (stored) return stored;
@@ -38,7 +40,8 @@ export function useDaemonSocket(
 
   const [authToken, setAuthToken] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('pocketafk_daemon_token') || '';
+      const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+      return localStorage.getItem(`pocketafk_daemon_token_${u}`) || '';
     }
     return '';
   });
@@ -59,19 +62,60 @@ export function useDaemonSocket(
   const onAccountVerifiedRef = useRef(onAccountVerified);
   onAccountVerifiedRef.current = onAccountVerified;
 
+  // Seamless user switching: close old socket and reload credentials when switching account
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+    
+    // Close existing socket connection immediately
+    if (socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch (e) {}
+      socketRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    const nextUrl = localStorage.getItem(`pocketafk_daemon_url_${u}`) || '';
+    const nextToken = localStorage.getItem(`pocketafk_daemon_token_${u}`) || '';
+    
+    setDaemonUrl(nextUrl);
+    setAuthToken(nextToken);
+    setStatus('DISCONNECTED');
+    setBotStates({});
+    setBotStateReasons({});
+    setBotVersions({});
+    setTelemetries({});
+    setMessagesByBot({});
+    setContainerWindows({});
+    setMsAuthData(null);
+
+    // Clean up any legacy shared global keys
+    localStorage.removeItem('pocketafk_daemon_url');
+    localStorage.removeItem('pocketafk_daemon_token');
+  }, [currentUser]);
+
   const saveSettings = useCallback((url: string, token: string) => {
     const cleanUrl = url.trim();
     setDaemonUrl(cleanUrl);
     setAuthToken(token);
     if (typeof window !== 'undefined') {
+      const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
       if (cleanUrl) {
-        localStorage.setItem('pocketafk_daemon_url', cleanUrl);
+        localStorage.setItem(`pocketafk_daemon_url_${u}`, cleanUrl);
       } else {
-        localStorage.removeItem('pocketafk_daemon_url');
+        localStorage.removeItem(`pocketafk_daemon_url_${u}`);
       }
-      localStorage.setItem('pocketafk_daemon_token', token);
+      localStorage.setItem(`pocketafk_daemon_token_${u}`, token);
+
+      // Clean up legacy global keys
+      localStorage.removeItem('pocketafk_daemon_url');
+      localStorage.removeItem('pocketafk_daemon_token');
     }
-  }, []);
+  }, [currentUser]);
 
   const connect = useCallback(() => {
     if (!enabled) {

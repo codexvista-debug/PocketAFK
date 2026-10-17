@@ -174,7 +174,7 @@ fi
 
 WSS_URL=$(echo "$TUNNEL_URL" | sed 's/https:/wss:/')
 DASHBOARD_SYNC_URL="https://pocketafk.vercel.app/api/tunnel"
-AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}"
+AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}&user=${APP_USER}"
 
 # 4. Auto-sync to Vercel Website
 echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
