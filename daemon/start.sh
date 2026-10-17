@@ -203,6 +203,18 @@ else
   echo -e "      ${YELLOW}✓ Live sync broadcasted.${NC}"
 fi
 
+# 5. Start background heartbeat to keep tunnel alive in dashboard (every 20s)
+run_heartbeat_loop() {
+  while true; do
+    sleep 20
+    curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
+      -H "Content-Type: application/json" \
+      -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" >/dev/null 2>&1 || true
+  done
+}
+run_heartbeat_loop &
+HEARTBEAT_PID=$!
+
 # Print Fancy Summary Card
 echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║${NC}   ${BOLD}🎉 POCKETAFK IS OFFICIALLY LIVE & PROTECTED 24/7${NC}                      ${GREEN}║${NC}"
@@ -227,11 +239,19 @@ TAIL_PID=$!
 # Trap exit
 cleanup() {
   echo -e "\n\n${YELLOW}[!] Stopping PocketAFK processes cleanly...${NC}"
+  kill $HEARTBEAT_PID 2>/dev/null
   kill $TAIL_PID 2>/dev/null
   kill $DAEMON_PID 2>/dev/null
   pkill -f "tsx src/index.ts" 2>/dev/null || true
   kill $TUNNEL_PID 2>/dev/null
   pkill -f "cloudflared tunnel" 2>/dev/null || true
+
+  # Notify dashboard immediately that daemon has disconnected
+  echo -e "      ${YELLOW}Syncing offline status to dashboard...${NC}"
+  curl -s --connect-timeout 3 --max-time 5 -X POST "$DASHBOARD_SYNC_URL" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"$APP_USER\",\"url\":\"\",\"token\":\"$APP_SECRET\",\"action\":\"disconnect\"}" >/dev/null 2>&1 || true
+
   if command -v termux-wake-unlock &> /dev/null; then
     termux-wake-unlock
   fi

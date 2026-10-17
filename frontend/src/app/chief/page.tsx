@@ -305,6 +305,24 @@ export default function ChiefAdminPage() {
     }
   };
 
+  // Handle Disconnect / Clear Tunnel
+  const handleDisconnectTunnel = async (username: string) => {
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect_tunnel', username }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to disconnect tunnel');
+
+      showToast(`Tunnel and bots disconnected for @${username}`, 'success');
+      fetchData(true);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -755,7 +773,7 @@ export default function ChiefAdminPage() {
                   </div>
                 ) : (
                   tunnels.map((tun) => {
-                    const isLive = tun.isRecent;
+                    const isLive = Boolean(tun.isRecent && tun.url);
                     const lastSyncSec = tun.updatedAt ? Math.max(0, Math.floor((nowTick - tun.updatedAt) / 1000)) : 0;
                     return (
                       <div
@@ -763,7 +781,7 @@ export default function ChiefAdminPage() {
                         className={`p-3 rounded-xl border transition ${
                           isLive
                             ? 'bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-200 shadow-2xs'
-                            : 'bg-slate-50/70 border-slate-200 opacity-75'
+                            : 'bg-slate-50/80 border-slate-200'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -776,7 +794,7 @@ export default function ChiefAdminPage() {
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 text-slate-600">
-                                Inactive
+                                Inactive (Offline)
                               </span>
                             )}
                           </div>
@@ -789,18 +807,29 @@ export default function ChiefAdminPage() {
                           <span className="truncate text-slate-700 select-all" title={tun.url}>
                             {tun.url || 'No active tunnel'}
                           </span>
-                          {tun.url && (
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(tun.url);
-                                showToast(`Copied tunnel for @${tun.username}`, 'info');
-                              }}
-                              className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
-                              title="Copy tunnel URL"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {tun.url && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(tun.url);
+                                  showToast(`Copied tunnel for @${tun.username}`, 'info');
+                                }}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                title="Copy tunnel URL"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+                            {tun.url && (
+                              <button
+                                onClick={() => handleDisconnectTunnel(tun.username)}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition cursor-pointer"
+                                title="Disconnect / clear daemon tunnel"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
@@ -808,7 +837,13 @@ export default function ChiefAdminPage() {
                             <Smartphone className="w-3 h-3 text-slate-400" />
                             Android Termux
                           </span>
-                          <span>{isLive && tun.updatedAt ? `Heartbeat ${formatUptime(lastSyncSec)} ago` : 'Offline'}</span>
+                          <span>
+                            {isLive
+                              ? `Heartbeat ${formatUptime(lastSyncSec)} ago`
+                              : tun.updatedAt
+                              ? `Offline (last heartbeat ${formatUptime(lastSyncSec)} ago)`
+                              : 'Offline'}
+                          </span>
                         </div>
                       </div>
                     );

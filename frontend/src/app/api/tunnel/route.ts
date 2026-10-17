@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 import { generateSecretCode } from '@/lib/authUtils';
-
 import { sharedUserTunnels } from '@/lib/tunnelStore';
 
 const userTunnels = sharedUserTunnels;
 
 export const dynamic = 'force-dynamic';
+
+// 65-second timeout: daemons send heartbeats every 20 seconds.
+// If no heartbeat is received in 65s, the daemon is considered offline.
+const TUNNEL_TIMEOUT_MS = 65000;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -14,10 +17,11 @@ export async function GET(req: NextRequest) {
 
   // 1. Check in-memory cache first
   const cached = userTunnels.get(username);
-  if (cached && Date.now() - cached.updatedAt < 1000 * 60 * 60 * 12) { // 12 hours valid
+  if (cached && cached.url && Date.now() - cached.updatedAt < TUNNEL_TIMEOUT_MS) {
     return NextResponse.json({
       ...cached,
       tunnel_url: cached.url,
+      isLive: true,
     });
   }
 
@@ -25,39 +29,39 @@ export async function GET(req: NextRequest) {
   if (supabase) {
     try {
       const { data } = await supabase.from('tunnels').select('*').ilike('username', username).maybeSingle();
-      if (data) {
-        const tunnelObj = {
-          url: data.daemon_url,
-          tunnel_url: data.daemon_url,
-          token: data.daemon_token || '',
-          updatedAt: new Date(data.updated_at).getTime(),
-        };
-        userTunnels.set(username, tunnelObj);
-        return NextResponse.json(tunnelObj);
+      if (data && data.daemon_url) {
+        const updatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+        if (Date.now() - updatedAt < TUNNEL_TIMEOUT_MS) {
+          const tunnelObj = {
+            url: data.daemon_url,
+            tunnel_url: data.daemon_url,
+            token: data.daemon_token || '',
+            updatedAt,
+            isLive: true,
+          };
+          userTunnels.set(username, tunnelObj);
+          return NextResponse.json(tunnelObj);
+        }
       }
     } catch (e) {
       // ignore
     }
   }
 
-  if (cached) {
-    return NextResponse.json({
-      ...cached,
-      tunnel_url: cached.url,
-    });
-  }
-
-  return NextResponse.json({ url: '', tunnel_url: '', token: '', updatedAt: 0 });
+  // Expired or offline
+  return NextResponse.json({
+    url: '',
+    tunnel_url: '',
+    token: '',
+    updatedAt: cached?.updatedAt || 0,
+    isLive: false,
+  });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { username, url, token } = body;
-
-    if (!url || typeof url !== 'string') {
-      return NextResponse.json({ error: 'Valid URL is required' }, { status: 400 });
-    }
+    const { username, url, token, action } = body;
 
     const cleanUsername = (typeof username === 'string' && username.trim()) 
       ? username.trim().toLowerCase() 
@@ -87,7 +91,51 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Ensure format is wss://
+    // 1. Handle Explicit Disconnect / Shutdown
+    if (action === 'disconnect' || !url || (typeof url === 'string' && url.trim() === '')) {
+      userTunnels.delete(cleanUsername);
+
+      if (supabase) {
+        try {
+          await supabase.from('tunnels').update({
+            daemon_url: '',
+            updated_at: new Date().toISOString(),
+          }).ilike('username', cleanUsername);
+
+          // Automatically mark all connected bot accounts for this user as disconnected
+          const { data: userAccs } = await supabase
+            .from('accounts')
+            .select('id, settings')
+            .ilike('username', cleanUsername);
+
+          if (userAccs && userAccs.length > 0) {
+            for (const acc of userAccs) {
+              const updatedSettings = {
+                ...(acc.settings || {}),
+                is_connected: false,
+                connected_at: null,
+              };
+              await supabase
+                .from('accounts')
+                .update({
+                  settings: updatedSettings,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', acc.id);
+            }
+          }
+        } catch (e) {
+          console.warn('Error clearing tunnel & accounts in Supabase:', e);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Phone daemon tunnel disconnected and accounts marked offline for @${cleanUsername}`,
+      });
+    }
+
+    // 2. Handle Heartbeat or New Tunnel Connection
     let cleanUrl = url.trim();
     if (cleanUrl.startsWith('https://')) {
       cleanUrl = cleanUrl.replace('https://', 'wss://');
@@ -101,7 +149,6 @@ export async function POST(req: NextRequest) {
 
     userTunnels.set(cleanUsername, record);
 
-    // Persist to Supabase if available
     if (supabase) {
       try {
         await supabase.from('tunnels').upsert({
@@ -117,7 +164,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Tunnel paired for user @${cleanUsername}`,
+      message: action === 'heartbeat' ? 'Heartbeat received' : `Tunnel paired for user @${cleanUsername}`,
       data: record,
     });
   } catch (e: any) {

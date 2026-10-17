@@ -116,8 +116,14 @@ export async function GET(req: NextRequest) {
           rankMap.set(lowerOwner, metaRank);
         }
       } else if (!botName.startsWith('__')) {
-        const isConnected = Boolean(row.settings?.is_connected);
         const userTunnel = tunnelMap.get(lowerOwner);
+        // Authoritative liveness: Phone daemon must have sent heartbeat within 65 seconds
+        const isTunnelLive = Boolean(userTunnel?.url && Date.now() - userTunnel.updatedAt < 65000);
+
+        // A bot CANNOT be online if its phone daemon is dead/offline
+        const rawConnected = Boolean(row.settings?.is_connected);
+        const isConnected = rawConnected && isTunnelLive;
+
         const activeDaemonUrl = (row.settings?.daemon_url || '').trim() || (isConnected ? userTunnel?.url || '' : '');
 
         let legitimacy: AccountItem['legitimacy'];
@@ -126,7 +132,11 @@ export async function GET(req: NextRequest) {
           legitimacy = {
             status: 'offline',
             badge: 'Standby / Offline',
-            description: userTunnel?.url ? `Configured tunnel: ${userTunnel.url}` : 'No phone daemon registered for this user',
+            description: userTunnel?.url
+              ? isTunnelLive
+                ? `Phone daemon live on ${userTunnel.url} (Bot offline)`
+                : `Phone daemon offline (Last heartbeat ${Math.max(1, Math.round((Date.now() - userTunnel.updatedAt) / 60000))}m ago)`
+              : 'No phone daemon registered for this user',
             isLegit: true,
           };
         } else {
@@ -198,7 +208,7 @@ export async function GET(req: NextRequest) {
           serverHost: row.server_host || 'donutsmp.net',
           serverPort: row.server_port || 25565,
           isConnected,
-          connectedAt: row.settings?.connected_at,
+          connectedAt: isConnected ? row.settings?.connected_at : undefined,
           updatedAt: row.updated_at,
           createdAt: row.created_at,
           settings: row.settings || {},
@@ -223,7 +233,7 @@ export async function GET(req: NextRequest) {
       const connectedCount = userAccounts.filter((a) => a.isConnected).length;
       const secretCode = u.password_hash ? generateSecretCode(u.password_hash) : undefined;
       const userTunnel = tunnelMap.get(lowerU);
-      const isTunnelActive = Boolean(userTunnel?.url && (Date.now() - userTunnel.updatedAt < 1000 * 60 * 60 * 12));
+      const isTunnelActive = Boolean(userTunnel?.url && Date.now() - userTunnel.updatedAt < 65000);
 
       return {
         id: u.id,
@@ -242,7 +252,7 @@ export async function GET(req: NextRequest) {
     const tunnelList: AdminTunnelItem[] = [];
     tunnelMap.forEach((t, u) => {
       const activeBots = realAccounts.filter((a) => a.owner.toLowerCase().trim() === u && a.isConnected).length;
-      const isRecent = Boolean(t.url && Date.now() - t.updatedAt < 1000 * 60 * 60 * 12);
+      const isRecent = Boolean(t.url && Date.now() - t.updatedAt < 65000);
       tunnelList.push({
         username: u,
         url: t.url,
@@ -491,6 +501,47 @@ export async function POST(req: NextRequest) {
         .eq('id', accountId);
 
       return NextResponse.json({ success: true, message: 'Account connection marked as disconnected' });
+    }
+
+    // Action 7: Disconnect / Clear Tunnel
+    if (action === 'disconnect_tunnel') {
+      const { username } = body;
+      if (!username) {
+        return NextResponse.json({ error: 'username required' }, { status: 400 });
+      }
+
+      const cleanUser = username.trim().toLowerCase();
+      sharedUserTunnels.delete(cleanUser);
+
+      await supabase.from('tunnels').update({
+        daemon_url: '',
+        updated_at: new Date().toISOString(),
+      }).ilike('username', cleanUser);
+
+      // Also set all accounts for this user as disconnected
+      const { data: userAccs } = await supabase
+        .from('accounts')
+        .select('id, settings')
+        .ilike('username', cleanUser);
+
+      if (userAccs && userAccs.length > 0) {
+        for (const acc of userAccs) {
+          const updatedSettings = {
+            ...(acc.settings || {}),
+            is_connected: false,
+            connected_at: null,
+          };
+          await supabase
+            .from('accounts')
+            .update({
+              settings: updatedSettings,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', acc.id);
+        }
+      }
+
+      return NextResponse.json({ success: true, message: `Phone daemon tunnel and active bots disconnected for @${cleanUser}` });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
