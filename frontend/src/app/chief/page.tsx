@@ -212,10 +212,10 @@ export default function ChiefAdminPage() {
               setLiveChats((prev) => {
                 const next = { ...prev };
                 if (ignKey) {
-                  next[ignKey] = [...(next[ignKey] || []).slice(-9), entry];
+                  next[ignKey] = [...(next[ignKey] || []).slice(-20), entry];
                 }
                 if (botKey && botKey !== ignKey) {
-                  next[botKey] = [...(next[botKey] || []).slice(-9), entry];
+                  next[botKey] = [...(next[botKey] || []).slice(-20), entry];
                 }
                 return next;
               });
@@ -1241,254 +1241,215 @@ export default function ChiefAdminPage() {
               </div>
             </div>
 
-            {/* Accounts Table */}
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
-                    <tr>
-                      <th className="p-3.5">Minecraft Account</th>
-                      <th className="p-3.5">PocketAFK Owner</th>
-                      <th className="p-3.5">Tunnel & Daemon Endpoint</th>
-                      <th className="p-3.5">Server Destination</th>
-                      <th className="p-3.5">Security & Legitimacy</th>
-                      <th className="p-3.5">Status & Uptime</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400">
-                          <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-600 mb-2" />
-                          <span>Loading accounts and analyzing tunnel security...</span>
-                        </td>
-                      </tr>
-                    ) : filteredAccounts.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400">
-                          No Minecraft accounts found matching your filter.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredAccounts.map((a) => {
-                        const uptimeSec =
-                          a.isConnected && a.connectedAt
-                            ? Math.max(0, Math.floor((nowTick - a.connectedAt) / 1000))
-                            : 0;
+            {/* Accounts Portrait Cards Grid */}
+            {loading ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 shadow-xs">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-600 mb-2" />
+                <span className="text-xs font-medium">Loading Minecraft accounts and analyzing security...</span>
+              </div>
+            ) : filteredAccounts.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 shadow-xs text-xs">
+                No Minecraft accounts found matching your filter.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {filteredAccounts.map((a) => {
+                  const uptimeSec =
+                    a.isConnected && a.connectedAt
+                      ? Math.max(0, Math.floor((nowTick - a.connectedAt) / 1000))
+                      : 0;
 
-                        const displayTunnel = a.daemonUrl || a.registeredTunnel || '';
+                  const displayTunnel = a.daemonUrl || a.registeredTunnel || '';
+                  const botChats =
+                    liveChats[a.ign.toLowerCase()] ||
+                    liveChats[(a.settings?.last_bot_id || '').toLowerCase()] ||
+                    [];
 
-                        return (
-                          <tr key={a.id} className="hover:bg-slate-50/80 transition">
-                            {/* IGN & Head */}
-                            <td className="p-3.5">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-300 bg-slate-100 shrink-0">
-                                  <img
-                                    src={`https://crafthead.net/helm/${encodeURIComponent(a.ign.split('@')[0])}/32`}
-                                    alt={a.ign}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      (e.target as HTMLElement).style.display = 'none';
-                                    }}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="font-bold text-slate-900 block">{a.ign}</span>
-                                  <span className="text-[10px] text-slate-400 font-mono">Row ID: {a.id.substring(0, 8)}...</span>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Owner */}
-                            <td className="p-3.5">
-                              <span className="px-2 py-1 rounded-lg bg-slate-100 font-bold text-slate-800 text-xs">
+                  return (
+                    <div
+                      key={a.id}
+                      className="bg-white border border-slate-200 rounded-3xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                    >
+                      {/* Top Header: Head, IGN, Owner, Status & Actions */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 shrink-0 shadow-xs">
+                            <img
+                              src={`https://crafthead.net/helm/${encodeURIComponent(a.ign.split('@')[0])}/64`}
+                              alt={a.ign}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-black text-sm text-slate-900 tracking-tight truncate" title={a.ign}>
+                              {a.ign}
+                            </h3>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold font-mono">
                                 @{a.owner}
                               </span>
-                            </td>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                #{a.id.substring(0, 6)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
 
-                            {/* Tunnel & Daemon Endpoint */}
-                            <td className="p-3.5">
-                              {displayTunnel ? (
-                                <div className="space-y-1 max-w-[220px]">
-                                  <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 bg-slate-100/90 px-2 py-1 rounded-lg border border-slate-200">
-                                    <span className="truncate" title={displayTunnel}>
-                                      {displayTunnel}
-                                    </span>
-                                    <button
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(displayTunnel);
-                                        showToast(`Copied tunnel URL`, 'info');
-                                      }}
-                                      className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
-                                      title="Copy tunnel URL"
-                                    >
-                                      <Copy className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                                    <Globe className="w-3 h-3 text-slate-400" />
-                                    <span>Cloudflare SSL Tunnel</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-slate-400 text-xs italic">
-                                  No tunnel registered
-                                </div>
-                              )}
-                            </td>
+                        {/* Status & Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {a.isConnected ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              Connected
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              Offline
+                            </span>
+                          )}
 
-                            {/* Server Host & Live Chat */}
-                            <td className="p-3.5">
-                              <div className="font-mono text-xs text-slate-700 flex items-center gap-1.5 font-semibold">
-                                <Server className="w-3 h-3 text-slate-400" />
-                                <span>{a.serverHost}:{a.serverPort}</span>
-                              </div>
+                          {a.isConnected && (
+                            <button
+                              onClick={() => handleDisconnectAccount(a.id, a.ign)}
+                              className="p-1.5 rounded-xl border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-500 hover:text-amber-700 transition cursor-pointer"
+                              title="Disconnect bot"
+                            >
+                              <Power className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
-                              {/* Live Server Chat for Connected Bot (up to 3 messages) */}
-                              {a.isConnected && (
-                                <div className="mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-[10.5px] font-mono shadow-inner max-w-[280px] space-y-1">
-                                  <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
-                                    <span className="flex items-center gap-1.5 text-[9.5px] font-bold text-emerald-400 uppercase tracking-wider">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                      Live Chat
-                                    </span>
-                                    <span className="text-[9px] text-slate-500 font-sans">last 3 msgs</span>
-                                  </div>
-                                  {(() => {
-                                    const botChats =
-                                      liveChats[a.ign.toLowerCase()] ||
-                                      liveChats[(a.settings?.last_bot_id || '').toLowerCase()] ||
-                                      [];
-                                    if (botChats.length === 0) {
-                                      return (
-                                        <div className="text-slate-500 italic text-[9.5px] py-0.5">
-                                          Listening for server messages...
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <div className="space-y-1">
-                                        {botChats.slice(-3).map((c, i) => (
-                                          <div key={i} className="text-slate-300 truncate leading-snug" title={c.text}>
-                                            <span className="text-slate-500 text-[8.5px] mr-1 select-none font-sans">
-                                              {new Date(c.timestamp).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                              })}
-                                            </span>
-                                            <span dangerouslySetInnerHTML={{ __html: c.formatted || c.text }} />
-                                          </div>
-                                        ))}
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </td>
+                          <button
+                            onClick={() => setDeleteTarget({ type: 'account', id: a.id, name: a.ign })}
+                            className="p-1.5 rounded-xl border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            title="Delete account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
 
-                            {/* Security & Legitimacy Analysis */}
-                            <td className="p-3.5">
-                              {a.legitimacy?.status === 'legit' && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-fit">
-                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                    Verified Legit
+                      {/* Middle Details Box */}
+                      <div className="space-y-2.5 text-xs bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80">
+                        {/* Server Destination */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5 shrink-0">
+                            <Server className="w-3.5 h-3.5 text-slate-400" />
+                            Server:
+                          </span>
+                          <span className="font-mono font-bold text-slate-800 truncate text-[11px] bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                            {a.serverHost}:{a.serverPort}
+                          </span>
+                        </div>
+
+                        {/* Tunnel Daemon */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5 shrink-0">
+                            <Globe className="w-3.5 h-3.5 text-slate-400" />
+                            Tunnel:
+                          </span>
+                          {displayTunnel ? (
+                            <div className="flex items-center gap-1 max-w-[200px] truncate bg-white px-2 py-0.5 rounded-md border border-slate-200 font-mono text-[10.5px] text-slate-700">
+                              <span className="truncate" title={displayTunnel}>
+                                {displayTunnel}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(displayTunnel);
+                                  showToast('Copied tunnel URL', 'info');
+                                }}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
+                                title="Copy tunnel URL"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">No tunnel registered</span>
+                          )}
+                        </div>
+
+                        {/* Security / Legitimacy & Uptime */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/70">
+                          {a.legitimacy?.status === 'legit' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              Verified Legit
+                            </span>
+                          ) : a.legitimacy?.status === 'leak' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                              <ShieldAlert className="w-3 h-3 text-rose-600" />
+                              {a.legitimacy.badge}
+                            </span>
+                          ) : a.legitimacy?.status === 'unverified' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" />
+                              {a.legitimacy.badge}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              Standby
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-600">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            {a.isConnected ? (
+                              <span className="text-emerald-700">{formatUptime(uptimeSec)}</span>
+                            ) : (
+                              <span className="text-slate-400">Offline</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Live Server Chat (Light Mode - 5 Messages) */}
+                      {a.isConnected && (
+                        <div className="p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 text-xs space-y-2">
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                            <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Live Server Chat
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-sans font-medium">
+                              last 5 msgs
+                            </span>
+                          </div>
+
+                          {botChats.length === 0 ? (
+                            <div className="text-slate-400 italic text-[11px] py-2 text-center">
+                              Listening for server messages...
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                              {botChats.slice(-5).map((c, i) => (
+                                <div key={i} className="text-slate-800 text-[11px] font-mono leading-relaxed break-words">
+                                  <span className="text-slate-400 text-[9px] mr-1.5 select-none font-sans font-medium">
+                                    {new Date(c.timestamp).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit',
+                                    })}
                                   </span>
-                                  <span className="text-[10px] text-emerald-700 font-medium">Owner Daemon Verified</span>
+                                  <span
+                                    className="text-slate-800"
+                                    dangerouslySetInnerHTML={{ __html: c.formatted || c.text }}
+                                  />
                                 </div>
-                              )}
-
-                              {a.legitimacy?.status === 'leak' && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 w-fit">
-                                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                                    {a.legitimacy.badge}
-                                  </span>
-                                  <span className="text-[10px] text-rose-700 font-medium max-w-[200px] truncate" title={a.legitimacy.description}>
-                                    {a.legitimacy.description}
-                                  </span>
-                                </div>
-                              )}
-
-                              {a.legitimacy?.status === 'unverified' && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 w-fit">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                                    {a.legitimacy.badge}
-                                  </span>
-                                  <span className="text-[10px] text-amber-700 font-medium max-w-[200px] truncate" title={a.legitimacy.description}>
-                                    {a.legitimacy.description}
-                                  </span>
-                                </div>
-                              )}
-
-                              {(!a.legitimacy || a.legitimacy.status === 'offline') && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 w-fit">
-                                    <Clock className="w-3 h-3 text-slate-400" />
-                                    Standby
-                                  </span>
-                                  <span className="text-[10px] text-slate-400">Offline</span>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Status & Uptime */}
-                            <td className="p-3.5">
-                              {a.isConnected ? (
-                                <div className="space-y-1">
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                    Connected
-                                  </span>
-                                  <div className="font-mono text-emerald-700 font-bold text-xs flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
-                                    {formatUptime(uptimeSec)}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                                    Offline
-                                  </span>
-                                  <div className="text-slate-400 text-xs">-</div>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Actions */}
-                            <td className="p-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {a.isConnected && (
-                                  <button
-                                    onClick={() => handleDisconnectAccount(a.id, a.ign)}
-                                    className="px-2 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-600 hover:text-amber-700 text-xs font-semibold transition cursor-pointer"
-                                    title="Mark bot as disconnected"
-                                  >
-                                    <Power className="w-3 h-3" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => setDeleteTarget({ type: 'account', id: a.id, name: a.ign })}
-                                  className="p-1.5 rounded-lg border border-slate-200 hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                  title="Delete account row"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
         )}
       </main>
