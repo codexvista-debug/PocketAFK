@@ -27,8 +27,14 @@ import {
   ChevronDown,
   UserPlus,
   ShieldCheck,
+  ShieldAlert,
   Sliders,
   Filter,
+  Radio,
+  Wifi,
+  WifiOff,
+  Smartphone,
+  Globe,
 } from 'lucide-react';
 import { RANKS, RANK_ORDER, UserRank } from '@/lib/ranks';
 
@@ -40,6 +46,16 @@ interface UserItem {
   connectedCount: number;
   secretCode?: string;
   createdAt: string;
+  tunnelUrl?: string;
+  isTunnelActive?: boolean;
+}
+
+interface AdminTunnelItem {
+  username: string;
+  url: string;
+  updatedAt: number;
+  isRecent: boolean;
+  activeBots: number;
 }
 
 interface AccountItem {
@@ -53,12 +69,21 @@ interface AccountItem {
   updatedAt?: string;
   createdAt?: string;
   settings?: any;
+  daemonUrl?: string;
+  registeredTunnel?: string;
+  legitimacy?: {
+    status: 'legit' | 'leak' | 'unverified' | 'offline';
+    badge: string;
+    description: string;
+    isLegit: boolean;
+  };
 }
 
 interface AdminStats {
   totalUsers: number;
   totalAccounts: number;
   totalConnected: number;
+  totalTunnels?: number;
   rankBreakdown: Record<string, number>;
 }
 
@@ -67,10 +92,12 @@ export default function ChiefAdminPage() {
     totalUsers: 0,
     totalAccounts: 0,
     totalConnected: 0,
+    totalTunnels: 0,
     rankBreakdown: { iron: 0, gold: 0, diamond: 0, emerald: 0 },
   });
   const [users, setUsers] = useState<UserItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
+  const [tunnels, setTunnels] = useState<AdminTunnelItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'users' | 'accounts' | 'overview'>('users');
@@ -79,7 +106,7 @@ export default function ChiefAdminPage() {
   const [userSearch, setUserSearch] = useState<string>('');
   const [userRankFilter, setUserRankFilter] = useState<string>('all');
   const [accountSearch, setAccountSearch] = useState<string>('');
-  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline' | 'legit' | 'suspicious'>('all');
 
   // Modal States
   const [resetPasswordUser, setResetPasswordUser] = useState<UserItem | null>(null);
@@ -126,10 +153,12 @@ export default function ChiefAdminPage() {
         totalUsers: 0,
         totalAccounts: 0,
         totalConnected: 0,
+        totalTunnels: 0,
         rankBreakdown: { iron: 0, gold: 0, diamond: 0, emerald: 0 },
       });
       setUsers(data.users || []);
       setAccounts(data.accounts || []);
+      setTunnels(data.tunnels || []);
     } catch (err: any) {
       showToast(err.message || 'Error fetching data', 'error');
     } finally {
@@ -290,14 +319,27 @@ export default function ChiefAdminPage() {
   // Filtered Accounts
   const filteredAccounts = useMemo(() => {
     return accounts.filter((a) => {
+      const q = accountSearch.toLowerCase().trim();
       const matchSearch =
-        a.ign.toLowerCase().includes(accountSearch.toLowerCase()) ||
-        a.owner.toLowerCase().includes(accountSearch.toLowerCase()) ||
-        a.serverHost.toLowerCase().includes(accountSearch.toLowerCase());
-      const matchStatus =
-        accountStatusFilter === 'all' ||
-        (accountStatusFilter === 'online' && a.isConnected) ||
-        (accountStatusFilter === 'offline' && !a.isConnected);
+        !q ||
+        a.ign.toLowerCase().includes(q) ||
+        a.owner.toLowerCase().includes(q) ||
+        a.serverHost.toLowerCase().includes(q) ||
+        (a.daemonUrl && a.daemonUrl.toLowerCase().includes(q)) ||
+        (a.registeredTunnel && a.registeredTunnel.toLowerCase().includes(q)) ||
+        (a.legitimacy?.badge && a.legitimacy.badge.toLowerCase().includes(q));
+
+      let matchStatus = true;
+      if (accountStatusFilter === 'online') {
+        matchStatus = a.isConnected;
+      } else if (accountStatusFilter === 'offline') {
+        matchStatus = !a.isConnected;
+      } else if (accountStatusFilter === 'legit') {
+        matchStatus = a.isConnected && a.legitimacy?.status === 'legit';
+      } else if (accountStatusFilter === 'suspicious') {
+        matchStatus = a.isConnected && a.legitimacy?.status !== 'legit';
+      }
+
       return matchSearch && matchStatus;
     });
   }, [accounts, accountSearch, accountStatusFilter]);
@@ -315,24 +357,6 @@ export default function ChiefAdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Top Banner: Reminder for future IP protection */}
-      <div className="bg-gradient-to-r from-amber-600 via-emerald-600 to-teal-600 text-white text-[11px] py-2 px-4 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full bg-white/20 font-black uppercase text-[10px] tracking-wider">
-              Chief Admin Mode
-            </span>
-            <span>
-              <strong>Admin Control Panel</strong> — Manage users, password resets, rank tiers, and active connections.
-            </span>
-          </div>
-          <div className="text-amber-100 flex items-center gap-1.5 text-[11px]">
-            <Lock className="w-3 h-3" />
-            <span>IP protection can be activated upon project completion.</span>
-          </div>
-        </div>
-      </div>
-
       {/* Main Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
@@ -580,7 +604,18 @@ export default function ChiefAdminPage() {
                                 </div>
                                 <div>
                                   <span className="font-bold text-slate-900 block">@{u.username}</span>
-                                  <span className="text-[10px] text-slate-400 font-mono">ID: {u.id.substring(0, 8)}...</span>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                                    <span className="font-mono">ID: {u.id.substring(0, 8)}...</span>
+                                    <span>•</span>
+                                    {u.isTunnelActive ? (
+                                      <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold" title={u.tunnelUrl}>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Daemon Live
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">No Daemon</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -685,13 +720,110 @@ export default function ChiefAdminPage() {
         {/* TAB 2: MINECRAFT ACCOUNTS & LIVE CONNECTIONS */}
         {activeTab === 'accounts' && (
           <div className="space-y-4">
+            {/* Live Phone Daemons & Cloudflare Tunnels (Termux Core) Overview Cards */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center font-bold">
+                    <Radio className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      Phone Daemons & Cloudflare Tunnels (Termux Core)
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+                        {tunnels.filter((t) => t.isRecent).length} Online
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Live SSL WebSocket bridges connecting Android Termux devices to PocketAFK</p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Legit Owner Dedicated
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-slate-300" /> Offline / Standby
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {tunnels.length === 0 ? (
+                  <div className="col-span-full py-4 text-center text-slate-400 text-xs italic">
+                    No phone daemons registered yet. Users can start their daemon via the 1-click Termux command.
+                  </div>
+                ) : (
+                  tunnels.map((tun) => {
+                    const isLive = tun.isRecent;
+                    const lastSyncSec = tun.updatedAt ? Math.max(0, Math.floor((nowTick - tun.updatedAt) / 1000)) : 0;
+                    return (
+                      <div
+                        key={tun.username}
+                        className={`p-3 rounded-xl border transition ${
+                          isLive
+                            ? 'bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-200 shadow-2xs'
+                            : 'bg-slate-50/70 border-slate-200 opacity-75'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-xs text-slate-900">@{tun.username}</span>
+                            {isLive ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Live Daemon
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 text-slate-600">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {tun.activeBots} {tun.activeBots === 1 ? 'bot' : 'bots'} running
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between gap-1 text-[11px] font-mono bg-white/90 px-2 py-1 rounded-lg border border-slate-200/80">
+                          <span className="truncate text-slate-700 select-all" title={tun.url}>
+                            {tun.url || 'No active tunnel'}
+                          </span>
+                          {tun.url && (
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(tun.url);
+                                showToast(`Copied tunnel for @${tun.username}`, 'info');
+                              }}
+                              className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
+                              title="Copy tunnel URL"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-slate-400" />
+                            Android Termux
+                          </span>
+                          <span>{isLive && tun.updatedAt ? `Heartbeat ${formatUptime(lastSyncSec)} ago` : 'Offline'}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
             {/* Filter Bar */}
             <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-              <div className="relative w-full sm:w-80">
+              <div className="relative w-full sm:w-96">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search account, owner, or server..."
+                  placeholder="Search account, owner, server, or tunnel URL..."
                   value={accountSearch}
                   onChange={(e) => setAccountSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
@@ -700,15 +832,17 @@ export default function ChiefAdminPage() {
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs text-slate-500 font-medium">Status:</span>
+                <span className="text-xs text-slate-500 font-medium">Filter:</span>
                 <select
                   value={accountStatusFilter}
                   onChange={(e) => setAccountStatusFilter(e.target.value as any)}
-                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500"
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
                 >
-                  <option value="all">All Accounts</option>
-                  <option value="online">Online Bots Only</option>
-                  <option value="offline">Offline Only</option>
+                  <option value="all">All Accounts ({accounts.length})</option>
+                  <option value="online">Online Bots Only ({accounts.filter((a) => a.isConnected).length})</option>
+                  <option value="legit">Verified Legit Only ({accounts.filter((a) => a.isConnected && a.legitimacy?.status === 'legit').length})</option>
+                  <option value="suspicious">Security Warnings / Leaks ({accounts.filter((a) => a.isConnected && a.legitimacy?.status !== 'legit').length})</option>
+                  <option value="offline">Offline Only ({accounts.filter((a) => !a.isConnected).length})</option>
                 </select>
               </div>
             </div>
@@ -721,24 +855,25 @@ export default function ChiefAdminPage() {
                     <tr>
                       <th className="p-3.5">Minecraft Account</th>
                       <th className="p-3.5">PocketAFK Owner</th>
+                      <th className="p-3.5">Tunnel & Daemon Endpoint</th>
                       <th className="p-3.5">Server Destination</th>
-                      <th className="p-3.5">Connection Status</th>
-                      <th className="p-3.5">Uptime</th>
+                      <th className="p-3.5">Security & Legitimacy</th>
+                      <th className="p-3.5">Status & Uptime</th>
                       <th className="p-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400">
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
                           <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-600 mb-2" />
-                          <span>Loading accounts...</span>
+                          <span>Loading accounts and analyzing tunnel security...</span>
                         </td>
                       </tr>
                     ) : filteredAccounts.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400">
-                          No Minecraft accounts found.
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          No Minecraft accounts found matching your filter.
                         </td>
                       </tr>
                     ) : (
@@ -747,6 +882,8 @@ export default function ChiefAdminPage() {
                           a.isConnected && a.connectedAt
                             ? Math.max(0, Math.floor((nowTick - a.connectedAt) / 1000))
                             : 0;
+
+                        const displayTunnel = a.daemonUrl || a.registeredTunnel || '';
 
                         return (
                           <tr key={a.id} className="hover:bg-slate-50/80 transition">
@@ -777,6 +914,37 @@ export default function ChiefAdminPage() {
                               </span>
                             </td>
 
+                            {/* Tunnel & Daemon Endpoint */}
+                            <td className="p-3.5">
+                              {displayTunnel ? (
+                                <div className="space-y-1 max-w-[220px]">
+                                  <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 bg-slate-100/90 px-2 py-1 rounded-lg border border-slate-200">
+                                    <span className="truncate" title={displayTunnel}>
+                                      {displayTunnel}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(displayTunnel);
+                                        showToast(`Copied tunnel URL`, 'info');
+                                      }}
+                                      className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
+                                      title="Copy tunnel URL"
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                                    <Globe className="w-3 h-3 text-slate-400" />
+                                    <span>Cloudflare SSL Tunnel</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-slate-400 text-xs italic">
+                                  No tunnel registered
+                                </div>
+                              )}
+                            </td>
+
                             {/* Server Host */}
                             <td className="p-3.5">
                               <div className="font-mono text-xs text-slate-700 flex items-center gap-1.5">
@@ -785,30 +953,74 @@ export default function ChiefAdminPage() {
                               </div>
                             </td>
 
-                            {/* Status */}
+                            {/* Security & Legitimacy Analysis */}
                             <td className="p-3.5">
-                              {a.isConnected ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                  Connected
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                  Offline
-                                </span>
+                              {a.legitimacy?.status === 'legit' && (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 w-fit">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                    Verified Legit
+                                  </span>
+                                  <span className="text-[10px] text-emerald-700 font-medium">Owner Daemon Verified</span>
+                                </div>
+                              )}
+
+                              {a.legitimacy?.status === 'leak' && (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 w-fit">
+                                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                                    {a.legitimacy.badge}
+                                  </span>
+                                  <span className="text-[10px] text-rose-700 font-medium max-w-[200px] truncate" title={a.legitimacy.description}>
+                                    {a.legitimacy.description}
+                                  </span>
+                                </div>
+                              )}
+
+                              {a.legitimacy?.status === 'unverified' && (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 w-fit">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                    {a.legitimacy.badge}
+                                  </span>
+                                  <span className="text-[10px] text-amber-700 font-medium max-w-[200px] truncate" title={a.legitimacy.description}>
+                                    {a.legitimacy.description}
+                                  </span>
+                                </div>
+                              )}
+
+                              {(!a.legitimacy || a.legitimacy.status === 'offline') && (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200 w-fit">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    Standby
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">Offline</span>
+                                </div>
                               )}
                             </td>
 
-                            {/* Uptime */}
+                            {/* Status & Uptime */}
                             <td className="p-3.5">
                               {a.isConnected ? (
-                                <span className="font-mono text-emerald-700 font-bold text-xs flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {formatUptime(uptimeSec)}
-                                </span>
+                                <div className="space-y-1">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    Connected
+                                  </span>
+                                  <div className="font-mono text-emerald-700 font-bold text-xs flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {formatUptime(uptimeSec)}
+                                  </div>
+                                </div>
                               ) : (
-                                <span className="text-slate-400 text-xs">-</span>
+                                <div className="space-y-1">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    Offline
+                                  </span>
+                                  <div className="text-slate-400 text-xs">-</div>
+                                </div>
                               )}
                             </td>
 

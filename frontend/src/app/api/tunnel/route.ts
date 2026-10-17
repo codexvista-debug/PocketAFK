@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 import { generateSecretCode } from '@/lib/authUtils';
 
-// In-memory cache: username -> { url, token, updatedAt }
-const userTunnels = new Map<string, { url: string; token: string; updatedAt: number }>();
+import { sharedUserTunnels } from '@/lib/tunnelStore';
+
+const userTunnels = sharedUserTunnels;
 
 export const dynamic = 'force-dynamic';
 

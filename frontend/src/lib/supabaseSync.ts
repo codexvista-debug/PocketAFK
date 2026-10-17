@@ -204,7 +204,8 @@ export async function recordAccountConnectionStart(
   accountName: string,
   serverHost: string,
   startTime: number,
-  serverId?: string
+  serverId?: string,
+  daemonUrl?: string
 ) {
   if (!supabase || !currentUser || !accountName) return;
   try {
@@ -225,6 +226,7 @@ export async function recordAccountConnectionStart(
       is_connected: true,
       server_host: serverHost,
       server_id: serverId,
+      daemon_url: daemonUrl || existingSettings.daemon_url || '',
     };
 
     await supabase

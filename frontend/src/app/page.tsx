@@ -1454,7 +1454,7 @@ export default function Dashboard() {
 
     // Record in Supabase for persistence across devices/refreshes
     if (currentUser && cleanPlayerName) {
-      recordAccountConnectionStart(currentUser, cleanPlayerName, profile.serverHost, now, botKey).catch(() => {});
+      recordAccountConnectionStart(currentUser, cleanPlayerName, profile.serverHost, now, botKey, daemonUrl).catch(() => {});
     }
 
     // Track connections count

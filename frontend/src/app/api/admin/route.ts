@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { RANKS, UserRank, getRankConfig } from '@/lib/ranks';
 import { hashPassword, generateSecretCode, USERNAME_REGEX } from '@/lib/authUtils';
 
+import { sharedUserTunnels } from '@/lib/tunnelStore';
+
 export const dynamic = 'force-dynamic';
 
 interface UserSummaryItem {
@@ -13,6 +15,8 @@ interface UserSummaryItem {
   connectedCount: number;
   secretCode?: string;
   createdAt: string;
+  tunnelUrl?: string;
+  isTunnelActive?: boolean;
 }
 
 interface AccountItem {
@@ -26,6 +30,22 @@ interface AccountItem {
   updatedAt?: string;
   createdAt?: string;
   settings?: any;
+  daemonUrl?: string;
+  registeredTunnel?: string;
+  legitimacy: {
+    status: 'legit' | 'leak' | 'unverified' | 'offline';
+    badge: string;
+    description: string;
+    isLegit: boolean;
+  };
+}
+
+interface AdminTunnelItem {
+  username: string;
+  url: string;
+  updatedAt: number;
+  isRecent: boolean;
+  activeBots: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -54,7 +74,35 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: accsErr.message }, { status: 500 });
     }
 
-    // 3. Separate metadata rows from real Minecraft accounts
+    // 3. Fetch all registered tunnels from Supabase
+    const { data: allTunnels } = await supabase
+      .from('tunnels')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    const tunnelMap = new Map<string, { url: string; token: string; updatedAt: number }>();
+
+    (allTunnels || []).forEach((t: any) => {
+      const u = (t.username || '').toLowerCase().trim();
+      if (u && t.daemon_url) {
+        tunnelMap.set(u, {
+          url: t.daemon_url,
+          token: t.daemon_token || '',
+          updatedAt: t.updated_at ? new Date(t.updated_at).getTime() : 0,
+        });
+      }
+    });
+
+    // Merge in-memory live cache (more up to date)
+    sharedUserTunnels.forEach((val, u) => {
+      const lower = u.toLowerCase().trim();
+      const existing = tunnelMap.get(lower);
+      if (!existing || val.updatedAt > existing.updatedAt) {
+        tunnelMap.set(lower, val);
+      }
+    });
+
+    // 4. Separate metadata rows from real Minecraft accounts & verify legitimacy
     const rankMap = new Map<string, UserRank>();
     const realAccounts: AccountItem[] = [];
 
@@ -69,6 +117,80 @@ export async function GET(req: NextRequest) {
         }
       } else if (!botName.startsWith('__')) {
         const isConnected = Boolean(row.settings?.is_connected);
+        const userTunnel = tunnelMap.get(lowerOwner);
+        const activeDaemonUrl = (row.settings?.daemon_url || '').trim() || (isConnected ? userTunnel?.url || '' : '');
+
+        let legitimacy: AccountItem['legitimacy'];
+
+        if (!isConnected) {
+          legitimacy = {
+            status: 'offline',
+            badge: 'Standby / Offline',
+            description: userTunnel?.url ? `Configured tunnel: ${userTunnel.url}` : 'No phone daemon registered for this user',
+            isLegit: true,
+          };
+        } else {
+          // Account is connected - analyze legitimacy
+          if (!activeDaemonUrl && !userTunnel?.url) {
+            legitimacy = {
+              status: 'unverified',
+              badge: 'Unregistered Daemon',
+              description: `User @${row.username} has no active phone daemon registered in the system!`,
+              isLegit: false,
+            };
+          } else {
+            // Check if activeDaemonUrl belongs to another user
+            let foreignOwner: string | null = null;
+            if (activeDaemonUrl) {
+              tunnelMap.forEach((tData, tUser) => {
+                if (
+                  !foreignOwner &&
+                  tUser !== lowerOwner &&
+                  tData.url &&
+                  (tData.url === activeDaemonUrl || activeDaemonUrl.includes(tData.url) || tData.url.includes(activeDaemonUrl))
+                ) {
+                  foreignOwner = tUser;
+                }
+              });
+            }
+
+            if (foreignOwner) {
+              legitimacy = {
+                status: 'leak',
+                badge: `Foreign Tunnel (@${foreignOwner})`,
+                description: `CRITICAL LEAK: Account owned by @${row.username} is routed through @${foreignOwner}'s phone tunnel!`,
+                isLegit: false,
+              };
+            } else if (
+              userTunnel?.url &&
+              activeDaemonUrl &&
+              !userTunnel.url.includes(activeDaemonUrl) &&
+              !activeDaemonUrl.includes(userTunnel.url)
+            ) {
+              legitimacy = {
+                status: 'leak',
+                badge: 'Tunnel URL Mismatch',
+                description: `Account is routed via ${activeDaemonUrl}, but @${row.username}'s registered tunnel is ${userTunnel.url}`,
+                isLegit: false,
+              };
+            } else if (!userTunnel?.url && activeDaemonUrl) {
+              legitimacy = {
+                status: 'unverified',
+                badge: 'Direct Tunnel (Standalone)',
+                description: `Connected directly via ${activeDaemonUrl} without user-registered phone daemon.`,
+                isLegit: true,
+              };
+            } else {
+              legitimacy = {
+                status: 'legit',
+                badge: 'Verified Legit Owner',
+                description: `Legitimate connection: Running securely on @${row.username}'s dedicated phone daemon tunnel.`,
+                isLegit: true,
+              };
+            }
+          }
+        }
+
         realAccounts.push({
           id: row.id,
           owner: row.username,
@@ -80,11 +202,14 @@ export async function GET(req: NextRequest) {
           updatedAt: row.updated_at,
           createdAt: row.created_at,
           settings: row.settings || {},
+          daemonUrl: activeDaemonUrl,
+          registeredTunnel: userTunnel?.url,
+          legitimacy,
         });
       }
     });
 
-    // 4. Build user summary list
+    // 5. Build user summary list
     const userList: UserSummaryItem[] = (users || []).map((u) => {
       const lowerU = (u.username || '').toLowerCase().trim();
       let rank: UserRank = 'iron';
@@ -97,6 +222,8 @@ export async function GET(req: NextRequest) {
       const userAccounts = realAccounts.filter((a) => a.owner.toLowerCase().trim() === lowerU);
       const connectedCount = userAccounts.filter((a) => a.isConnected).length;
       const secretCode = u.password_hash ? generateSecretCode(u.password_hash) : undefined;
+      const userTunnel = tunnelMap.get(lowerU);
+      const isTunnelActive = Boolean(userTunnel?.url && (Date.now() - userTunnel.updatedAt < 1000 * 60 * 60 * 12));
 
       return {
         id: u.id,
@@ -106,10 +233,26 @@ export async function GET(req: NextRequest) {
         connectedCount,
         secretCode,
         createdAt: u.created_at || new Date().toISOString(),
+        tunnelUrl: userTunnel?.url,
+        isTunnelActive,
       };
     });
 
-    // 5. Aggregate stats
+    // 6. Build tunnel overview list
+    const tunnelList: AdminTunnelItem[] = [];
+    tunnelMap.forEach((t, u) => {
+      const activeBots = realAccounts.filter((a) => a.owner.toLowerCase().trim() === u && a.isConnected).length;
+      const isRecent = Boolean(t.url && Date.now() - t.updatedAt < 1000 * 60 * 60 * 12);
+      tunnelList.push({
+        username: u,
+        url: t.url,
+        updatedAt: t.updatedAt,
+        isRecent,
+        activeBots,
+      });
+    });
+
+    // 7. Aggregate stats
     const rankBreakdown = {
       iron: 0,
       gold: 0,
@@ -123,15 +266,19 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    const activeTunnelsCount = tunnelList.filter((t) => t.isRecent).length;
+
     return NextResponse.json({
       stats: {
         totalUsers: userList.length,
         totalAccounts: realAccounts.length,
         totalConnected: realAccounts.filter((a) => a.isConnected).length,
+        totalTunnels: activeTunnelsCount,
         rankBreakdown,
       },
       users: userList,
       accounts: realAccounts,
+      tunnels: tunnelList,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
