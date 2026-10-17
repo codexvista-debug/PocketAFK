@@ -40,6 +40,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { RANKS, RANK_ORDER, UserRank } from '@/lib/ranks';
+import { MinecraftChatMessage } from '@/components/MinecraftChatMessage';
 
 interface UserItem {
   id: string;
@@ -135,8 +136,8 @@ export default function ChiefAdminPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Live Chat Map for Connected Bots: key -> array of up to 10 ChatMessage items
-  const [liveChats, setLiveChats] = useState<Record<string, Array<{ text: string; formatted: string; timestamp: number }>>>({});
+  // Live Chat Map for Connected Bots: key -> array of up to 20 ChatMessage items
+  const [liveChats, setLiveChats] = useState<Record<string, Array<{ text: string; raw?: string; message?: string; formatted?: string; formattedText?: string; sender?: string; id?: string; type?: string; timestamp: number }>>>({});
   const daemonSocketsRef = useRef<Map<string, WebSocket>>(new Map());
 
   // Connect WebSockets to online tunnels to receive live server chat & manage real-time disconnects
@@ -204,8 +205,14 @@ export default function ChiefAdminPage() {
               const ignKey = (msg.accountUsername || '').toLowerCase().trim();
               const botKey = (msg.botId || '').toLowerCase().trim();
               const entry = {
-                text: msg.raw || '',
-                formatted: msg.formattedText || msg.raw || '',
+                id: msg.id || `${Date.now()}-${Math.random()}`,
+                text: msg.raw || msg.text || msg.message || '',
+                raw: msg.raw || msg.text || msg.message || '',
+                message: msg.raw || msg.text || msg.message || '',
+                formatted: msg.formattedText || msg.formatted || msg.raw || '',
+                formattedText: msg.formattedText || msg.formatted || msg.raw || '',
+                sender: msg.sender || msg.accountUsername || '',
+                type: msg.type || 'chat',
                 timestamp: msg.timestamp || Date.now(),
               };
 
@@ -459,32 +466,42 @@ export default function ChiefAdminPage() {
     });
   }, [users, userSearch, userRankFilter]);
 
-  // Filtered Accounts
+  // Filtered Accounts (Connected bots first, then offline)
   const filteredAccounts = useMemo(() => {
-    return accounts.filter((a) => {
-      const q = accountSearch.toLowerCase().trim();
-      const matchSearch =
-        !q ||
-        a.ign.toLowerCase().includes(q) ||
-        a.owner.toLowerCase().includes(q) ||
-        a.serverHost.toLowerCase().includes(q) ||
-        (a.daemonUrl && a.daemonUrl.toLowerCase().includes(q)) ||
-        (a.registeredTunnel && a.registeredTunnel.toLowerCase().includes(q)) ||
-        (a.legitimacy?.badge && a.legitimacy.badge.toLowerCase().includes(q));
+    return accounts
+      .filter((a) => {
+        const q = accountSearch.toLowerCase().trim();
+        const matchSearch =
+          !q ||
+          a.ign.toLowerCase().includes(q) ||
+          a.owner.toLowerCase().includes(q) ||
+          a.serverHost.toLowerCase().includes(q) ||
+          (a.daemonUrl && a.daemonUrl.toLowerCase().includes(q)) ||
+          (a.registeredTunnel && a.registeredTunnel.toLowerCase().includes(q)) ||
+          (a.legitimacy?.badge && a.legitimacy.badge.toLowerCase().includes(q));
 
-      let matchStatus = true;
-      if (accountStatusFilter === 'online') {
-        matchStatus = a.isConnected;
-      } else if (accountStatusFilter === 'offline') {
-        matchStatus = !a.isConnected;
-      } else if (accountStatusFilter === 'legit') {
-        matchStatus = a.isConnected && a.legitimacy?.status === 'legit';
-      } else if (accountStatusFilter === 'suspicious') {
-        matchStatus = a.isConnected && a.legitimacy?.status !== 'legit';
-      }
+        let matchStatus = true;
+        if (accountStatusFilter === 'online') {
+          matchStatus = a.isConnected;
+        } else if (accountStatusFilter === 'offline') {
+          matchStatus = !a.isConnected;
+        } else if (accountStatusFilter === 'legit') {
+          matchStatus = a.isConnected && a.legitimacy?.status === 'legit';
+        } else if (accountStatusFilter === 'suspicious') {
+          matchStatus = a.isConnected && a.legitimacy?.status !== 'legit';
+        }
 
-      return matchSearch && matchStatus;
-    });
+        return matchSearch && matchStatus;
+      })
+      .sort((a, b) => {
+        // Connected bots always appear first
+        if (a.isConnected && !b.isConnected) return -1;
+        if (!a.isConnected && b.isConnected) return 1;
+        // Secondary sort: most recently connected or created first
+        const aTime = a.connectedAt || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+        const bTime = b.connectedAt || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        return bTime - aTime;
+      });
   }, [accounts, accountSearch, accountStatusFilter]);
 
   // Format seconds into uptime
@@ -1407,9 +1424,9 @@ export default function ChiefAdminPage() {
                         </div>
                       </div>
 
-                      {/* Live Server Chat (Light Mode - 5 Messages) */}
+                      {/* Live Server Chat (Matches Dashboard Console) */}
                       {a.isConnected && (
-                        <div className="p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 text-xs space-y-2">
+                        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 text-xs shadow-2xs space-y-2">
                           <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
                             <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 uppercase tracking-wider">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1421,25 +1438,18 @@ export default function ChiefAdminPage() {
                           </div>
 
                           {botChats.length === 0 ? (
-                            <div className="text-slate-400 italic text-[11px] py-2 text-center">
+                            <div className="text-slate-400 italic text-[11px] py-3 text-center bg-slate-50/50 rounded-xl border border-slate-200/60">
                               Listening for server messages...
                             </div>
                           ) : (
-                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                            <div className="space-y-1 bg-slate-50/50 p-2 rounded-xl border border-slate-200/80 max-h-[170px] overflow-y-auto">
                               {botChats.slice(-5).map((c, i) => (
-                                <div key={i} className="text-slate-800 text-[11px] font-mono leading-relaxed break-words">
-                                  <span className="text-slate-400 text-[9px] mr-1.5 select-none font-sans font-medium">
-                                    {new Date(c.timestamp).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      second: '2-digit',
-                                    })}
-                                  </span>
-                                  <span
-                                    className="text-slate-800"
-                                    dangerouslySetInnerHTML={{ __html: c.formatted || c.text }}
-                                  />
-                                </div>
+                                <MinecraftChatMessage
+                                  key={c.id || i}
+                                  message={c}
+                                  compact={true}
+                                  showTimestamp={true}
+                                />
                               ))}
                             </div>
                           )}
