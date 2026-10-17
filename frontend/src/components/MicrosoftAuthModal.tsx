@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
+import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2, LogOut } from 'lucide-react';
 
 interface MicrosoftAuthModalProps {
   authData: {
@@ -28,8 +28,11 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
   if (!authData) return null;
 
-  // authData.url already contains pre-filled otc code, login_hint, and select_account prompt
-  const forceAccountUrl = authData.url || 'https://www.microsoft.com/link';
+  // Ensure prompt=select_account is always present so Microsoft never auto-confirms an already-active session
+  let forceAccountUrl = authData.url || 'https://www.microsoft.com/link';
+  if (!forceAccountUrl.includes('prompt=')) {
+    forceAccountUrl += (forceAccountUrl.includes('?') ? '&' : '?') + 'prompt=select_account';
+  }
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(authData.userCode);
@@ -118,18 +121,37 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
               Open Microsoft Login Page
             </a>
 
-            <button
-              onClick={handleCopyLink}
-              className="w-full py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-200 cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              {copiedLink ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              {copiedLink ? 'Private Tab Link Copied!' : 'Copy Link for Incognito/Private Tab'}
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <a
+                href="https://login.live.com/logout.srf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs transition border border-amber-200 cursor-pointer flex items-center justify-center gap-1.5"
+                title="Log out of current Microsoft account in browser"
+              >
+                <LogOut className="w-3.5 h-3.5 text-amber-700" />
+                <span>Sign Out of Microsoft</span>
+              </a>
+
+              <button
+                onClick={handleCopyLink}
+                className="py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-200 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {copiedLink ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedLink ? 'Copied!' : 'Copy Private Link'}
+              </button>
+            </div>
           </div>
 
-          {/* Private Tab Tip */}
-          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900 text-left leading-relaxed">
-            <b>💡 Important:</b> Make sure you log into the exact Microsoft account that <b>owns Minecraft Java Edition</b>! If your browser is logged into another personal Microsoft account, use an <b>Incognito / Private tab</b>.
+          {/* Multi-Account Advice Box */}
+          <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 text-left space-y-1.5">
+            <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Adding a 2nd or 3rd Account?</span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              If your browser automatically logs you into an already-linked account, click <b>Sign Out of Microsoft</b> above or paste the link into an <b>Incognito / Private tab</b> so you can enter the credentials for your new Minecraft account!
+            </p>
           </div>
         </div>
 

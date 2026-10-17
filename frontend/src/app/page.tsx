@@ -435,7 +435,10 @@ export default function Dashboard() {
       );
 
       if (alreadyLinked) {
-        showToast(`Account '@${data.ign}' is already linked! To link a different account, sign in with another Microsoft account.`, 'error');
+        showToast(
+          `Account '@${data.ign}' is already linked! Your browser is still logged into this account. Click 'Sign Out of Microsoft' in the sign-in modal or use an Incognito tab to link a different account.`,
+          'error'
+        );
         return cleanAccounts;
       }
 
@@ -1352,7 +1355,7 @@ export default function Dashboard() {
             );
 
             if (isDuplicate) {
-              const dupMsg = `Account '@${finalIgn}' is already linked to PocketAFK.`;
+              const dupMsg = `Account '@${finalIgn}' is already linked to PocketAFK! Your browser is still logged into this account. Click 'Sign Out of Microsoft' in the sign-in modal or use an Incognito tab to link a different account.`;
               setMsAuthError(dupMsg);
               showToast(dupMsg, 'error');
               return;

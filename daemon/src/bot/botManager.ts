@@ -120,7 +120,7 @@ export class BotManager {
       const flow = new Authflow(authKey, profilesFolder, options, (data: any) => {
         console.log(chalk.yellow(`[Auth Code] Code for ${authKey}: ${data.user_code}`));
         const directUri = data.user_code
-          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}`
+          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}&prompt=select_account`
           : (data.verification_uri || 'https://www.microsoft.com/link');
         this.broadcastFn({
           type: 'MS_AUTH_CODE',
