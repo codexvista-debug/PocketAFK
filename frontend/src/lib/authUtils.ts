@@ -14,3 +14,9 @@ export function generateSecretCode(username: string, passwordHash: string): stri
   const hash = crypto.createHash('sha256').update(`${cleanUser}:${passwordHash}:${SECRET_EXTRA_SALT}`).digest('hex');
   return `pk_${hash.substring(0, 10)}`;
 }
+
+export function generateLegacySecretCode(passwordHash: string): string {
+  // Legacy formula without username salt for backward compatibility with previously launched daemons
+  const hash = crypto.createHash('sha256').update(passwordHash + SECRET_EXTRA_SALT).digest('hex');
+  return `pk_${hash.substring(0, 10)}`;
+}

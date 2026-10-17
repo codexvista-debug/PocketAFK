@@ -169,6 +169,18 @@ export default function Dashboard() {
     if (cachedSecret) {
       setSecretCode(cachedSecret);
     }
+    // Fetch authoritative user-specific secret key from server to keep 1-click command current
+    fetch(`/api/auth?username=${encodeURIComponent(currentUser)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.secretCode) {
+          setSecretCode(data.secretCode);
+          try {
+            localStorage.setItem(`pocketafk_secret_${currentUser}`, data.secretCode);
+          } catch (e) {}
+        }
+      })
+      .catch(() => {});
   }, [currentUser]);
 
   // Views & Tabs (MinecraftAFK Architecture)

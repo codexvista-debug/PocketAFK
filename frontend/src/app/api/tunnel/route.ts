@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
-import { generateSecretCode } from '@/lib/authUtils';
+import { generateSecretCode, generateLegacySecretCode } from '@/lib/authUtils';
 import { sharedUserTunnels } from '@/lib/tunnelStore';
 
 const userTunnels = sharedUserTunnels;
@@ -117,9 +117,10 @@ export async function POST(req: NextRequest) {
 
         if (user && user.password_hash) {
           const expectedSecret = generateSecretCode(cleanUsername, user.password_hash);
+          const legacySecret = generateLegacySecretCode(user.password_hash);
           const providedSecret = typeof token === 'string' ? token.trim() : '';
 
-          if (providedSecret !== expectedSecret) {
+          if (providedSecret !== expectedSecret && providedSecret !== legacySecret) {
             return NextResponse.json({
               error: `Unauthorized: Invalid daemon secret code for user @${cleanUsername}. Hijacking attempt blocked.`
             }, { status: 401 });
@@ -216,14 +217,25 @@ export async function POST(req: NextRequest) {
 
     if (supabase) {
       try {
-        await supabase.from('tunnels').upsert({
-          username: cleanUsername,
-          daemon_url: cleanUrl,
-          daemon_token: record.token,
-          updated_at: new Date().toISOString(),
-        });
+        if (action !== 'heartbeat') {
+          // Clean wipe any older records for this user so only the newly launched tunnel is active & locked
+          await supabase.from('tunnels').delete().ilike('username', cleanUsername);
+          await supabase.from('tunnels').insert({
+            username: cleanUsername,
+            daemon_url: cleanUrl,
+            daemon_token: record.token,
+            updated_at: new Date().toISOString(),
+          });
+        } else {
+          await supabase.from('tunnels').upsert({
+            username: cleanUsername,
+            daemon_url: cleanUrl,
+            daemon_token: record.token,
+            updated_at: new Date().toISOString(),
+          });
+        }
       } catch (e) {
-        console.warn('Supabase tunnel upsert error:', e);
+        console.warn('Supabase tunnel registration error:', e);
       }
     }
 

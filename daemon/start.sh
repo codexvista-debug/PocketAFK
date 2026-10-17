@@ -207,6 +207,30 @@ else
   echo -e "      ${YELLOW}✓ Live sync broadcasted.${NC}"
 fi
 
+# Verify web dashboard has locked this tunnel URL
+echo -ne "      ${YELLOW}⌛ Verifying web dashboard is locked to @${APP_USER}...${NC}"
+VERIFIED=false
+for i in {1..5}; do
+  CHECK_RESP=$(curl -s --connect-timeout 4 --max-time 6 "https://pocketafk.vercel.app/api/tunnel?username=${APP_USER}" 2>/dev/null)
+  VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"tunnel_url":"[^"]*"' | cut -d'"' -f4)
+  if [ -z "$VERIFIED_URL" ]; then
+    VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"url":"[^"]*"' | cut -d'"' -f4)
+  fi
+
+  if [ "$VERIFIED_URL" = "$WSS_URL" ]; then
+    VERIFIED=true
+    break
+  fi
+  sleep 1
+done
+echo ""
+
+if [ "$VERIFIED" = "true" ]; then
+  echo -e "      ${GREEN}✓ VERIFIED: Web dashboard is locked to this tunnel: ${CYAN}${WSS_URL}${NC}"
+else
+  echo -e "      ${YELLOW}✓ Registered tunnel. Dashboard syncing in progress.${NC}"
+fi
+
 # 5. Start background heartbeat to keep tunnel alive in dashboard (every 15s)
 run_heartbeat_loop() {
   exec -a pocketafk_heartbeat bash -c '
