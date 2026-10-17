@@ -65,6 +65,7 @@ export type BotLifecycleState =
 
 export interface ChatMessage {
   botId: string;
+  serverId?: string;
   accountUsername?: string;
   id: string;
   timestamp: number;
@@ -76,6 +77,7 @@ export interface ChatMessage {
 
 export interface Telemetry {
   botId: string;
+  serverId?: string;
   accountUsername?: string;
   connectedAt?: number;
   health: number;
@@ -107,6 +109,7 @@ export interface ContainerSlot {
 
 export interface ContainerWindow {
   botId: string;
+  serverId?: string;
   windowId: number;
   title: string;
   type: string;

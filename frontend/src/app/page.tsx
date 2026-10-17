@@ -1237,6 +1237,7 @@ export default function Dashboard() {
             (accId) => accId === id || accId === target?.ign || accId === target?.username
           ));
       if (isAssigned) {
+        stopBot(`${srv.id}__${id}`);
         stopBot(srv.id);
       }
     });
@@ -1393,10 +1394,13 @@ export default function Dashboard() {
     const cleanPlayerName = (assignedAcc?.ign || assignedAcc?.username || profile.name).replace(/^@/, '').trim();
     const now = Date.now();
 
-    // Optimistically record start time locally for this server profile
+    const botKey = assignedAcc ? `${profile.id}__${assignedAcc.id}` : profile.id;
+
+    // Optimistically record start time locally for this bot and profile
     setSessionStartTimes((prev) => {
       const updated = {
         ...prev,
+        [botKey]: now,
         [profile.id]: now,
       };
       if (typeof window !== 'undefined') {
@@ -1408,7 +1412,7 @@ export default function Dashboard() {
 
     // Record in Supabase for persistence across devices/refreshes
     if (currentUser && cleanPlayerName) {
-      recordAccountConnectionStart(currentUser, cleanPlayerName, profile.serverHost, now, profile.id).catch(() => {});
+      recordAccountConnectionStart(currentUser, cleanPlayerName, profile.serverHost, now, botKey).catch(() => {});
     }
 
     // Track connections count
@@ -1422,7 +1426,8 @@ export default function Dashboard() {
     });
 
     startBot({
-      id: profile.id,
+      id: botKey,
+      serverId: profile.id,
       username: cleanPlayerName,
       accountId: assignedAcc?.id,
       authType: 'microsoft',
@@ -1446,6 +1451,7 @@ export default function Dashboard() {
     const srv = servers.find((s) => s.id === profileId) || activeServer;
     const acc = targetAcc || (srv ? resolveServerAccount(srv) : activeAccount);
     const cleanPlayerName = (acc?.ign || acc?.username || '').replace(/^@/, '').trim();
+    const botKey = acc ? `${profileId}__${acc.id}` : profileId;
 
     if (cleanPlayerName && srv) {
       addPlayerLog(
@@ -1458,10 +1464,15 @@ export default function Dashboard() {
       );
     }
 
-    // Remove from local sessionStartTimes for this profile only
+    // Remove from local sessionStartTimes for this bot and profile
     setSessionStartTimes((prev) => {
       const next = { ...prev };
-      delete next[profileId];
+      delete next[botKey];
+      // Only delete base profileId start time if no other sub-bots are running under this profile
+      const otherSubBotsRunning = Object.keys(next).some((k) => k !== botKey && k.startsWith(`${profileId}__`));
+      if (!otherSubBotsRunning) {
+        delete next[profileId];
+      }
       if (typeof window !== 'undefined') {
         const u = currentUser || 'guest';
         localStorage.setItem(`pocketafk_sessions_${u}`, JSON.stringify(next));
@@ -1472,40 +1483,48 @@ export default function Dashboard() {
     const isRunningElsewhere = servers.some(
       (s) =>
         s.id !== profileId &&
-        (botStates[s.id] === 'SPAWNED' || botStates[s.id] === 'LOGGED_IN' || botStates[s.id] === 'CONNECTING') &&
-        (s.accountId === acc?.id || s.accountId === acc?.ign || s.accountId === cleanPlayerName)
+        (botStates[`${s.id}__${acc?.id}`] === 'SPAWNED' || botStates[s.id] === 'SPAWNED')
     );
     if (currentUser && cleanPlayerName && !isRunningElsewhere) {
       recordAccountConnectionStop(currentUser, cleanPlayerName).catch(() => {});
     }
 
-    stopBot(profileId);
+    stopBot(botKey);
     showToast(`Bot connection stopped${cleanPlayerName ? ` (@${cleanPlayerName})` : ''}.`, 'info');
   };
 
   // Connect Selected / Disconnect Selected
   const handleConnectSelected = () => {
     if (!activeServer) return;
-    const target = accounts.find((a) => selectedAccountIds.includes(a.id)) || activeAccount;
-    if (!target) {
-      showToast('Please select an account to connect.', 'error');
+    const targets = accounts.filter((a) => selectedAccountIds.includes(a.id));
+    const toConnect = targets.length > 0 ? targets : (activeAccount ? [activeAccount] : []);
+    if (toConnect.length === 0) {
+      showToast('Please select at least one account to connect.', 'error');
       return;
     }
     const currentAssigned = Array.isArray(activeServer.assignedAccountIds) ? activeServer.assignedAccountIds : [];
-    const updatedAssigned = Array.from(new Set([...currentAssigned, target.id]));
+    const updatedAssigned = Array.from(new Set([...currentAssigned, ...toConnect.map((t) => t.id)]));
     const updatedProfile: ServerProfile = {
       ...activeServer,
-      accountId: target.id,
+      accountId: toConnect[0].id,
       assignedAccountIds: updatedAssigned,
     };
     handleSaveServer(updatedProfile);
-    handleStartServer(updatedProfile, target);
+    toConnect.forEach((target, index) => {
+      setTimeout(() => {
+        handleStartServer(updatedProfile, target);
+      }, index * 400);
+    });
+    showToast(`Connecting ${toConnect.length} account${toConnect.length > 1 ? 's' : ''}...`, 'info');
   };
 
   const handleDisconnectSelected = () => {
     if (!activeServer) return;
-    const target = accounts.find((a) => selectedAccountIds.includes(a.id)) || activeAccount;
-    handleStopServer(activeServer.id, target);
+    const targets = accounts.filter((a) => selectedAccountIds.includes(a.id));
+    const toDisconnect = targets.length > 0 ? targets : (activeAccount ? [activeAccount] : []);
+    toDisconnect.forEach((target) => {
+      handleStopServer(activeServer.id, target);
+    });
   };
 
   // Accounts assigned to current Server Profile (strictly filtered to existing accounts)
@@ -1545,6 +1564,7 @@ export default function Dashboard() {
   const handleRemoveAccountFromProfile = (accId: string) => {
     if (!activeServer) return;
     const targetAcc = accounts.find((a) => a.id === accId);
+    stopBot(`${activeServer.id}__${accId}`);
     const updatedIds = profileAccountIds.filter((id) => id !== accId);
     const updatedServer: ServerProfile = {
       ...activeServer,
@@ -1589,14 +1609,16 @@ export default function Dashboard() {
     );
 
   const availableChatSenders = useMemo(() => {
-    return serverProfileAccounts.map((acc) => ({
-      id: acc.id,
-      name: acc.username,
-      ign: acc.ign,
-      isOnline:
-        botStates[activeServer?.id || ''] === 'SPAWNED' ||
-        botStates[activeServer?.id || ''] === 'LOGGED_IN',
-    }));
+    return serverProfileAccounts.map((acc) => {
+      const botKey = `${activeServer?.id}__${acc.id}`;
+      const state = botStates[botKey] || (activeServer ? botStates[activeServer.id] : undefined);
+      return {
+        id: acc.id,
+        name: acc.username,
+        ign: acc.ign,
+        isOnline: state === 'SPAWNED' || state === 'LOGGED_IN',
+      };
+    });
   }, [serverProfileAccounts, botStates, activeServer]);
 
   const filteredChatMessages = useMemo(() => {
@@ -2299,14 +2321,24 @@ export default function Dashboard() {
                             })
                             .map((srv) => {
                               const isPinned = pinnedServerIds.includes(srv.id);
-                              const totalAssigned = (
+                              const assignedIds = (
                                 Array.isArray(srv.assignedAccountIds)
                                   ? srv.assignedAccountIds
                                   : srv.accountId ? [srv.accountId] : []
-                              ).filter((id) => accounts.some((a) => a.id === id || a.ign === id)).length;
-                              const rawState = botStates[srv.id] || 'DISCONNECTED';
-                              const isRunning = (rawState === 'SPAWNED' || rawState === 'LOGGED_IN' || rawState === 'CONNECTING') && totalAssigned > 0;
-                              const onlineCount = isRunning ? 1 : 0;
+                              ).filter((id) => accounts.some((a) => a.id === id || a.ign === id));
+                              const totalAssigned = assignedIds.length;
+
+                              const onlineCount = assignedIds.filter((accId) => {
+                                const st = botStates[`${srv.id}__${accId}`] || (srv.accountId === accId ? botStates[srv.id] : undefined);
+                                return st === 'SPAWNED' || st === 'LOGGED_IN';
+                              }).length;
+
+                              const hasConnecting = assignedIds.some((accId) => {
+                                const st = botStates[`${srv.id}__${accId}`] || (srv.accountId === accId ? botStates[srv.id] : undefined);
+                                return st === 'CONNECTING';
+                              });
+
+                              const isRunning = onlineCount > 0 || hasConnecting;
                               const connections = serverConnections[srv.id] || srv.connectionsCount || 0;
                               const dateAddedStr = formatServerDate(srv.createdAt);
 
@@ -2738,30 +2770,29 @@ export default function Dashboard() {
                             ) : (
                               assignedAccounts.map((acc) => {
                                 const isChecked = selectedAccountIds.includes(acc.id);
+                                const botKey = `${activeServer.id}__${acc.id}`;
                                 const isAssignedActive =
                                   activeAccount?.id === acc.id ||
                                   activeServer.accountId === acc.id ||
                                   activeServer.accountId === acc.ign ||
                                   activeServer.accountId === acc.username;
 
-                                const thisServerBotState: BotLifecycleState =
-                                  (activeServer.id === activeServerId ? botState : botStates[activeServer.id]) ||
-                                  botStates[activeServer.id] ||
+                                const currentBotState: BotLifecycleState =
+                                  botStates[botKey] ||
+                                  (isAssignedActive ? ((activeServer.id === activeServerId ? botState : botStates[activeServer.id]) || botStates[activeServer.id]) : undefined) ||
                                   'DISCONNECTED';
-
-                                const currentBotState: BotLifecycleState = isAssignedActive
-                                  ? thisServerBotState
-                                  : 'DISCONNECTED';
-
 
                                 const isPinned = pinnedAccountIds.includes(acc.id);
                                 const isBotOnline = currentBotState === 'SPAWNED' || currentBotState === 'LOGGED_IN';
                                 const isBotConnecting = currentBotState === 'CONNECTING';
                                 const isBotActive = isBotOnline || isBotConnecting;
 
-                                const srvStart = sessionStartTimes[activeServer.id];
+                                const srvStart = sessionStartTimes[botKey] || (isAssignedActive ? sessionStartTimes[activeServer.id] : undefined);
                                 const localSec = srvStart ? Math.max(0, Math.floor((nowTick - srvStart) / 1000)) : 0;
-                                const srvTel = telemetries?.[activeServer.id] || (telemetry?.botId === activeServer.id ? telemetry : null);
+                                const srvTel =
+                                  telemetries?.[botKey] ||
+                                  (telemetry?.botId === botKey ? telemetry : null) ||
+                                  (isAssignedActive ? (telemetries?.[activeServer.id] || (telemetry?.botId === activeServer.id ? telemetry : null)) : null);
                                 const daemonUptime =
                                   srvTel && typeof srvTel.uptime === 'number' && srvTel.uptime > 0
                                     ? srvTel.uptime

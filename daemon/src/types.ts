@@ -15,6 +15,7 @@ export interface BotSettings {
 
 export interface BotConfig {
   id: string;
+  serverId?: string;
   username: string;
   accountId?: string;
   authType: 'microsoft' | 'offline';
@@ -35,6 +36,7 @@ export type BotLifecycleState =
 
 export interface ChatMessagePayload {
   botId: string;
+  serverId?: string;
   accountUsername?: string;
   id: string;
   timestamp: number;
@@ -46,6 +48,7 @@ export interface ChatMessagePayload {
 
 export interface TelemetryPayload {
   botId: string;
+  serverId?: string;
   accountUsername?: string;
   connectedAt?: number;
   version?: string;
@@ -101,7 +104,7 @@ export type ClientMessage =
 // Daemon to Client Messages
 export type DaemonMessage =
   | { type: 'AUTH_RESULT'; payload: { success: boolean; message?: string } }
-  | { type: 'BOT_STATE'; payload: { botId: string; username?: string; accountId?: string; version?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
+  | { type: 'BOT_STATE'; payload: { botId: string; serverId?: string; username?: string; accountId?: string; version?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
   | { type: 'CHAT_MESSAGE'; payload: ChatMessagePayload }
   | { type: 'TELEMETRY'; payload: TelemetryPayload }
   | { type: 'CONTAINER_WINDOW'; payload: ContainerWindowPayload }

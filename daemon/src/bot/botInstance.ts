@@ -166,6 +166,7 @@ export class PocketBotInstance {
       type: 'BOT_STATE',
       payload: {
         botId: this.config.id,
+        serverId: this.config.serverId,
         username: this.config.username,
         accountId: this.config.accountId,
         version: detectedVer,
@@ -512,6 +513,7 @@ export class PocketBotInstance {
     const detectedVer = this.bot?.version || (this.bot as any)?._client?.version || (this.config.version !== 'auto' ? this.config.version : undefined);
     const payload: TelemetryPayload = {
       botId: this.config.id,
+      serverId: this.config.serverId,
       accountUsername: this.bot?.username || this.config.username,
       connectedAt: this.connectedAt || 0,
       version: detectedVer,
@@ -644,6 +646,7 @@ export class PocketBotInstance {
   private logConsole(data: Omit<ChatMessagePayload, 'botId' | 'id' | 'timestamp'>) {
     const payload: ChatMessagePayload = {
       botId: this.config.id,
+      serverId: this.config.serverId,
       accountUsername: this.bot?.username || this.config.username,
       id: Math.random().toString(36).substring(2, 9),
       timestamp: Date.now(),

@@ -66,7 +66,21 @@ export class BotManager {
       }
     }
 
-    // 3. Fallback only if no bot was matched by ID: match by active bot IGN or username
+    // 3. If stopping an entire server (e.g. "srv_donutsmp"), stop all sub-bots belonging to that server
+    let stoppedAny = false;
+    for (const [bId, instance] of Array.from(this.bots.entries())) {
+      if (bId.toLowerCase().startsWith(`${target}__`)) {
+        instance.stop();
+        this.bots.delete(bId);
+        stoppedAny = true;
+      }
+    }
+    if (stoppedAny) {
+      updateTermuxNotification(this.getAllBots());
+      return;
+    }
+
+    // 4. Fallback only if no bot was matched by ID: match by active bot IGN or username
     for (const [bId, instance] of Array.from(this.bots.entries())) {
       const cfgUser = instance.config?.username?.toLowerCase();
       const botUser = instance.bot?.username?.toLowerCase();
@@ -172,16 +186,42 @@ export class BotManager {
 
       case 'SEND_CHAT': {
         const { botId, message, targetAccount } = msg.payload;
-        // 1. If botId is specified, route chat strictly to that bot instance
+        // 1. If botId matches a direct bot instance:
         if (botId && botId !== 'all') {
-          const bot = this.bots.get(botId);
-          if (bot) {
-            bot.chat(message);
+          const directBot = this.bots.get(botId);
+          if (directBot) {
+            directBot.chat(message);
+            break;
           }
-          break;
+
+          // 2. If botId is a server profile ID (e.g. "srv_donutsmp"), find sub-bots (e.g. "srv_donutsmp__acc1")
+          const lower = (targetAccount && targetAccount !== 'all') ? targetAccount.toLowerCase() : null;
+          const serverBots = Array.from(this.bots.entries())
+            .filter(([bId]) => bId.startsWith(`${botId}__`))
+            .map(([, b]) => b);
+
+          if (serverBots.length > 0) {
+            if (lower) {
+              const matched = serverBots.find(
+                (b) =>
+                  b.config.username.toLowerCase() === lower ||
+                  b.bot?.username?.toLowerCase() === lower ||
+                  b.config.accountId?.toLowerCase() === lower
+              );
+              if (matched) {
+                matched.chat(message);
+                break;
+              }
+            }
+            // If all or no specific targetAccount, chat on all bots for this server
+            for (const b of serverBots) {
+              b.chat(message);
+            }
+            break;
+          }
         }
 
-        // 2. Fallback only if botId is 'all' or missing
+        // 3. Fallback only if botId is 'all' or missing
         if (targetAccount && targetAccount !== 'all') {
           const lower = targetAccount.toLowerCase();
           for (const b of this.bots.values()) {
@@ -238,6 +278,7 @@ export class BotManager {
             type: 'BOT_STATE',
             payload: {
               botId: bot.config.id,
+              serverId: bot.config.serverId,
               username: bot.config.username,
               accountId: bot.config.accountId,
               state: bot.state,

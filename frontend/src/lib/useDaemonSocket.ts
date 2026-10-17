@@ -366,19 +366,51 @@ export function useDaemonSocket(
 
   const clearMessages = useCallback((botId?: string) => {
     if (botId) {
-      setMessagesByBot((prev) => ({ ...prev, [botId]: [] }));
+      setMessagesByBot((prev) => {
+        const next = { ...prev };
+        delete next[botId];
+        for (const k of Object.keys(next)) {
+          if (k.startsWith(`${botId}__`)) delete next[k];
+        }
+        return next;
+      });
     } else {
       setMessagesByBot({});
     }
   }, []);
 
-  // Scoped getters for active instance
+  // Scoped getters for active instance (supports multi-account sub-bots under activeServerId)
   const currentBotId = activeBotId || '';
-  const currentBotState: BotLifecycleState = (currentBotId && botStates[currentBotId]) || 'DISCONNECTED';
-  const currentBotReason: string = (currentBotId && botStateReasons[currentBotId]) || '';
-  const currentTelemetry: Telemetry | null = (currentBotId && telemetries[currentBotId]) || null;
-  const currentMessages: ChatMessage[] = (currentBotId && messagesByBot[currentBotId]) || [];
-  const currentWindow: ContainerWindow | null = (currentBotId && containerWindows[currentBotId]) || null;
+  const subBotStates = Object.entries(botStates).filter(([k]) => k.startsWith(`${currentBotId}__`));
+  const activeSubState = subBotStates.find(([, s]) => s === 'SPAWNED' || s === 'LOGGED_IN' || s === 'CONNECTING')?.[1];
+
+  const currentBotState: BotLifecycleState =
+    (currentBotId && botStates[currentBotId]) ||
+    activeSubState ||
+    'DISCONNECTED';
+
+  const currentBotReason: string =
+    (currentBotId && botStateReasons[currentBotId]) ||
+    subBotStates.find(([k]) => botStateReasons[k])?.[1] ||
+    '';
+
+  const currentTelemetry: Telemetry | null =
+    (currentBotId && telemetries[currentBotId]) ||
+    Object.entries(telemetries).find(([k, t]) => k.startsWith(`${currentBotId}__`) && t !== null)?.[1] ||
+    null;
+
+  const currentMessages: ChatMessage[] = currentBotId
+    ? Object.entries(messagesByBot)
+        .filter(([bId]) => bId === currentBotId || bId.startsWith(`${currentBotId}__`))
+        .flatMap(([, msgs]) => msgs)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-250)
+    : [];
+
+  const currentWindow: ContainerWindow | null =
+    (currentBotId && containerWindows[currentBotId]) ||
+    Object.entries(containerWindows).find(([k, w]) => k.startsWith(`${currentBotId}__`) && w !== null)?.[1] ||
+    null;
 
   return {
     status: enabled ? status : 'DISCONNECTED',
