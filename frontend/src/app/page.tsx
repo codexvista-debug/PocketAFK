@@ -385,22 +385,46 @@ export default function Dashboard() {
         return prevAccounts;
       }
 
-      const nextAccounts = prevAccounts.map((acc) => {
-        if (
-          acc.username.toLowerCase() === data.email.toLowerCase() ||
+      let nextAccounts: MinecraftAccount[];
+      const exists = prevAccounts.some(
+        (acc) =>
           acc.id === data.botId ||
-          (acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase())
-        ) {
-          return {
-            ...acc,
-            ign: data.ign,
-            uuid: data.uuid,
-            verified: true,
-            authError: undefined,
-          };
-        }
-        return acc;
-      });
+          (acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase()) ||
+          acc.username.toLowerCase() === data.email.toLowerCase()
+      );
+
+      if (exists) {
+        nextAccounts = prevAccounts.map((acc) => {
+          if (
+            acc.username.toLowerCase() === data.email.toLowerCase() ||
+            acc.id === data.botId ||
+            (acc.ign && acc.ign.toLowerCase() === data.ign.toLowerCase())
+          ) {
+            return {
+              ...acc,
+              username: data.ign,
+              ign: data.ign,
+              uuid: data.uuid,
+              verified: true,
+              authError: undefined,
+            };
+          }
+          return acc;
+        });
+      } else {
+        const newAcc: MinecraftAccount = {
+          id: data.botId && data.botId !== 'new_account' ? data.botId : `acc_${Math.random().toString(36).substring(2, 9)}`,
+          username: data.ign,
+          ign: data.ign,
+          uuid: data.uuid,
+          auth_type: 'microsoft',
+          verified: true,
+          addedAt: Date.now(),
+        };
+        nextAccounts = [...prevAccounts, newAcc];
+      }
+
+      showToast(`Successfully linked official Java account @${data.ign}!`, 'success');
 
       const userKey = currentUser ? `pocketafk_accounts_${currentUser}` : 'pocketafk_accounts_guest';
       if (typeof window !== 'undefined') {
@@ -1068,6 +1092,21 @@ export default function Dashboard() {
 
     setIsAccountsOpen(false);
     setMsAuthError(null);
+
+    // If Termux daemon is online and authenticated, use daemon-native verification!
+    // This stores tokens directly on the phone so the user NEVER has to log in twice!
+    if (socketStatus === 'AUTHENTICATED') {
+      const targetId = typeof target === 'object' && target ? target.id : `acc_${Math.random().toString(36).substring(2, 9)}`;
+      const targetEmail =
+        typeof target === 'string'
+          ? target
+          : (target?.expectedIgn || target?.ign || (!target?.username?.includes('@') ? target?.username : null) || 'new_account');
+
+      showToast('Requesting Microsoft sign-in via Termux daemon...', 'info');
+      verifyAccount(targetId, targetEmail);
+      return;
+    }
+
     setIsPollingMs(true);
 
     try {

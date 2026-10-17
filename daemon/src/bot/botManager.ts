@@ -1,4 +1,6 @@
+import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import chalk from 'chalk';
 import { Authflow, Titles } from 'prismarine-auth';
 const minecraftFolderPath = require('minecraft-folder-path');
@@ -98,7 +100,26 @@ export class BotManager {
   public async verifyAccount(accountId: string, email: string) {
     console.log(chalk.cyan(`[Auth] Initiating Microsoft Device Verification for ${email}...`));
     try {
-      const profilesFolder = path.join(minecraftFolderPath, 'nmp-cache');
+      const profilesFolder = path.resolve(process.cwd(), 'tokens');
+      if (!fs.existsSync(profilesFolder)) {
+        try { fs.mkdirSync(profilesFolder, { recursive: true }); } catch (e) {}
+      }
+
+      // Also migrate any existing tokens from nmp-cache into tokens/
+      const nmpCache = path.join(minecraftFolderPath, 'nmp-cache');
+      if (fs.existsSync(nmpCache)) {
+        try {
+          const files = fs.readdirSync(nmpCache);
+          for (const f of files) {
+            const src = path.join(nmpCache, f);
+            const dst = path.join(profilesFolder, f);
+            if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
+              fs.copyFileSync(src, dst);
+            }
+          }
+        } catch (e) {}
+      }
+
       const options = {
         authTitle: Titles.MinecraftNintendoSwitch,
         deviceType: 'Nintendo',
@@ -107,12 +128,15 @@ export class BotManager {
 
       const flow = new Authflow(email, profilesFolder, options, (data: any) => {
         console.log(chalk.yellow(`[Auth Code] Code for ${email}: ${data.user_code}`));
+        const directUri = data.user_code
+          ? `https://www.microsoft.com/link?otc=${encodeURIComponent(data.user_code)}&prompt=select_account`
+          : (data.verification_uri || 'https://www.microsoft.com/link');
         this.broadcastFn({
           type: 'MS_AUTH_CODE',
           payload: {
             botId: accountId,
             userCode: data.user_code,
-            url: data.verification_uri || 'https://www.microsoft.com/link',
+            url: directUri,
             message: data.message
           }
         });
@@ -121,6 +145,26 @@ export class BotManager {
       const res = await flow.getMinecraftJavaToken({ fetchProfile: true });
       const realIgn = res?.profile?.name || email;
       const playerUuid = res?.profile?.id;
+
+      // Duplicate tokens under hash(realIgn) so when Mineflayer launches as realIgn,
+      // prismarine-auth immediately finds the cache and never prompts for login again!
+      const emailHash = crypto.createHash('sha1').update(email ?? '', 'binary').digest('hex').substring(0, 6);
+      const ignHash = crypto.createHash('sha1').update(realIgn ?? '', 'binary').digest('hex').substring(0, 6);
+
+      if (emailHash !== ignHash) {
+        try {
+          const files = fs.readdirSync(profilesFolder);
+          for (const f of files) {
+            if (f.startsWith(`${emailHash}_`)) {
+              const targetFileName = f.replace(`${emailHash}_`, `${ignHash}_`);
+              const src = path.join(profilesFolder, f);
+              const dst = path.join(profilesFolder, targetFileName);
+              fs.copyFileSync(src, dst);
+              console.log(chalk.green(`[Auth Cache] Mirrored token cache from ${f} -> ${targetFileName}`));
+            }
+          }
+        } catch (e) {}
+      }
 
       this.broadcastFn({
         type: 'ACCOUNT_VERIFIED',

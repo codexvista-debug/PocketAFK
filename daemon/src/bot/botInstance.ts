@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import mineflayer, { Bot } from 'mineflayer';
 const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload } from '../types';
@@ -209,6 +210,27 @@ export class PocketBotInstance {
           uuid: playerUuid,
         }
       });
+
+      // Mirror token cache under hash(realIgn) so future logins under verified IGN never prompt
+      const cleanUsername = this.config.username.includes('@')
+        ? this.config.username.split('@')[0]
+        : this.config.username;
+      const configuredHash = crypto.createHash('sha1').update(cleanUsername ?? '', 'binary').digest('hex').substring(0, 6);
+      const ignHash = crypto.createHash('sha1').update(realIgn ?? '', 'binary').digest('hex').substring(0, 6);
+      if (configuredHash !== ignHash) {
+        try {
+          const tokenFolder = path.resolve(process.cwd(), 'tokens');
+          const files = fs.readdirSync(tokenFolder);
+          for (const f of files) {
+            if (f.startsWith(`${configuredHash}_`)) {
+              const targetFileName = f.replace(`${configuredHash}_`, `${ignHash}_`);
+              const src = path.join(tokenFolder, f);
+              const dst = path.join(tokenFolder, targetFileName);
+              fs.copyFileSync(src, dst);
+            }
+          }
+        } catch (e) {}
+      }
 
       this.logConsole({
         type: 'system',
