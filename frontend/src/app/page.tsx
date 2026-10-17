@@ -743,7 +743,7 @@ export default function Dashboard() {
     }
   }, [messages, activeServer, activeAccount, resolveServerAccount, addPlayerLog]);
 
-  // Automatically close Microsoft Authentication popup and dismiss Connecting toast once bot is connected
+  // Dismiss Connecting toast once active bot or any bot connects
   useEffect(() => {
     const isAnyConnected =
       botState === 'SPAWNED' ||
@@ -751,12 +751,6 @@ export default function Dashboard() {
       Object.values(botStates).some((st) => st === 'SPAWNED' || st === 'LOGGED_IN');
 
     if (isAnyConnected) {
-      if (msAuthData || apiMsAuthData) {
-        clearMsAuth();
-        setApiMsAuthData(null);
-        setIsPollingMs(false);
-        if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
-      }
       setToast((prev) => {
         if (prev && prev.message.includes('Connecting to')) {
           return null;
@@ -764,7 +758,7 @@ export default function Dashboard() {
         return prev;
       });
     }
-  }, [botState, botStates, msAuthData, apiMsAuthData, clearMsAuth]);
+  }, [botState, botStates]);
 
   const effectiveUser = currentUser || 'default';
   const termuxCommand = secretCode
@@ -1074,6 +1068,8 @@ export default function Dashboard() {
         url: data.verificationUri,
         deviceCode: data.deviceCode,
       });
+
+      setToast((prev) => (prev && prev.message.includes('Requesting Microsoft sign-in code') ? null : prev));
 
       if (pollingTimerRef.current) clearInterval(pollingTimerRef.current);
 
