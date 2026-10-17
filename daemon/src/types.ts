@@ -46,6 +46,26 @@ export interface ChatMessagePayload {
   type: 'chat' | 'system' | 'session_divider' | 'death' | 'error';
 }
 
+export interface FarmMachineState {
+  id: string;
+  name: string;
+  direction: 'north' | 'east' | 'south' | 'west';
+  status: 'running' | 'idle' | 'jammed';
+  pistonActive: boolean;
+  blocksProduced: number;
+}
+
+export interface FarmTelemetry {
+  detectedMachines: number;
+  activePistons: number;
+  cobbleNearby: number;
+  lavaNearby: number;
+  waterNearby: number;
+  hoppersNearby: number;
+  genRatePerMinute: number;
+  machines?: FarmMachineState[];
+}
+
 export interface TelemetryPayload {
   botId: string;
   serverId?: string;
@@ -67,6 +87,7 @@ export interface TelemetryPayload {
   gamemode: string;
   ping: number;
   uptime: number;
+  farm?: FarmTelemetry;
 }
 
 export interface ContainerSlot {
