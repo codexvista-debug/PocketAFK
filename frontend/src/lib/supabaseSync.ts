@@ -470,4 +470,78 @@ export async function loadAccountLogsFromSupabase(
   }
 }
 
+/**
+ * Universal Account Notes Sync:
+ * Saves account notes centrally in Supabase under metadata row '__meta_notes__',
+ * ensuring all devices (PC, mobile, tablet) always see the exact same account notes.
+ */
+export async function saveNotesToSupabase(currentUser: string, notes: Record<string, string>) {
+  if (!supabase || !currentUser) return;
+  try {
+    const cleanUser = currentUser.trim();
+
+    const { data: existing } = await supabase
+      .from('accounts')
+      .select('id')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_notes__')
+      .limit(1);
+
+    const payload = {
+      notes,
+      updatedAt: Date.now(),
+    };
+
+    if (existing && existing.length > 0) {
+      await supabase
+        .from('accounts')
+        .update({
+          settings: payload,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('accounts').insert([
+        {
+          username: cleanUser,
+          bot_name: '__meta_notes__',
+          server_host: 'pocketafk.internal',
+          server_port: 25565,
+          settings: payload,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.warn('Failed to save notes to Supabase:', err);
+  }
+}
+
+/**
+ * Universal Account Notes Loader:
+ * Fetches centrally configured account notes for the user from Supabase.
+ */
+export async function loadNotesFromSupabase(currentUser: string): Promise<Record<string, string> | null> {
+  if (!supabase || !currentUser) return null;
+  try {
+    const cleanUser = currentUser.trim();
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_notes__')
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const notes = data[0]?.settings?.notes;
+    if (notes && typeof notes === 'object') {
+      return notes;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to load notes from Supabase:', err);
+    return null;
+  }
+}
+
+
 

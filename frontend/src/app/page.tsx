@@ -31,6 +31,8 @@ import {
   loadQuickCommandsFromSupabase,
   saveAccountLogsToSupabase,
   loadAccountLogsFromSupabase,
+  saveNotesToSupabase,
+  loadNotesFromSupabase,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -516,6 +518,7 @@ export default function Dashboard() {
     }
     setCurrentUser(null);
     setSecretCode('');
+    setAccountNotes({});
     localStorage.removeItem('pocketafk_user');
     saveSettings('', '');
     setToast(null);
@@ -975,12 +978,43 @@ export default function Dashboard() {
     }
   }, [currentUser]);
 
-  // Save notes
-  const handleUpdateNote = (accId: string, noteText: string) => {
-    const updated = { ...accountNotes, [accId]: noteText };
+  const notesDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync notes across devices when user focuses window
+  useEffect(() => {
+    if (!currentUser) return;
+    const handleFocus = () => {
+      loadNotesFromSupabase(currentUser)
+        .then((remoteNotes) => {
+          if (remoteNotes && typeof remoteNotes === 'object') {
+            setAccountNotes((prev) => ({ ...prev, ...remoteNotes }));
+            localStorage.setItem(`pocketafk_notes_${currentUser}`, JSON.stringify(remoteNotes));
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [currentUser]);
+
+  // Save notes universally to Supabase and cache locally
+  const handleUpdateNote = (accId: string, noteText: string, ign?: string) => {
+    const updated: Record<string, string> = { ...accountNotes, [accId]: noteText };
+    if (ign) {
+      updated[ign.toLowerCase()] = noteText;
+    }
     setAccountNotes(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem(`pocketafk_notes_${currentUser || 'guest'}`, JSON.stringify(updated));
+    }
+
+    if (currentUser) {
+      if (notesDebounceRef.current) {
+        clearTimeout(notesDebounceRef.current);
+      }
+      notesDebounceRef.current = setTimeout(() => {
+        saveNotesToSupabase(currentUser, updated);
+      }, 400);
     }
   };
 
@@ -1101,9 +1135,10 @@ export default function Dashboard() {
             return;
           }
 
-          const [remoteServers, remoteAccounts] = await Promise.all([
+          const [remoteServers, remoteAccounts, remoteNotes] = await Promise.all([
             loadServersFromSupabase(currentUser),
             loadAccountsFromSupabase(currentUser),
+            loadNotesFromSupabase(currentUser),
           ]);
 
           // Handle Universal Servers:
@@ -1145,6 +1180,23 @@ export default function Dashboard() {
           } else {
             setAccounts([]);
             localStorage.setItem(accKey, JSON.stringify([]));
+          }
+
+          // Handle Universal Notes:
+          const notesKey = `pocketafk_notes_${currentUser}`;
+          let localNotes: Record<string, string> = {};
+          try {
+            const rawStored = localStorage.getItem(notesKey);
+            if (rawStored) localNotes = JSON.parse(rawStored);
+          } catch {}
+
+          if (remoteNotes && typeof remoteNotes === 'object') {
+            setAccountNotes(remoteNotes);
+            localStorage.setItem(notesKey, JSON.stringify(remoteNotes));
+          } else if (Object.keys(localNotes).length > 0) {
+            // Migrate existing local notes to Supabase for this user
+            await saveNotesToSupabase(currentUser, localNotes);
+            setAccountNotes(localNotes);
           }
         } catch (err) {
           console.warn('Failed to load universal data from Supabase:', err);
@@ -1674,7 +1726,7 @@ export default function Dashboard() {
       const q = accountFilter.toLowerCase().trim();
       if (!q) return true;
       const ign = (a.ign || a.username).toLowerCase();
-      const note = (accountNotes[a.id] || '').toLowerCase();
+      const note = (accountNotes[a.id] || (a.ign ? accountNotes[a.ign.toLowerCase()] : '') || '').toLowerCase();
       return ign.includes(q) || note.includes(q);
     });
   }, [accounts, profileAccountIds, accountFilter, accountNotes]);
@@ -1685,7 +1737,7 @@ export default function Dashboard() {
       const q = accountFilter.toLowerCase().trim();
       if (!q) return true;
       const ign = (a.ign || a.username).toLowerCase();
-      const note = (accountNotes[a.id] || '').toLowerCase();
+      const note = (accountNotes[a.id] || (a.ign ? accountNotes[a.ign.toLowerCase()] : '') || '').toLowerCase();
       return ign.includes(q) || note.includes(q);
     });
   }, [accounts, profileAccountIds, accountFilter, accountNotes]);
@@ -1796,6 +1848,7 @@ export default function Dashboard() {
       purgeLocalUserData(user);
       setAccounts([]);
       setServers([]);
+      setAccountNotes({});
       setActiveServerId('');
     }
     setCurrentUser(user);
@@ -3117,8 +3170,8 @@ export default function Dashboard() {
                                       <input
                                         type="text"
                                         placeholder="Add Note"
-                                        value={accountNotes[acc.id] || ''}
-                                        onChange={(e) => handleUpdateNote(acc.id, e.target.value)}
+                                        value={accountNotes[acc.id] || (acc.ign ? accountNotes[acc.ign.toLowerCase()] : '') || ''}
+                                        onChange={(e) => handleUpdateNote(acc.id, e.target.value, acc.ign)}
                                         className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500"
                                       />
                                     </td>
@@ -3202,8 +3255,8 @@ export default function Dashboard() {
                                       <input
                                         type="text"
                                         placeholder="Add Note"
-                                        value={accountNotes[acc.id] || ''}
-                                        onChange={(e) => handleUpdateNote(acc.id, e.target.value)}
+                                        value={accountNotes[acc.id] || (acc.ign ? accountNotes[acc.ign.toLowerCase()] : '') || ''}
+                                        onChange={(e) => handleUpdateNote(acc.id, e.target.value, acc.ign)}
                                         className="w-full max-w-xs px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500"
                                       />
                                     </td>
