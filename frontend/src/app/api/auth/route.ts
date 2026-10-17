@@ -22,13 +22,13 @@ export async function GET(req: NextRequest) {
         .maybeSingle();
 
       if (user?.password_hash) {
-        return NextResponse.json({ secretCode: generateSecretCode(user.password_hash) });
+        return NextResponse.json({ secretCode: generateSecretCode(username, user.password_hash) });
       }
     }
 
     const storedHash = localUsers.get(username);
     if (storedHash) {
-      return NextResponse.json({ secretCode: generateSecretCode(storedHash) });
+      return NextResponse.json({ secretCode: generateSecretCode(username, storedHash) });
     }
 
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     const lowerUser = cleanUsername.toLowerCase();
     const hashedPassword = hashPassword(password);
-    const secretCode = generateSecretCode(hashedPassword);
+    const secretCode = generateSecretCode(cleanUsername, hashedPassword);
 
     if (action === 'register') {
       if (supabase) {

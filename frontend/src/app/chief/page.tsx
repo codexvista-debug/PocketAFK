@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   Shield,
   Users,
   Key,
   RefreshCw,
+  MessageSquare,
   Trash2,
   Edit3,
   Check,
@@ -130,6 +131,115 @@ export default function ChiefAdminPage() {
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  // Live Chat Map for Connected Bots: key -> array of up to 10 ChatMessage items
+  const [liveChats, setLiveChats] = useState<Record<string, Array<{ text: string; formatted: string; timestamp: number }>>>({});
+  const daemonSocketsRef = useRef<Map<string, WebSocket>>(new Map());
+
+  // Connect WebSockets to online tunnels to receive live server chat & manage real-time disconnects
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Collect active tunnels from connected accounts
+    const targetTunnels = new Map<string, { url: string; owner: string; secret?: string }>();
+    
+    // Build user -> secret map
+    const userSecretMap = new Map<string, string>();
+    users.forEach((u) => {
+      if (u.secretCode) {
+        userSecretMap.set(u.username.toLowerCase(), u.secretCode);
+      }
+    });
+
+    accounts.forEach((a) => {
+      if (a.isConnected) {
+        const url = (a.daemonUrl || a.registeredTunnel || '').trim();
+        const owner = (a.owner || '').trim().toLowerCase();
+        if (url && url.startsWith('ws')) {
+          targetTunnels.set(url, {
+            url,
+            owner,
+            secret: userSecretMap.get(owner),
+          });
+        }
+      }
+    });
+
+    // Close sockets no longer active
+    daemonSocketsRef.current.forEach((ws, url) => {
+      if (!targetTunnels.has(url)) {
+        try { ws.close(); } catch {}
+        daemonSocketsRef.current.delete(url);
+      }
+    });
+
+    // Connect to each target tunnel
+    targetTunnels.forEach((info, url) => {
+      const existing = daemonSocketsRef.current.get(url);
+      if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      try {
+        const ws = new WebSocket(url);
+        daemonSocketsRef.current.set(url, ws);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: 'AUTH',
+            payload: { username: info.owner, token: info.secret || '' }
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'AUTH_RESULT' && data.payload?.success) {
+              ws.send(JSON.stringify({ type: 'REQUEST_SYNC' }));
+            } else if (data.type === 'CHAT_MESSAGE') {
+              const msg = data.payload;
+              const ignKey = (msg.accountUsername || '').toLowerCase().trim();
+              const botKey = (msg.botId || '').toLowerCase().trim();
+              const entry = {
+                text: msg.raw || '',
+                formatted: msg.formattedText || msg.raw || '',
+                timestamp: msg.timestamp || Date.now(),
+              };
+
+              setLiveChats((prev) => {
+                const next = { ...prev };
+                if (ignKey) {
+                  next[ignKey] = [...(next[ignKey] || []).slice(-9), entry];
+                }
+                if (botKey && botKey !== ignKey) {
+                  next[botKey] = [...(next[botKey] || []).slice(-9), entry];
+                }
+                return next;
+              });
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          daemonSocketsRef.current.delete(url);
+        };
+
+        ws.onerror = () => {
+          try { ws.close(); } catch {}
+          daemonSocketsRef.current.delete(url);
+        };
+      } catch (e) {}
+    });
+  }, [accounts, users]);
+
+  useEffect(() => {
+    return () => {
+      daemonSocketsRef.current.forEach((ws) => {
+        try { ws.close(); } catch {}
+      });
+      daemonSocketsRef.current.clear();
+    };
   }, []);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -289,16 +399,29 @@ export default function ChiefAdminPage() {
 
   // Handle Disconnect Account
   const handleDisconnectAccount = async (accountId: string, ign: string) => {
+    // 1. Immediately send STOP_BOT via any connected daemon WebSockets
+    try {
+      daemonSocketsRef.current.forEach((ws) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'STOP_BOT',
+            payload: { botId: ign, id: ign, username: ign }
+          }));
+        }
+      });
+    } catch {}
+
+    // 2. Call admin API to update Supabase and send backend STOP_BOT
     try {
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect_account', accountId }),
+        body: JSON.stringify({ action: 'disconnect_account', accountId, ign }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to disconnect account');
 
-      showToast(`Marked ${ign} as disconnected.`, 'info');
+      showToast(`Disconnected ${ign} from server.`, 'success');
       fetchData(true);
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -980,12 +1103,54 @@ export default function ChiefAdminPage() {
                               )}
                             </td>
 
-                            {/* Server Host */}
+                            {/* Server Host & Live Chat */}
                             <td className="p-3.5">
-                              <div className="font-mono text-xs text-slate-700 flex items-center gap-1.5">
+                              <div className="font-mono text-xs text-slate-700 flex items-center gap-1.5 font-semibold">
                                 <Server className="w-3 h-3 text-slate-400" />
                                 <span>{a.serverHost}:{a.serverPort}</span>
                               </div>
+
+                              {/* Live Server Chat for Connected Bot (up to 3 messages) */}
+                              {a.isConnected && (
+                                <div className="mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-[10.5px] font-mono shadow-inner max-w-[280px] space-y-1">
+                                  <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
+                                    <span className="flex items-center gap-1.5 text-[9.5px] font-bold text-emerald-400 uppercase tracking-wider">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      Live Chat
+                                    </span>
+                                    <span className="text-[9px] text-slate-500 font-sans">last 3 msgs</span>
+                                  </div>
+                                  {(() => {
+                                    const botChats =
+                                      liveChats[a.ign.toLowerCase()] ||
+                                      liveChats[(a.settings?.last_bot_id || '').toLowerCase()] ||
+                                      [];
+                                    if (botChats.length === 0) {
+                                      return (
+                                        <div className="text-slate-500 italic text-[9.5px] py-0.5">
+                                          Listening for server messages...
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div className="space-y-1">
+                                        {botChats.slice(-3).map((c, i) => (
+                                          <div key={i} className="text-slate-300 truncate leading-snug" title={c.text}>
+                                            <span className="text-slate-500 text-[8.5px] mr-1 select-none font-sans">
+                                              {new Date(c.timestamp).toLocaleTimeString([], {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                              })}
+                                            </span>
+                                            <span dangerouslySetInnerHTML={{ __html: c.formatted || c.text }} />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                             </td>
 
                             {/* Security & Legitimacy Analysis */}

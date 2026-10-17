@@ -231,7 +231,7 @@ export async function GET(req: NextRequest) {
 
       const userAccounts = realAccounts.filter((a) => a.owner.toLowerCase().trim() === lowerU);
       const connectedCount = userAccounts.filter((a) => a.isConnected).length;
-      const secretCode = u.password_hash ? generateSecretCode(u.password_hash) : undefined;
+      const secretCode = u.password_hash ? generateSecretCode(u.username, u.password_hash) : undefined;
       const userTunnel = tunnelMap.get(lowerU);
       const isTunnelActive = Boolean(userTunnel?.url && Date.now() - userTunnel.updatedAt < 65000);
 
@@ -293,6 +293,68 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+async function sendStopBotToDaemon(
+  daemonUrl: string,
+  username: string,
+  token: string,
+  botIgn: string,
+  lastBotId?: string
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      if (typeof WebSocket === 'undefined') {
+        return resolve(false);
+      }
+      const ws = new WebSocket(daemonUrl);
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch {}
+        resolve(false);
+      }, 3500);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'AUTH',
+          payload: { username, token }
+        }));
+      };
+
+      ws.onmessage = (event: any) => {
+        try {
+          const raw = typeof event.data === 'string' ? event.data : event.data?.toString();
+          const msg = JSON.parse(raw);
+          if (msg.type === 'AUTH_RESULT' && msg.payload?.success) {
+            if (botIgn) {
+              ws.send(JSON.stringify({
+                type: 'STOP_BOT',
+                payload: { botId: botIgn, id: botIgn, username: botIgn }
+              }));
+            }
+            if (lastBotId && lastBotId.toLowerCase() !== botIgn.toLowerCase()) {
+              ws.send(JSON.stringify({
+                type: 'STOP_BOT',
+                payload: { botId: lastBotId, id: lastBotId, username: lastBotId }
+              }));
+            }
+            setTimeout(() => {
+              clearTimeout(timer);
+              try { ws.close(); } catch {}
+              resolve(true);
+            }, 600);
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timer);
+        try { ws.close(); } catch {}
+        resolve(false);
+      };
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -381,7 +443,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Password for @${cleanUser} successfully updated!`,
-        newSecretCode: generateSecretCode(newHash),
+        newSecretCode: generateSecretCode(cleanUser, newHash),
       });
     }
 
@@ -503,27 +565,56 @@ export async function POST(req: NextRequest) {
 
     // Action 6: Disconnect account
     if (action === 'disconnect_account') {
-      const { accountId } = body;
+      const { accountId, ign } = body;
       if (!accountId) {
         return NextResponse.json({ error: 'accountId required' }, { status: 400 });
       }
 
-      const { data } = await supabase.from('accounts').select('settings').eq('id', accountId).maybeSingle();
-      const existingSettings = data?.settings || {};
+      const { data: accRow } = await supabase.from('accounts').select('*').eq('id', accountId).maybeSingle();
+      const existingSettings = accRow?.settings || {};
+      const owner = (accRow?.username || '').trim().toLowerCase();
+      const botIgn = (ign || accRow?.bot_name || '').trim();
 
+      // 1. Mark disconnected in Supabase
       await supabase
         .from('accounts')
         .update({
           settings: {
             ...existingSettings,
             is_connected: false,
+            connected_at: null,
             disconnected_at: Date.now(),
           },
           updated_at: new Date().toISOString(),
         })
         .eq('id', accountId);
 
-      return NextResponse.json({ success: true, message: 'Account connection marked as disconnected' });
+      // 2. Proactively terminate the bot on the active daemon
+      let daemonUrl = sharedUserTunnels.get(owner)?.url;
+      if (!daemonUrl && supabase) {
+        const { data: tunRow } = await supabase
+          .from('tunnels')
+          .select('daemon_url')
+          .ilike('username', owner)
+          .maybeSingle();
+        daemonUrl = tunRow?.daemon_url;
+      }
+
+      if (daemonUrl && daemonUrl.startsWith('ws')) {
+        try {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('password_hash')
+            .ilike('username', owner)
+            .maybeSingle();
+          const token = userRow?.password_hash ? generateSecretCode(owner, userRow.password_hash) : '';
+          await sendStopBotToDaemon(daemonUrl, owner, token, botIgn, existingSettings.last_bot_id);
+        } catch (e) {
+          console.warn('[Admin] Failed to send STOP_BOT to daemon:', e);
+        }
+      }
+
+      return NextResponse.json({ success: true, message: `Account ${botIgn || accountId} disconnected successfully` });
     }
 
     // Action 7: Disconnect / Clear Tunnel

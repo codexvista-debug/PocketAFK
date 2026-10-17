@@ -322,6 +322,16 @@ export class BotManager {
             }
           });
           bot.emitTelemetry();
+
+          // Replay recent live server chat messages so newly connected clients see immediate history
+          if (bot.recentMessages && bot.recentMessages.length > 0) {
+            for (const msg of bot.recentMessages.slice(-5)) {
+              this.broadcastFn({
+                type: 'CHAT_MESSAGE',
+                payload: msg
+              });
+            }
+          }
         }
         break;
       }

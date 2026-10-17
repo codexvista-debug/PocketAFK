@@ -8,8 +8,9 @@ export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + SALT).digest('hex');
 }
 
-export function generateSecretCode(passwordHash: string): string {
-  // A hash of password hash + random-style 4 salt letters 'x7k9'
-  const hash = crypto.createHash('sha256').update(passwordHash + SECRET_EXTRA_SALT).digest('hex');
+export function generateSecretCode(username: string, passwordHash: string): string {
+  // Hash username + password hash + salt to ensure every user has a globally unique secret code
+  const cleanUser = (username || '').trim().toLowerCase();
+  const hash = crypto.createHash('sha256').update(`${cleanUser}:${passwordHash}:${SECRET_EXTRA_SALT}`).digest('hex');
   return `pk_${hash.substring(0, 10)}`;
 }

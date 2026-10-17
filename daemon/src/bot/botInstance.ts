@@ -25,6 +25,7 @@ export class PocketBotInstance {
   private reconnectAttempts: number = 0;
   private currentWindow: any = null;
   public connectedAt: number = 0;
+  public recentMessages: ChatMessagePayload[] = [];
 
   constructor(config: BotConfig, broadcast: MessageBroadcastFn) {
     this.config = config;
@@ -658,6 +659,11 @@ export class PocketBotInstance {
       timestamp: Date.now(),
       ...data
     };
+
+    this.recentMessages.push(payload);
+    if (this.recentMessages.length > 30) {
+      this.recentMessages.shift();
+    }
 
     this.broadcast({
       type: 'CHAT_MESSAGE',

@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (user && user.password_hash) {
-          const expectedSecret = generateSecretCode(user.password_hash);
+          const expectedSecret = generateSecretCode(cleanUsername, user.password_hash);
           const providedSecret = typeof token === 'string' ? token.trim() : '';
 
           if (providedSecret !== expectedSecret) {
