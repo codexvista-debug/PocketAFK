@@ -16,7 +16,7 @@ import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
 import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickCommandsModal';
 import { AccountLogsModal } from '../components/AccountLogsModal';
-import { CobbleFarmPOVVisualizer } from '../components/CobbleFarmPOVVisualizer';
+import { XaerosMinimap } from '../components/XaerosMinimap';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -3651,91 +3651,12 @@ export default function Dashboard() {
                     const botAccountUsername = assignedAccounts[0]?.ign || assignedAccounts[0]?.username || currentUser || 'Bot';
 
                     return (
-                      <div className="max-w-5xl space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-lg font-black text-slate-900">POV & World Telemetry</h2>
-                            <p className="text-xs text-slate-500">Live coordinates, health, hunger, and world dimension data.</p>
-                          </div>
-                          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${isSrvOnline ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                            {isSrvOnline ? 'Live Telemetry' : 'Server Offline'}
-                          </span>
-                        </div>
-
-                        <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-5 shadow-xs">
-                          {/* Health & Hunger */}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                              <div className="flex items-center justify-between text-xs font-bold text-rose-600">
-                                <span className="flex items-center gap-1.5"><Heart className="w-4 h-4 fill-current" /> Health</span>
-                                <span>{isSrvOnline ? (currentServerTel?.health ?? 20) : '--'} / 20</span>
-                              </div>
-                              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                                <div
-                                  className="h-full bg-rose-500 rounded-full"
-                                  style={{ width: `${isSrvOnline ? Math.min(100, ((currentServerTel?.health ?? 20) / 20) * 100) : 0}%` }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                              <div className="flex items-center justify-between text-xs font-bold text-amber-600">
-                                <span className="flex items-center gap-1.5"><Utensils className="w-4 h-4" /> Hunger</span>
-                                <span>{isSrvOnline ? (currentServerTel?.food ?? 20) : '--'} / 20</span>
-                              </div>
-                              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-                                <div
-                                  className="h-full bg-amber-500 rounded-full"
-                                  style={{ width: `${isSrvOnline ? Math.min(100, ((currentServerTel?.food ?? 20) / 20) * 100) : 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Coordinates & Dimension */}
-                          <div className="grid grid-cols-3 gap-3 text-center">
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                              <span className="text-[10px] text-slate-500 uppercase font-bold block">X</span>
-                              <span className="text-sm font-mono font-bold text-slate-900">{isSrvOnline ? (currentServerTel?.position?.x ?? 0) : '--'}</span>
-                            </div>
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                              <span className="text-[10px] text-slate-500 uppercase font-bold block">Y</span>
-                              <span className="text-sm font-mono font-bold text-slate-900">{isSrvOnline ? (currentServerTel?.position?.y ?? 0) : '--'}</span>
-                            </div>
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                              <span className="text-[10px] text-slate-500 uppercase font-bold block">Z</span>
-                              <span className="text-sm font-mono font-bold text-slate-900">{isSrvOnline ? (currentServerTel?.position?.z ?? 0) : '--'}</span>
-                            </div>
-                          </div>
-
-                          {/* Dimension & Ping */}
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono">
-                            <span className="text-slate-600">Dimension: <b className="text-emerald-700">{isSrvOnline ? (currentServerTel?.dimension || 'Overworld') : 'N/A'}</b></span>
-                            <span className="text-slate-600">Ping: <b className="text-emerald-700">{isSrvOnline ? `${currentServerTel?.ping ?? 0}ms` : 'N/A'}</b></span>
-                          </div>
-                        </div>
-
-                        {/* LIVE XAERO'S MINIMAP & 28 COBBLESTONE FARM MACHINES */}
-                        <div>
-                          <div className="mb-3">
-                            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                              <span>Xaero's Minimap — 28 Machine Factory Radar</span>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                28 Active Generators
-                              </span>
-                            </h3>
-                            <p className="text-xs text-slate-500">
-                              Live top-down tactical minimap displaying 28 animated cobblestone machines in front of the bot, player skin heads, usernames, and nearby mobs.
-                            </p>
-                          </div>
-
-                          <CobbleFarmPOVVisualizer
-                            telemetry={currentServerTel}
-                            isOnline={isSrvOnline}
-                            accountUsername={botAccountUsername}
-                            serverName={activeServer.name || 'DonutSMP'}
-                          />
-                        </div>
+                      <div className="w-full max-w-4xl mx-auto py-2">
+                        <XaerosMinimap
+                          telemetry={currentServerTel}
+                          botName={botAccountUsername}
+                          large={true}
+                        />
                       </div>
                     );
                   })()}

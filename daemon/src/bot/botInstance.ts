@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import mineflayer, { Bot } from 'mineflayer';
 const minecraftFolderPath = require('minecraft-folder-path');
-import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity } from '../types';
+import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity, MinimapPlayer, MinimapMob } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
 import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens } from './tokenManager';
 
@@ -614,12 +614,33 @@ export class PocketBotInstance {
 
     // Scan nearby entities (Players with usernames, Hostile Mobs, Passive Animals)
     try {
+      const botYaw = this.bot?.entity?.yaw ?? 0;
+      const compassDeg = (((180 - (botYaw * 180) / Math.PI) % 360) + 360) % 360;
+      let botFacing = 'South';
+      if (compassDeg >= 315 || compassDeg < 45) botFacing = 'South';
+      else if (compassDeg >= 45 && compassDeg < 135) botFacing = 'West';
+      else if (compassDeg >= 135 && compassDeg < 225) botFacing = 'North';
+      else botFacing = 'East';
+
+      payload.facing = botFacing;
+      payload.yaw = botYaw;
+      payload.coordinates = {
+        x: Math.round(pos.x * 10) / 10,
+        y: Math.round(pos.y * 10) / 10,
+        z: Math.round(pos.z * 10) / 10,
+      };
+
       if (this.bot?.entities) {
         const entityList: RadarEntity[] = [];
+        const playersList: MinimapPlayer[] = [];
+        const mobsList: MinimapMob[] = [];
+
         Object.values(this.bot.entities).forEach((entity: any) => {
           if (!entity || entity === this.bot?.entity || !entity.position) return;
-          const dist = pos.distanceTo(entity.position);
-          if (dist > 64) return; // 64 block radar radius
+          const dx = entity.position.x - pos.x;
+          const dz = entity.position.z - pos.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist > 48) return;
 
           if (entity.type === 'player' && entity.username) {
             entityList.push({
@@ -633,29 +654,68 @@ export class PocketBotInstance {
               yaw: entity.yaw,
               distance: Math.round(dist * 10) / 10
             });
+            playersList.push({
+              username: entity.username,
+              x: Math.round(entity.position.x * 10) / 10,
+              y: Math.round(entity.position.y * 10) / 10,
+              z: Math.round(entity.position.z * 10) / 10,
+              dx: Math.round(dx * 10) / 10,
+              dz: Math.round(dz * 10) / 10,
+              distance: Math.round(dist * 10) / 10,
+              yaw: entity.yaw,
+            });
           } else if (entity.type === 'mob' || entity.type === 'hostile' || entity.kind === 'Hostile mobs') {
+            const mName = entity.name || entity.displayName || 'Monster';
             entityList.push({
               id: entity.id,
               type: 'hostile',
-              name: entity.name || entity.displayName || 'Hostile Mob',
+              name: mName,
               x: Math.round(entity.position.x * 10) / 10,
               y: Math.round(entity.position.y * 10) / 10,
               z: Math.round(entity.position.z * 10) / 10,
               distance: Math.round(dist * 10) / 10
             });
+            mobsList.push({
+              id: entity.id,
+              name: mName,
+              type: 'hostile',
+              distance: Math.round(dist * 10) / 10,
+              x: Math.round(entity.position.x * 10) / 10,
+              y: Math.round(entity.position.y * 10) / 10,
+              z: Math.round(entity.position.z * 10) / 10,
+              dx: Math.round(dx * 10) / 10,
+              dz: Math.round(dz * 10) / 10,
+              isHostile: true,
+            });
           } else if (entity.type === 'animal' || entity.type === 'passive' || entity.kind === 'Passive mobs') {
+            const aName = entity.name || entity.displayName || 'Animal';
             entityList.push({
               id: entity.id,
               type: 'passive',
-              name: entity.name || entity.displayName || 'Animal',
+              name: aName,
               x: Math.round(entity.position.x * 10) / 10,
               y: Math.round(entity.position.y * 10) / 10,
               z: Math.round(entity.position.z * 10) / 10,
               distance: Math.round(dist * 10) / 10
             });
+            mobsList.push({
+              id: entity.id,
+              name: aName,
+              type: 'passive',
+              distance: Math.round(dist * 10) / 10,
+              x: Math.round(entity.position.x * 10) / 10,
+              y: Math.round(entity.position.y * 10) / 10,
+              z: Math.round(entity.position.z * 10) / 10,
+              dx: Math.round(dx * 10) / 10,
+              dz: Math.round(dz * 10) / 10,
+              isHostile: false,
+            });
           }
         });
+
         payload.entities = entityList;
+        payload.nearbyPlayers = playersList;
+        payload.nearbyMobs = mobsList;
       }
     } catch {}
 

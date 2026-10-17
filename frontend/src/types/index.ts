@@ -107,6 +107,49 @@ export interface RadarEntity {
   distance: number;
 }
 
+export interface MinimapPlayer {
+  username: string;
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dz: number;
+  distance: number;
+  yaw: number;
+  facing?: string;
+  health?: number;
+}
+
+export interface MinimapMob {
+  id: number;
+  name: string;
+  type: string;
+  distance: number;
+  x: number;
+  y: number;
+  z: number;
+  dx: number;
+  dz: number;
+  isHostile: boolean;
+}
+
+export interface TerrainPaletteItem {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export interface TerrainGridData {
+  radius: number;
+  size: number;
+  currentBiome?: string;
+  currentLandBlock?: string;
+  palette: TerrainPaletteItem[];
+  cells: number[];
+  heights: number[];
+  timeOfDay?: string;
+}
+
 export interface Telemetry {
   botId: string;
   serverId?: string;
@@ -128,6 +171,15 @@ export interface Telemetry {
   ping: number;
   uptime?: number;
   version?: string;
+  facing?: string;
+  yaw?: number;
+  pitch?: number;
+  coordinates?: { x: number; y: number; z: number };
+  currentBiome?: string;
+  currentLandBlock?: string;
+  nearbyPlayers?: MinimapPlayer[];
+  nearbyMobs?: MinimapMob[];
+  terrainGrid?: TerrainGridData | null;
   farm?: FarmTelemetry;
   entities?: RadarEntity[];
 }
