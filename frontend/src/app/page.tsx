@@ -1976,7 +1976,7 @@ export default function Dashboard() {
         </div>
       ) : (
         /* MINECRAFTAFK MAIN DASHBOARD LAYOUT */
-        <div className="flex-1 flex flex-col md:flex-row min-h-screen">
+        <div className="flex-1 flex flex-col md:flex-row md:min-h-screen">
           {/* LEFT SIDEBAR */}
           <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs">
             {/* Logo Bar */}
@@ -2308,7 +2308,7 @@ export default function Dashboard() {
             </header>
 
             {/* TAB CONTENT PANELS */}
-            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto">
+            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-24 md:pb-6">
               {/* VIEW: SERVERS OVERVIEW */}
               {activeMainView === 'servers' && (
                 <div className="space-y-4">
@@ -2361,7 +2361,8 @@ export default function Dashboard() {
 
                   {/* Servers Table */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                    <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto touch-pan-x">
+                      <table className="w-full text-left text-xs min-w-[660px]">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                         <tr>
                           <th className="p-3.5">
@@ -2577,6 +2578,7 @@ export default function Dashboard() {
                     </table>
                   </div>
                 </div>
+              </div>
               )}
 
               {/* VIEW: DEDICATED ACCOUNTS PAGE */}
@@ -2625,7 +2627,8 @@ export default function Dashboard() {
 
                   {/* Accounts Table */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                    <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto touch-pan-x">
+                      <table className="w-full text-left text-xs min-w-[720px]">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                         <tr>
                           <th className="p-3.5 w-16 text-center">
@@ -2824,6 +2827,7 @@ export default function Dashboard() {
                     </table>
                   </div>
                 </div>
+              </div>
               )}
 
               {/* VIEW: PROFILE SUB-TABS */}
@@ -2868,7 +2872,8 @@ export default function Dashboard() {
 
                       {/* Accounts Table for this Server Profile */}
                       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                        <table className="w-full text-left text-xs">
+                        <div className="overflow-x-auto touch-pan-x">
+                          <table className="w-full text-left text-xs min-w-[680px]">
                           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                             <tr>
                               <th className="p-3 w-8">
@@ -3121,6 +3126,7 @@ export default function Dashboard() {
                           </tbody>
                         </table>
                       </div>
+                    </div>
 
                       {/* Available Accounts to Add (+) to this Server Profile */}
                       {availableAccounts.length > 0 && (
@@ -3130,7 +3136,8 @@ export default function Dashboard() {
                             <span className="text-[11px] text-slate-400 font-medium">Click &ldquo;+ Add to Profile&rdquo; to assign</span>
                           </div>
                           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                            <table className="w-full text-left text-xs">
+                            <div className="overflow-x-auto touch-pan-x">
+                              <table className="w-full text-left text-xs min-w-[480px]">
                               <tbody className="divide-y divide-slate-100">
                                 {availableAccounts.map((acc) => (
                                   <tr key={acc.id} className="hover:bg-slate-50/80 transition">
@@ -3179,6 +3186,7 @@ export default function Dashboard() {
                               </tbody>
                             </table>
                           </div>
+                        </div>
                         </div>
                       )}
 
@@ -3466,20 +3474,22 @@ export default function Dashboard() {
                             <span className="text-xs font-mono text-emerald-700 font-bold">Window #{containerWindow.windowId}</span>
                           </div>
 
-                          <div className="grid grid-cols-9 gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                            {containerWindow.slots.map((item, idx) => (
-                              <div
-                                key={idx}
-                                onClick={() => clickSlot(activeServer.id, containerWindow.windowId, idx, 0)}
-                                className="aspect-square rounded-lg border border-slate-200 bg-white hover:border-emerald-500 flex items-center justify-center relative cursor-pointer shadow-2xs"
-                              >
-                                {item && (
-                                  <span className="text-[10px] font-mono text-slate-800 truncate px-1">
-                                    {item.displayName || item.name}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
+                          <div className="overflow-x-auto touch-pan-x">
+                            <div className="grid grid-cols-9 gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-xl min-w-[340px]">
+                              {containerWindow.slots.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => clickSlot(activeServer.id, containerWindow.windowId, idx, 0)}
+                                  className="aspect-square rounded-lg border border-slate-200 bg-white hover:border-emerald-500 flex items-center justify-center relative cursor-pointer shadow-2xs"
+                                >
+                                  {item && (
+                                    <span className="text-[10px] font-mono text-slate-800 truncate px-1">
+                                      {item.displayName || item.name}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -3816,8 +3826,8 @@ export default function Dashboard() {
             </div>
           </main>
 
-          {/* Mobile Bottom User Bar (Strictly at the very bottom of the page in mobile view) */}
-          <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 flex items-center justify-between gap-1 shadow-xs mt-auto shrink-0 z-20">
+          {/* Mobile Bottom User Bar (Fixed cleanly at bottom of screen on small displays) */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 flex items-center justify-between gap-1 shadow-lg">
             <div className="flex items-center gap-2 truncate min-w-0">
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               <span className="text-xs font-bold text-slate-800 font-mono truncate">
