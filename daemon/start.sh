@@ -114,7 +114,7 @@ else
 fi
 
 if command -v termux-notification &> /dev/null; then
-  termux-notification --id pocketafk_status --title "PocketAFK Active • 24/7 (@${UPPER_USER})" --content "🚀 Tunnel Live | Standby for server connection" --ongoing --priority high 2>/dev/null || true
+  termux-notification --id pocketafk_status --title "PocketAFK Active • 24/7 (@${UPPER_USER})" --content "🚀 Tunnel Live | Standby for server connection" --ongoing --priority low --alert-once 2>/dev/null || true
   echo -e "      ${GREEN}✓ Android persistent status notification initialized${NC}"
 fi
 

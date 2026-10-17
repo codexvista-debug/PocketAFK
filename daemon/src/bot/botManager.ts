@@ -19,7 +19,7 @@ export class BotManager {
     };
     setInterval(() => {
       updateTermuxNotification(this.getAllBots());
-    }, 25000);
+    }, 60000);
     updateTermuxNotification([]);
   }
 
