@@ -68,7 +68,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
   const [name, setName] = useState('');
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState<string | number>(25565);
-  const [serverVersion, setServerVersion] = useState('26.3');
+  const [serverVersion, setServerVersion] = useState('auto');
   const [loading, setLoading] = useState(false);
   const [showBrowseSetups, setShowBrowseSetups] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -86,12 +86,12 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
         setName(initialProfile.name || '');
         setServerHost(initialProfile.serverHost || '');
         setServerPort(initialProfile.serverPort || 25565);
-        setServerVersion(initialProfile.serverVersion || '26.3');
+        setServerVersion(initialProfile.serverVersion || 'auto');
       } else {
         setName('');
         setServerHost('');
         setServerPort(25565);
-        setServerVersion('26.3');
+        setServerVersion('auto');
       }
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Server,
   Users,
@@ -18,6 +18,8 @@ import {
   HardDrive,
   KeyRound,
   ExternalLink,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { MinecraftAccount, ServerProfile, UserRank } from '../types';
 import { getRankConfig } from '../lib/ranks';
@@ -43,6 +45,42 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onOpenAddAccount,
   onOpenAddServer,
 }) => {
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pocketafk_theme');
+      if (saved) return saved === 'dark';
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const saved = localStorage.getItem('pocketafk_theme');
+      if (saved === 'dark') {
+        document.documentElement.classList.add('dark');
+        setIsDark(true);
+      } else if (saved === 'light') {
+        document.documentElement.classList.remove('dark');
+        setIsDark(false);
+      }
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (typeof document !== 'undefined') {
+      if (next) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('pocketafk_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('pocketafk_theme', 'light');
+      }
+    }
+  };
+
   const rankConfig = getRankConfig(userRank);
   const isOnline = socketStatus === 'AUTHENTICATED';
   const verifiedAccounts = accounts.filter((a) => a.verified);
@@ -91,32 +129,57 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </div>
           </div>
 
-          {/* Quick Metrics Badge Card */}
-          <div className="grid grid-cols-2 gap-3 shrink-0 lg:w-72 bg-slate-50/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Daemon Status</span>
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-rose-500'}`} />
-                <span className="text-xs font-extrabold text-slate-900">{isOnline ? 'Active Online' : 'Standby / Offline'}</span>
+          {/* Right Column: Theme Switcher & Quick Metrics */}
+          <div className="flex flex-col gap-3 shrink-0 lg:w-72">
+            {/* Dark / Light Mode Switcher Pill */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/90 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer active:scale-95"
+                title="Toggle Dark / Light Mode"
+              >
+                {isDark ? (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Light Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Dark Mode</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Metrics Badge Card */}
+            <div className="grid grid-cols-2 gap-3 bg-slate-50/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
+              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Daemon Status</span>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-rose-500'}`} />
+                  <span className="text-xs font-extrabold text-slate-900">{isOnline ? 'Active Online' : 'Standby / Offline'}</span>
+                </div>
               </div>
-            </div>
 
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">User Rank</span>
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="text-xs">{rankConfig.gemIcon}</span>
-                <span className="text-xs font-extrabold text-amber-600 truncate">{rankConfig.name}</span>
+              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">User Rank</span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-xs">{rankConfig.gemIcon}</span>
+                  <span className="text-xs font-extrabold text-amber-600 truncate">{rankConfig.name}</span>
+                </div>
               </div>
-            </div>
 
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Server Profiles</span>
-              <span className="text-base font-black text-slate-900">{servers.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxServers}</span></span>
-            </div>
+              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Server Profiles</span>
+                <span className="text-base font-black text-slate-900">{servers.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxServers}</span></span>
+              </div>
 
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Linked Java IGNs</span>
-              <span className="text-base font-black text-emerald-600">{verifiedAccounts.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxAccounts}</span></span>
+              <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Linked Java IGNs</span>
+                <span className="text-base font-black text-emerald-600">{verifiedAccounts.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxAccounts}</span></span>
+              </div>
             </div>
           </div>
         </div>

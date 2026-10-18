@@ -250,6 +250,18 @@ export default function Dashboard() {
     return {};
   });
 
+  // Initialize dark / light theme preference
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const saved = localStorage.getItem('pocketafk_theme');
+      if (saved === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else if (saved === 'light') {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, []);
+
   // Player Audit & Connection Logs Handlers
   const addPlayerLog = useCallback(
     (
@@ -768,11 +780,14 @@ export default function Dashboard() {
       if (prevSt === st) return;
       prevBotStateRef.current[bId] = st;
 
-      const srv = servers.find((s) => s.id === bId);
+      const [serverId, accountId] = bId.includes('__') ? bId.split('__') : [bId, undefined];
+      const srv = servers.find((s) => s.id === serverId) || (activeServer?.id === serverId ? activeServer : null);
       if (!srv) return;
-      const acc = resolveServerAccount(srv);
+      const acc = (accountId ? accounts.find((a) => a.id === accountId || a.ign === accountId) : null) || resolveServerAccount(srv);
       const cleanName = acc?.ign || acc?.username || srv.name;
       if (!cleanName) return;
+
+      const reason = botStateReasons?.[bId] || (bId === activeServerId ? botStateReason : '') || '';
 
       if (st === 'CONNECTING') {
         addPlayerLog(
@@ -802,28 +817,47 @@ export default function Dashboard() {
           'success'
         );
       } else if (st === 'KICKED') {
-        const reason = botStateReasons?.[bId] || (bId === activeServerId ? botStateReason : '') || 'Kicked by remote host';
+        const kickMsg = reason || 'Kicked by remote host';
         addPlayerLog(
           cleanName,
           srv.serverHost,
           'kicked',
-          `Kicked from server: ${reason}`,
+          `Kicked from server: ${kickMsg}`,
           undefined,
           'error'
         );
       } else if (st === 'ERROR') {
-        const reason = botStateReasons?.[bId] || (bId === activeServerId ? botStateReason : '') || 'Socket connection error';
+        const errorMsg = reason || 'Socket connection error';
         addPlayerLog(
           cleanName,
           srv.serverHost,
           'error',
-          `Connection error: ${reason}`,
+          `Connection error: ${errorMsg}`,
           undefined,
           'error'
         );
+      } else if (st === 'DISCONNECTED') {
+        const discMsg = reason || 'Connection closed by remote server';
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'disconnected',
+          `Disconnected from server: ${discMsg}`,
+          undefined,
+          'warning'
+        );
+      } else if (st === 'RECONNECTING') {
+        addPlayerLog(
+          cleanName,
+          srv.serverHost,
+          'reconnecting',
+          `Attempting automatic reconnection${reason ? ` (${reason})` : ''}...`,
+          undefined,
+          'warning'
+        );
       }
     });
-  }, [botStates, botStateReasons, botStateReason, servers, activeServer, resolveServerAccount, activeAccount, addPlayerLog]);
+  }, [botStates, botStateReasons, botStateReason, servers, activeServer, resolveServerAccount, activeAccount, addPlayerLog, accounts]);
 
   // Real-time automatic audit logging on incoming messages / server disconnects / kicks
   const lastLoggedMsgIdRef = useRef<string>('');
@@ -833,8 +867,10 @@ export default function Dashboard() {
     if (!latest || latest.id === lastLoggedMsgIdRef.current) return;
     lastLoggedMsgIdRef.current = latest.id;
 
-    const srv = (latest.botId ? servers.find((s) => s.id === latest.botId) : null) || activeServer;
-    const acc = srv ? resolveServerAccount(srv) : activeAccount;
+    const rawBotId = latest.botId || '';
+    const [serverId, accountId] = rawBotId.includes('__') ? rawBotId.split('__') : [rawBotId, undefined];
+    const srv = (serverId ? servers.find((s) => s.id === serverId) : null) || activeServer;
+    const acc = (accountId ? accounts.find((a) => a.id === accountId || a.ign === accountId) : null) || (srv ? resolveServerAccount(srv) : activeAccount);
     const cleanName = latest.accountUsername || acc?.ign || acc?.username;
     if (!cleanName || !srv) return;
 
@@ -849,14 +885,14 @@ export default function Dashboard() {
         latest.raw,
         'error'
       );
-    } else if (latest.raw.toLowerCase().includes('kicked from server')) {
+    } else if (latest.raw.toLowerCase().includes('kicked from server') || latest.raw.toLowerCase().includes('kicked:')) {
       addPlayerLog(cleanName, srv.serverHost, 'kicked', latest.raw, undefined, 'error');
-    } else if (latest.type === 'error' || latest.raw.toLowerCase().includes('connection closed')) {
+    } else if (latest.type === 'error' || latest.raw.toLowerCase().includes('connection closed') || latest.raw.toLowerCase().includes('error]')) {
       addPlayerLog(cleanName, srv.serverHost, 'error', latest.raw, undefined, 'error');
     } else if (latest.raw.toLowerCase().includes('verified java account')) {
       addPlayerLog(cleanName, srv.serverHost, 'handshake', latest.raw, undefined, 'success');
     }
-  }, [messages, activeServer, activeAccount, resolveServerAccount, addPlayerLog]);
+  }, [messages, servers, activeServer, activeAccount, accounts, resolveServerAccount, addPlayerLog]);
 
   // Dismiss Connecting toast once active bot or any bot connects
   useEffect(() => {

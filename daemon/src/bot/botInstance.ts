@@ -103,12 +103,18 @@ export class PocketBotInstance {
       // Always official Microsoft Java mode (100% compatible with real public Minecraft servers)
       const authMode: 'microsoft' = 'microsoft';
 
+      // Sanitize protocol version: if version is 'auto', '26.3', or unsupported, fall back to undefined for auto-ping
+      let targetVersion: string | undefined = undefined;
+      if (this.config.version && this.config.version !== 'auto' && this.config.version !== '26.3') {
+        targetVersion = String(this.config.version);
+      }
+
       this.bot = mineflayer.createBot({
         host: this.config.host,
         port: this.config.port,
         username: cleanUsername,
         auth: authMode,
-        version: this.config.version && this.config.version !== 'auto' ? this.config.version : undefined,
+        version: targetVersion,
         profilesFolder: tokenFolder,
         physicsEnabled: this.config.settings.physics !== false,
         viewDistance: 'tiny',
@@ -160,7 +166,15 @@ export class PocketBotInstance {
 
       this.setupEventHandlers();
     } catch (err: any) {
-      this.setState('ERROR', err.message);
+      const errMsg = err?.message || String(err || 'Failed to start bot');
+      console.error('[PocketAFK CreateBot Error]', errMsg);
+      this.setState('ERROR', errMsg);
+      this.emitActivity('disconnect', `❌ Connection error: ${errMsg}`);
+      this.logConsole({
+        type: 'error',
+        raw: `[PocketAFK Error] ${errMsg}`,
+        formattedText: `<span style="color:#FF5555">[PocketAFK Startup Error] ${errMsg}</span>`
+      });
       this.scheduleReconnect();
     }
   }
@@ -411,8 +425,8 @@ export class PocketBotInstance {
     this.bot.on('error', (err: Error) => {
       console.error('[PocketAFK Bot Error]', err);
 
-      // If error is transient null reference during proxy dimension switch or keepalive queue lag, don't kill bot
-      if (err.message.includes("reading 'id'") || err.message.includes('keepAliveError') || err.message.includes('timed out')) {
+      // If error is transient null reference during proxy dimension switch or keepalive queue lag while already spawned in world, don't kill bot
+      if (this.state === 'SPAWNED' && (err.message.includes("reading 'id'") || err.message.includes('keepAliveError'))) {
         this.logConsole({
           type: 'error',
           raw: `[PocketAFK Warning] Server queue/sync: ${err.message}`,
@@ -421,10 +435,8 @@ export class PocketBotInstance {
         return;
       }
 
-      const isSocketDead = !(this.bot as any)?._client?.socket?.writable;
-      if (isSocketDead) {
-        this.setState('ERROR', err.message);
-      }
+      this.setState('ERROR', err.message);
+      this.emitActivity('disconnect', `❌ Connection error: ${err.message}`);
       this.logConsole({
         type: 'error',
         raw: `[PocketAFK Error] ${err.message}`,
