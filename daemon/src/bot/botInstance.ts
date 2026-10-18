@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import mineflayer, { Bot } from 'mineflayer';
+const mcData = require('minecraft-data');
 const minecraftFolderPath = require('minecraft-folder-path');
 import { BotConfig, BotLifecycleState, ChatMessagePayload, ContainerSlot, ContainerWindowPayload, TelemetryPayload, RadarEntity, MinimapPlayer, MinimapMob, ActivityLog } from '../types';
 import { minecraftToHtml, stripMinecraftCodes } from '../utils/chatParser';
@@ -103,10 +104,16 @@ export class PocketBotInstance {
       // Always official Microsoft Java mode (100% compatible with real public Minecraft servers)
       const authMode: 'microsoft' = 'microsoft';
 
-      // Sanitize protocol version: if version is 'auto', '26.3', or unsupported, fall back to undefined for auto-ping
+      // Sanitize protocol version: only use if recognized by protocol library; otherwise undefined for auto-ping
       let targetVersion: string | undefined = undefined;
-      if (this.config.version && this.config.version !== 'auto' && this.config.version !== '26.3') {
-        targetVersion = String(this.config.version);
+      const configuredVer = this.config.version ? String(this.config.version).trim() : '';
+      if (configuredVer && configuredVer !== 'auto') {
+        const supported = (mcData as any)?.supportedVersions?.pc || [];
+        if (supported.includes(configuredVer)) {
+          targetVersion = configuredVer;
+        } else {
+          console.log(`[PocketAFK] Version '${configuredVer}' not in supported PC list; falling back to auto-detect ping.`);
+        }
       }
 
       this.bot = mineflayer.createBot({
@@ -279,9 +286,25 @@ export class PocketBotInstance {
     });
 
     // Auto-accept Server Resource Packs
-    // Many servers (CubeCraft, Hypixel, DonutSMP) kick, freeze, or block the bot with a prompt if resource packs are not accepted
+    // Many servers (CubeCraft, Hypixel, etc.) prompt for resource packs during 'play' state.
+    // In 'configuration' state, Mineflayer's built-in resource_pack plugin already automatically accepts.
+    // Calling it again during 'configuration' state floods the proxy (e.g. Velocity/DonutSMP) with duplicate packets, causing ECONNRESET!
     if (this.config.settings.acceptResourcePacks !== false) {
-      const handleResourcePack = (urlOrData: any, hashOrUuid?: any) => {
+      let lastAcceptedTime = 0;
+
+      this.bot.on('resourcePack', (_url: string, _hashOrUuid: any) => {
+        const client = (this.bot as any)?._client;
+        // If still in configuration state, Mineflayer's built-in plugin already handled auto-acceptance.
+        // Sending extra packets during configuration phase violates protocol and kicks the bot.
+        if (client && client.state === 'configuration') {
+          return;
+        }
+
+        // Debounce to prevent rapid double-handling
+        const now = Date.now();
+        if (now - lastAcceptedTime < 1000) return;
+        lastAcceptedTime = now;
+
         this.emitActivity('status', '📦 Accepted server custom resource pack');
         this.logConsole({
           type: 'system',
@@ -293,38 +316,9 @@ export class PocketBotInstance {
           if (typeof this.bot?.acceptResourcePack === 'function') {
             this.bot.acceptResourcePack();
           }
-        } catch (e) {}
-
-        try {
-          const client = (this.bot as any)?._client;
-          if (client && typeof client.write === 'function') {
-            const uuid = hashOrUuid || urlOrData?.uuid;
-            const hash = typeof hashOrUuid === 'string' ? hashOrUuid : urlOrData?.hash;
-
-            // Send ACCEPTED (3) then SUCCESSFULLY_LOADED (0)
-            client.write('resource_pack_receive', { uuid, hash, result: 3 });
-            setTimeout(() => {
-              try {
-                client.write('resource_pack_receive', { uuid, hash, result: 0 });
-              } catch (e) {}
-            }, 50);
-          }
-        } catch (e) {}
-      };
-
-      // 1. High-level Mineflayer event
-      this.bot.on('resourcePack', (url: string, hashOrUuid: any) => {
-        handleResourcePack(url, hashOrUuid);
-      });
-
-      // 2. Modern Minecraft 1.20.3+ / 1.20.4 / 1.21.x packet
-      (this.bot as any)._client?.on('add_resource_pack', (data: any) => {
-        handleResourcePack(data);
-      });
-
-      // 3. Legacy Minecraft packet
-      (this.bot as any)._client?.on('resource_pack_send', (data: any) => {
-        handleResourcePack(data);
+        } catch (e) {
+          console.warn('[PocketAFK] Error accepting resource pack:', e);
+        }
       });
     }
 
