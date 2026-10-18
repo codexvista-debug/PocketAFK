@@ -16,6 +16,12 @@ import {
   Database,
   Terminal,
   Filter,
+  Server,
+  Info,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  Zap,
 } from 'lucide-react';
 import { MinecraftAccount, PlayerLogEntry, PlayerLogType, ActivityLog } from '../types';
 
@@ -94,6 +100,12 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
     return combined.sort((a, b) => b.timestamp - a.timestamp);
   }, [logs, activityLogs, serverHost]);
 
+  const errorCount = useMemo(() => {
+    return unifiedLogs.filter(
+      (l) => l.type === 'error' || l.type === 'kicked' || l.type === 'disconnect' || l.status === 'error'
+    ).length;
+  }, [unifiedLogs]);
+
   const filteredLogs = useMemo(() => {
     return unifiedLogs
       .filter((entry) => {
@@ -143,65 +155,84 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'spawned':
       case 'connected':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            🟢 SPAWNED
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            SPAWNED
           </span>
         );
       case 'handshake':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <ShieldCheck className="w-3 h-3 text-purple-600" />
             HANDSHAKE
           </span>
         );
       case 'connect':
       case 'connecting':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+            <Radio className="w-3 h-3 text-sky-600 animate-pulse" />
+            CONNECTING
+          </span>
+        );
       case 'reconnecting':
       case 'reconnect':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
-            CONNECTING
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3 text-amber-600" />
+            RECONNECTING
           </span>
         );
       case 'anti_afk':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            🛡️ ANTI-AFK
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+            <Zap className="w-3 h-3 text-teal-600" />
+            ANTI-AFK
           </span>
         );
       case 'survival':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-            ⚔️ SURVIVAL
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+            SURVIVAL
           </span>
         );
       case 'command':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-            ⚡ COMMAND
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
+            COMMAND
           </span>
         );
       case 'kicked':
-      case 'disconnect':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-            ⚠ KICKED
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <XCircle className="w-3 h-3 text-rose-600" />
+            KICKED
           </span>
         );
       case 'error':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-            ✕ ERROR
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <AlertTriangle className="w-3 h-3 text-rose-600" />
+            ERROR
+          </span>
+        );
+      case 'disconnected':
+      case 'disconnect':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            DISCONNECTED
           </span>
         );
       case 'chat':
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
-            💬 CHAT
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <MessageSquare className="w-3 h-3 text-indigo-600" />
+            CHAT
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
             ACTIVITY
           </span>
         );
@@ -233,7 +264,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
                   @{cleanPlayerName}
                 </h2>
                 {isLiveConnected ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                     Online
                   </span>
@@ -243,8 +274,8 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 font-mono">
-                <span>Server:</span>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 font-mono">
+                <Server className="w-3 h-3 text-slate-400 inline" />
                 <span className="text-slate-700 font-semibold">{serverHost || 'Configured Server'}</span>
                 <span>•</span>
                 <Database className="w-3 h-3 text-emerald-600 inline" />
@@ -279,7 +310,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
               onClick={() => setActiveTab('activity')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                 activeTab === 'activity'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -289,7 +320,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
               onClick={() => setActiveTab('connection')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                 activeTab === 'connection'
-                  ? 'bg-sky-600 text-white shadow-2xs'
+                  ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -297,23 +328,20 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('errors')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
                 activeTab === 'errors'
                   ? 'bg-rose-600 text-white shadow-2xs'
+                  : errorCount > 0
+                  ? 'text-rose-700 hover:bg-rose-50'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              Kicks & Errors
-            </button>
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
-                activeTab === 'chat'
-                  ? 'bg-indigo-600 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              In-Game Chat
+              <span>Kicks & Errors</span>
+              {errorCount > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === 'errors' ? 'bg-white text-rose-700' : 'bg-rose-100 text-rose-800'}`}>
+                  {errorCount}
+                </span>
+              )}
             </button>
           </div>
 
@@ -326,13 +354,13 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
                 placeholder="Filter logs..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-500 font-mono shadow-2xs"
               />
             </div>
 
             <button
               onClick={handleCopyLogs}
-              className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer text-xs font-bold flex items-center gap-1 shadow-2xs shrink-0"
+              className="px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer text-xs font-bold flex items-center gap-1.5 shadow-2xs shrink-0"
               title="Copy visible logs to clipboard"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -346,7 +374,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
                     onClearLogs();
                     setConfirmClear(false);
                   }}
-                  className="px-2 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition cursor-pointer shadow-2xs"
                 >
                   Confirm Clear
                 </button>
@@ -361,7 +389,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
               <button
                 onClick={() => setConfirmClear(true)}
                 disabled={logs.length === 0}
-                className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 text-slate-500 hover:text-rose-600 transition cursor-pointer shadow-2xs shrink-0 disabled:opacity-40"
+                className="p-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 transition cursor-pointer shadow-2xs shrink-0 disabled:opacity-40"
                 title="Clear player logs"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -371,15 +399,15 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
         </div>
 
         {/* Logs Feed Container */}
-        <div className="flex-1 p-5 overflow-y-auto space-y-2.5 bg-slate-50/50 min-h-[320px]">
+        <div className="flex-1 p-4 sm:p-5 overflow-y-auto space-y-2 bg-slate-50/60 min-h-[340px]">
           {filteredLogs.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shadow-inner">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-2xs">
                 <Terminal className="w-6 h-6" />
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-800">No logs captured yet</h3>
-                <p className="text-xs text-slate-500 max-w-sm mt-1">
+                <p className="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
                   Connection attempts, TCP handshakes, world spawns, kick reasons, and error audits for @{cleanPlayerName} will record and sync here in real time.
                 </p>
               </div>
@@ -394,37 +422,47 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
               });
 
               const isError = entry.status === 'error' || entry.type === 'kicked' || entry.type === 'error';
+              const isWarning = entry.status === 'warning' || entry.type === 'reconnecting' || entry.type === 'disconnected';
+              const isSuccess = entry.type === 'spawned' || entry.type === 'connected';
 
               return (
                 <div
                   key={entry.id}
-                  className={`p-3 rounded-2xl border transition shadow-2xs ${
+                  className={`p-3 rounded-xl border transition shadow-2xs ${
                     isError
-                      ? 'bg-rose-50/80 border-rose-200/90 text-rose-950'
-                      : entry.type === 'spawned'
-                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                      : 'bg-white border-slate-200 text-slate-800'
+                      ? 'border-l-4 border-l-rose-500 bg-rose-50/40 border-rose-200 text-rose-950'
+                      : isWarning
+                      ? 'border-l-4 border-l-amber-500 bg-amber-50/30 border-amber-200 text-amber-950'
+                      : isSuccess
+                      ? 'border-l-4 border-l-emerald-500 bg-emerald-50/30 border-emerald-200 text-emerald-950'
+                      : entry.type === 'connecting' || entry.type === 'connect'
+                      ? 'border-l-4 border-l-sky-500 bg-white border-slate-200 text-slate-800'
+                      : 'border-l-4 border-l-slate-300 bg-white border-slate-200 text-slate-800'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[11px] font-mono font-bold text-slate-400 select-none">
+                      <span className="text-[10px] font-mono font-medium text-slate-400 select-none">
                         [{timeStr}]
                       </span>
                       {getTypeBadge(entry.type, entry.status)}
-                      <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/70">
-                        {entry.serverHost}
-                      </span>
+                      {entry.serverHost && (
+                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/70">
+                          {entry.serverHost}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <p className="text-xs font-mono font-medium mt-1.5 leading-relaxed break-words">
+                  <p className="text-xs font-mono font-medium mt-1 leading-relaxed break-words text-slate-800">
                     {entry.message}
                   </p>
 
+                  {/* Clean subtle light details badge (NO big black block!) */}
                   {entry.details && (
-                    <div className="mt-2 p-2 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto leading-relaxed border border-slate-800">
-                      {entry.details}
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 font-mono text-[11px] border border-slate-200/80 max-w-fit">
+                      <span className="text-slate-400 text-[9px] uppercase font-bold tracking-wider">Detail:</span>
+                      <span className="font-semibold text-slate-700">{entry.details}</span>
                     </div>
                   )}
                 </div>
@@ -436,15 +474,15 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
         {/* Modal Footer */}
         <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between bg-white text-xs">
           <div className="flex items-center gap-2 text-slate-500">
-            <span className="font-semibold text-slate-700">{filteredLogs.length}</span>
+            <span className="font-bold text-slate-800">{filteredLogs.length}</span>
             <span>of</span>
-            <span className="font-semibold text-slate-700">{unifiedLogs.length}</span>
+            <span className="font-bold text-slate-800">{unifiedLogs.length}</span>
             <span>logged events</span>
           </div>
 
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition shadow-xs cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition shadow-xs cursor-pointer active:scale-95"
           >
             Done
           </button>

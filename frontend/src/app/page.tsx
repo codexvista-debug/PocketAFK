@@ -250,15 +250,11 @@ export default function Dashboard() {
     return {};
   });
 
-  // Initialize dark / light theme preference
+  // Ensure clean light mode
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      const saved = localStorage.getItem('pocketafk_theme');
-      if (saved === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else if (saved === 'light') {
-        document.documentElement.classList.remove('dark');
-      }
+      document.documentElement.classList.remove('dark');
+      localStorage.removeItem('pocketafk_theme');
     }
   }, []);
 

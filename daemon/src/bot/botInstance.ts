@@ -279,27 +279,52 @@ export class PocketBotInstance {
     });
 
     // Auto-accept Server Resource Packs
-    // Many servers kick or freeze the bot if resource packs are not accepted
-    if (this.config.settings.acceptResourcePacks) {
-      (this.bot as any)._client?.on('resource_pack_send', (data: any) => {
+    // Many servers (CubeCraft, Hypixel, DonutSMP) kick, freeze, or block the bot with a prompt if resource packs are not accepted
+    if (this.config.settings.acceptResourcePacks !== false) {
+      const handleResourcePack = (urlOrData: any, hashOrUuid?: any) => {
         this.emitActivity('status', '📦 Accepted server custom resource pack');
         this.logConsole({
           type: 'system',
-          raw: `[Server] Resource pack offered. Automatically accepting...`,
-          formattedText: `<span style="color:#FFFF55">[Server] Resource pack offered. Automatically accepting...</span>`
+          raw: `[Server] Resource pack required. Automatically accepting & loading...`,
+          formattedText: `<span style="color:#FFFF55">[Server] Resource pack required. Automatically accepting & loading...</span>`
         });
-        
+
         try {
           if (typeof this.bot?.acceptResourcePack === 'function') {
             this.bot.acceptResourcePack();
-          } else {
-            (this.bot as any)._client?.write('resource_pack_receive', {
-              result: 3 // Successfully loaded
-            });
           }
-        } catch (e) {
-          // ignore error if client handled it
-        }
+        } catch (e) {}
+
+        try {
+          const client = (this.bot as any)?._client;
+          if (client && typeof client.write === 'function') {
+            const uuid = hashOrUuid || urlOrData?.uuid;
+            const hash = typeof hashOrUuid === 'string' ? hashOrUuid : urlOrData?.hash;
+
+            // Send ACCEPTED (3) then SUCCESSFULLY_LOADED (0)
+            client.write('resource_pack_receive', { uuid, hash, result: 3 });
+            setTimeout(() => {
+              try {
+                client.write('resource_pack_receive', { uuid, hash, result: 0 });
+              } catch (e) {}
+            }, 50);
+          }
+        } catch (e) {}
+      };
+
+      // 1. High-level Mineflayer event
+      this.bot.on('resourcePack', (url: string, hashOrUuid: any) => {
+        handleResourcePack(url, hashOrUuid);
+      });
+
+      // 2. Modern Minecraft 1.20.3+ / 1.20.4 / 1.21.x packet
+      (this.bot as any)._client?.on('add_resource_pack', (data: any) => {
+        handleResourcePack(data);
+      });
+
+      // 3. Legacy Minecraft packet
+      (this.bot as any)._client?.on('resource_pack_send', (data: any) => {
+        handleResourcePack(data);
       });
     }
 
