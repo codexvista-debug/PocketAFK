@@ -171,6 +171,21 @@ export class PocketBotInstance {
         enumerable: true
       });
 
+      // Safe guard against serialization error: Write error for undefined : Cannot read properties of undefined (reading 'length')
+      // If server or Mineflayer writes resource_pack_receive without a UUID on modern versions, provide a valid UUID
+      const client = (this.bot as any)?._client;
+      if (client && typeof client.write === 'function') {
+        const originalWrite = client.write.bind(client);
+        client.write = (name: string, params: any) => {
+          if (name === 'resource_pack_receive' && params) {
+            if (!params.uuid && (this.bot as any)?.supportFeature?.('resourcePackUsesUUID')) {
+              params.uuid = '00000000-0000-0000-0000-000000000000';
+            }
+          }
+          return originalWrite(name, params);
+        };
+      }
+
       this.setupEventHandlers();
     } catch (err: any) {
       const errMsg = err?.message || String(err || 'Failed to start bot');
@@ -293,13 +308,6 @@ export class PocketBotInstance {
       let lastAcceptedTime = 0;
 
       this.bot.on('resourcePack', (_url: string, _hashOrUuid: any) => {
-        const client = (this.bot as any)?._client;
-        // If still in configuration state, Mineflayer's built-in plugin already handled auto-acceptance.
-        // Sending extra packets during configuration phase violates protocol and kicks the bot.
-        if (client && client.state === 'configuration') {
-          return;
-        }
-
         // Debounce to prevent rapid double-handling
         const now = Date.now();
         if (now - lastAcceptedTime < 1000) return;
@@ -311,6 +319,13 @@ export class PocketBotInstance {
           raw: `[Server] Resource pack required. Automatically accepting & loading...`,
           formattedText: `<span style="color:#FFFF55">[Server] Resource pack required. Automatically accepting & loading...</span>`
         });
+
+        // If in configuration state, Mineflayer's internal plugin automatically accepted.
+        // We only need to manually invoke acceptResourcePack during 'play' state.
+        const client = (this.bot as any)?._client;
+        if (client && client.state === 'configuration') {
+          return;
+        }
 
         try {
           if (typeof this.bot?.acceptResourcePack === 'function') {
@@ -790,9 +805,9 @@ export class PocketBotInstance {
           // 3. Dropped Items (e.g. Cobblestone from cobble farms)
           if (rawName === 'item' || entity.type === 'object' && rawName.includes('item')) {
             let itemName = 'Cobblestone';
-            if ((entity as any).item?.name) {
+            if (typeof (entity as any).item?.name === 'string') {
               itemName = (entity as any).item.name.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-            } else if ((entity as any).item?.displayName) {
+            } else if (typeof (entity as any).item?.displayName === 'string') {
               itemName = (entity as any).item.displayName;
             } else if (Array.isArray((entity as any).metadata)) {
               for (const m of (entity as any).metadata) {

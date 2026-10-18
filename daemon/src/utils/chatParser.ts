@@ -41,9 +41,10 @@ const ANSI_COLORS: Record<string, string> = {
   '97': '#FFFFFF',
 };
 
-export function stripMinecraftCodes(str: string): string {
-  if (!str) return '';
-  return str
+export function stripMinecraftCodes(str: any): string {
+  if (str === null || str === undefined) return '';
+  const text = typeof str === 'string' ? str : (typeof str === 'object' ? JSON.stringify(str) : String(str));
+  return text
     .replace(/(?:§|&)#([0-9a-fA-F]{6})/gi, '')
     .replace(/\[#([0-9a-fA-F]{6})([^\]]*)\]/gi, '$2')
     .replace(/§[0-9a-fk-or]/gi, '')
@@ -55,10 +56,10 @@ export function stripMinecraftCodes(str: string): string {
 /**
  * Converts Minecraft string / ANSI into in-game HTML with colors
  */
-export function minecraftToHtml(str: string): string {
-  if (!str) return '';
+export function minecraftToHtml(str: any): string {
+  if (str === null || str === undefined) return '';
 
-  let text = str;
+  let text = typeof str === 'string' ? str : (typeof str === 'object' ? JSON.stringify(str) : String(str));
 
   // 1. Convert modern hex color codes: §#RRGGBB or &#RRGGBB
   text = text.replace(/(?:§|&)#([0-9a-fA-F]{6})/gi, (_, hex) => {
