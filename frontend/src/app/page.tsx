@@ -1807,9 +1807,8 @@ export default function Dashboard() {
   // Accounts for the active server profile (unfiltered by search term)
   const serverProfileAccounts = useMemo(() => {
     if (!activeServer) return [];
-    const valid = accounts.filter((a) => profileAccountIds.includes(a.id));
-    return valid.length > 0 ? valid : (activeAccount ? [activeAccount] : accounts);
-  }, [activeServer, accounts, profileAccountIds, activeAccount]);
+    return accounts.filter((a) => profileAccountIds.includes(a.id));
+  }, [activeServer, accounts, profileAccountIds]);
 
   const effectiveReceiverIds = useMemo(() => {
     if (chatReceiverAccountIds.length === 0) {
@@ -2784,7 +2783,12 @@ export default function Dashboard() {
                   {/* Top Bar: Title, Add Account Button, and Filter */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-xl font-black text-slate-900">Accounts</h2>
+                      <h2 className="text-xl font-black text-slate-900 flex items-center gap-2.5">
+                        <span>Accounts</span>
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono font-bold border border-slate-200">
+                          {accounts.length}/{currentRankConfig.maxAccounts}
+                        </span>
+                      </h2>
                       <p className="text-xs text-slate-500">Manage all your verified Microsoft Java Minecraft accounts.</p>
                     </div>
 
@@ -2828,9 +2832,6 @@ export default function Dashboard() {
                       <table className="w-full text-left text-xs min-w-[720px]">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                         <tr>
-                          <th className="p-3.5 w-16 text-center">
-                            <span className="font-mono text-slate-700 font-bold">{accounts.length}/{currentRankConfig.maxAccounts}</span>
-                          </th>
                           <th className="p-3.5">Account Name</th>
                           <th className="p-3.5">Account Access</th>
                           <th className="p-3.5">Connections</th>
@@ -2841,12 +2842,12 @@ export default function Dashboard() {
                       <tbody className="divide-y divide-slate-100">
                         {accounts.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="p-12 text-center text-slate-500">
+                            <td colSpan={5} className="p-12 text-center text-slate-500">
                               <div className="space-y-3 max-w-sm mx-auto">
                                 <Users className="w-8 h-8 text-slate-300 mx-auto" />
                                 <p className="text-xs font-semibold text-slate-700">No Minecraft accounts linked yet.</p>
                                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                                  Click &ldquo;Add Account&rdquo; above to authenticate and link your official Java Microsoft account.
+                                   Click &ldquo;Add Account&rdquo; above to authenticate and link your official Java Microsoft account.
                                 </p>
                                 <button
                                   onClick={() => handleStartMicrosoftLogin()}
@@ -2875,16 +2876,6 @@ export default function Dashboard() {
 
                               return (
                                 <tr key={acc.id} className="hover:bg-slate-50/80 transition">
-                                  {/* Checkbox */}
-                                  <td className="p-3.5 text-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedAccountIds.includes(acc.id)}
-                                      onChange={() => handleAccountCheckbox(acc.id)}
-                                      className="rounded bg-white border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                                    />
-                                  </td>
-
                                   {/* Account Name + Skin */}
                                   <td className="p-3.5">
                                     <div className="flex items-center gap-3">

@@ -106,8 +106,11 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
     if (!serverHost.trim()) return;
 
     const effectiveName = name.trim() || serverHost.trim();
-    // Default account to first account or server profile's account
-    const effectiveAccountId = initialProfile?.accountId || accounts[0]?.id || 'default';
+    // For new profiles, do NOT auto-assign any account so all accounts remain available
+    const effectiveAccountId = initialProfile ? (initialProfile.accountId || '') : '';
+    const effectiveAssignedAccountIds = initialProfile
+      ? (initialProfile.assignedAccountIds || (initialProfile.accountId ? [initialProfile.accountId] : []))
+      : [];
 
     setLoading(true);
     try {
@@ -116,7 +119,7 @@ export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({
         name: effectiveName,
         pocketUser: currentUser || initialProfile?.pocketUser,
         accountId: effectiveAccountId,
-        assignedAccountIds: initialProfile?.assignedAccountIds || (effectiveAccountId ? [effectiveAccountId] : []),
+        assignedAccountIds: effectiveAssignedAccountIds,
         serverHost: serverHost.trim(),
         serverPort: Number(serverPort) || 25565,
         serverVersion: serverVersion || 'auto',
