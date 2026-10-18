@@ -568,7 +568,7 @@ export default function ChiefAdminPage() {
         {/* Logo Bar - Clickable directly to Dashboard */}
         <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
           <Link
-            href="/"
+            href="/?tab=dashboard"
             className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
             title="Return to PocketAFK Dashboard"
           >

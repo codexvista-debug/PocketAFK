@@ -85,7 +85,9 @@ import {
   Copy,
   ArrowUpDown,
   Upload,
+  LayoutDashboard,
 } from 'lucide-react';
+import { DashboardOverview } from '../components/DashboardOverview';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
   physics: true,
@@ -101,7 +103,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'profile' | 'servers' | 'accounts';
+type MainView = 'dashboard' | 'profile' | 'servers' | 'accounts';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function purgeLocalUserData(username: string) {
@@ -166,6 +168,13 @@ export default function Dashboard() {
     try {
       const stored = localStorage.getItem('pocketafk_connections');
       if (stored) setAccountConnections(JSON.parse(stored));
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab') || params.get('view');
+      if (tab === 'dashboard') {
+        setActiveMainView('dashboard');
+      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile') {
+        setActiveMainView(tab as MainView);
+      }
     } catch (e) {}
   }, []);
 
@@ -2125,11 +2134,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveMainView('profile');
-                  setActiveSubTab('connect');
-                  if (servers.length > 0 && !activeServerId) {
-                    setActiveServerId(servers[0].id);
-                  }
+                  setActiveMainView('dashboard');
                 }}
                 className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
                 title="Go to PocketAFK Dashboard"
@@ -2151,6 +2156,20 @@ export default function Dashboard() {
 
             {/* Top Navigation Items */}
             <div className="p-3 space-y-1.5">
+              <button
+                onClick={() => setActiveMainView('dashboard')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeMainView === 'dashboard'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                }`}
+              >
+                <div className={`p-1 rounded-lg ${activeMainView === 'dashboard' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                </div>
+                <span>Dashboard</span>
+              </button>
+
               <button
                 onClick={() => setActiveMainView('servers')}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -2464,6 +2483,26 @@ export default function Dashboard() {
 
             {/* TAB CONTENT PANELS */}
             <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-24 md:pb-6">
+              {/* VIEW: DASHBOARD OVERVIEW */}
+              {activeMainView === 'dashboard' && (
+                <DashboardOverview
+                  accounts={accounts}
+                  servers={servers}
+                  socketStatus={socketStatus}
+                  currentUser={currentUser}
+                  userRank={userRank}
+                  onNavigate={(view, srvId) => {
+                    setActiveMainView(view);
+                    if (srvId) setActiveServerId(srvId);
+                  }}
+                  onOpenAddAccount={() => handleStartMicrosoftLogin()}
+                  onOpenAddServer={() => {
+                    setEditingServer(null);
+                    setIsServerModalOpen(true);
+                  }}
+                />
+              )}
+
               {/* VIEW: SERVERS OVERVIEW */}
               {activeMainView === 'servers' && (
                 <div className="space-y-4">

@@ -82,6 +82,29 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
             </div>
           )}
 
+          {/* Active Waiting & Auto-Close Loading Animation Indicator */}
+          {!errorMessage && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border border-emerald-200/90 shadow-2xs text-left relative overflow-hidden">
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="relative flex items-center justify-center shrink-0 w-8 h-8">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                  <div className="relative rounded-full w-7 h-7 bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-emerald-950">
+                    <span>Waiting for Microsoft Approval...</span>
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                  <p className="text-[11px] text-emerald-800/90 font-medium leading-relaxed mt-0.5">
+                    Please approve in your browser. <b>Do not close this window</b> — it will verify and close automatically!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <p className="text-xs text-slate-600 leading-relaxed">
             Microsoft requires you to verify ownership of your Minecraft account. Enter this code at the Microsoft link below:
           </p>
@@ -102,14 +125,6 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
               {copiedCode ? 'Code Copied!' : 'Copy Code'}
             </button>
           </div>
-
-          {/* Polling / Waiting Indicator */}
-          {isPolling && !errorMessage && (
-            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold flex items-center justify-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-              <span>Waiting for approval on Microsoft... (Auto-detecting)</span>
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div className="space-y-2 pt-1">
