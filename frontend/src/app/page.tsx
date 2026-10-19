@@ -106,6 +106,34 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
 type MainView = 'dashboard' | 'profile' | 'servers' | 'accounts';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
+function safeMinecraftText(val: any): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') {
+    if (val.trim().startsWith('{') && val.trim().endsWith('}')) {
+      try {
+        const obj = JSON.parse(val);
+        return safeMinecraftText(obj);
+      } catch {}
+    }
+    return val;
+  }
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    let t = val.text || val.value || '';
+    if (Array.isArray(val.extra)) {
+      t += val.extra.map((e: any) => safeMinecraftText(e)).join('');
+    }
+    if (Array.isArray(val.with)) {
+      t += val.with.map((w: any) => safeMinecraftText(w)).join(' ');
+    }
+    if (!t && val.translate) {
+      t = val.translate;
+    }
+    return t || (typeof val.toString === 'function' && val.toString !== Object.prototype.toString ? val.toString() : '');
+  }
+  return String(val || '');
+}
+
 function purgeLocalUserData(username: string) {
   if (typeof window === 'undefined' || !username) return;
   const raw = username.trim();
@@ -3695,21 +3723,21 @@ export default function Dashboard() {
                       {containerWindow ? (
                         <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-bold text-sm text-slate-900">{containerWindow.title || 'Chest / Menu'}</h3>
+                            <h3 className="font-bold text-sm text-slate-900">{safeMinecraftText(containerWindow.title) || 'Chest / Menu'}</h3>
                             <span className="text-xs font-mono text-emerald-700 font-bold">Window #{containerWindow.windowId}</span>
                           </div>
 
                           <div className="overflow-x-auto touch-pan-x">
                             <div className="grid grid-cols-9 gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-xl min-w-[340px]">
-                              {containerWindow.slots.map((item, idx) => (
+                              {Array.isArray(containerWindow.slots) && containerWindow.slots.map((item, idx) => (
                                 <div
                                   key={idx}
-                                  onClick={() => clickSlot(activeServer.id, containerWindow.windowId, idx, 0)}
+                                  onClick={() => clickSlot(activeServerId || activeServer?.id || '', containerWindow.windowId, idx, 0)}
                                   className="aspect-square rounded-lg border border-slate-200 bg-white hover:border-emerald-500 flex items-center justify-center relative cursor-pointer shadow-2xs"
                                 >
                                   {item && (
                                     <span className="text-[10px] font-mono text-slate-800 truncate px-1">
-                                      {item.displayName || item.name}
+                                      {safeMinecraftText(item.customName) || safeMinecraftText(item.displayName) || item.name || 'Item'}
                                     </span>
                                   )}
                                 </div>

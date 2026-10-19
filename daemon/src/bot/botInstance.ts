@@ -934,9 +934,46 @@ export class PocketBotInstance {
     });
   }
 
+  private parseReadableText(raw: any): string {
+    if (!raw) return '';
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          return this.parseReadableText(parsed);
+        } catch {}
+      }
+      return stripMinecraftCodes(raw).trim();
+    }
+    if (typeof raw === 'object') {
+      if (typeof raw.toMotd === 'function') {
+        try { return stripMinecraftCodes(raw.toMotd()).trim(); } catch {}
+      }
+      if (typeof raw.toAnsi === 'function') {
+        try { return stripMinecraftCodes(raw.toAnsi()).trim(); } catch {}
+      }
+      let text = raw.text || raw.value || '';
+      if (Array.isArray(raw.extra)) {
+        text += raw.extra.map((e: any) => this.parseReadableText(e)).join('');
+      }
+      if (Array.isArray(raw.with)) {
+        text += raw.with.map((w: any) => this.parseReadableText(w)).join(' ');
+      }
+      if (!text && raw.translate) {
+        text = raw.translate;
+      }
+      if (!text && typeof raw.toString === 'function' && raw.toString !== Object.prototype.toString) {
+        text = raw.toString();
+      }
+      return stripMinecraftCodes(text).trim();
+    }
+    return stripMinecraftCodes(String(raw)).trim();
+  }
+
   // --- CONTAINER / CHEST GUI ---
   public sendContainerWindow(window: any) {
-    if (!window) return;
+    if (!window || !Array.isArray(window.slots)) return;
 
     const slots: (ContainerSlot | null)[] = window.slots.map((item: any, idx: number) => {
       if (!item) return null;
@@ -944,41 +981,39 @@ export class PocketBotInstance {
       let customName: string | undefined = undefined;
       let lore: string[] | undefined = undefined;
 
-      if (item.nbt?.value?.display?.value?.Name?.value) {
-        try {
-          const parsed = JSON.parse(item.nbt.value.display.value.Name.value);
-          customName = parsed.text || parsed;
-        } catch {
-          customName = item.nbt.value.display.value.Name.value;
-        }
+      if (item.customName) {
+        const parsed = this.parseReadableText(item.customName);
+        if (parsed) customName = parsed;
+      } else if (item.nbt?.value?.display?.value?.Name?.value) {
+        const parsed = this.parseReadableText(item.nbt.value.display.value.Name.value);
+        if (parsed) customName = parsed;
       }
 
-      if (item.nbt?.value?.display?.value?.Lore?.value?.value) {
-        lore = item.nbt.value.display.value.Lore.value.value.map((l: string) => {
-          try {
-            const parsed = JSON.parse(l);
-            return parsed.text || parsed;
-          } catch {
-            return l;
-          }
-        });
+      if (Array.isArray(item.lore) && item.lore.length > 0) {
+        lore = item.lore.map((l: any) => this.parseReadableText(l)).filter(Boolean);
+      } else if (item.nbt?.value?.display?.value?.Lore?.value?.value) {
+        lore = item.nbt.value.display.value.Lore.value.value.map((l: any) => this.parseReadableText(l)).filter(Boolean);
       }
+
+      const safeDisplayName = this.parseReadableText(item.displayName) || item.name || 'Item';
 
       return {
         slot: idx,
-        name: item.name,
-        displayName: item.displayName || item.name,
-        count: item.count,
+        name: String(item.name || 'item'),
+        displayName: safeDisplayName,
+        count: typeof item.count === 'number' ? item.count : 1,
         customName,
         lore
       };
     });
 
+    const safeTitle = this.parseReadableText(window.title) || 'Server Menu / Chest';
+
     const payload: ContainerWindowPayload = {
       botId: this.config.id,
       windowId: window.id,
-      title: window.title || 'Chest / Menu',
-      type: window.type || 'chest',
+      title: safeTitle,
+      type: typeof window.type === 'string' ? window.type : 'chest',
       slotsCount: window.slots.length,
       slots
     };
