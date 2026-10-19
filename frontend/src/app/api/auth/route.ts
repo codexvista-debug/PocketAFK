@@ -17,12 +17,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (supabase) {
-      const { data: user } = await supabase
+      const { data: users } = await supabase
         .from('users')
         .select('password_hash')
         .ilike('username', username)
-        .maybeSingle();
+        .order('created_at', { ascending: true })
+        .limit(1);
 
+      const user = users?.[0];
       if (user?.password_hash) {
         return NextResponse.json({ secretCode: generateSecretCode(username, user.password_hash) });
       }
@@ -70,13 +72,13 @@ export async function POST(req: NextRequest) {
 
       if (supabase) {
         // Check if user exists in Supabase (case-insensitive)
-        const { data: existing } = await supabase
+        const { data: existingList } = await supabase
           .from('users')
           .select('username')
           .ilike('username', lowerUser)
-          .maybeSingle();
+          .limit(1);
 
-        if (existing) {
+        if (existingList && existingList.length > 0) {
           return NextResponse.json({ error: 'Username is already taken' }, { status: 400 });
         }
 
@@ -110,11 +112,14 @@ export async function POST(req: NextRequest) {
 
     if (action === 'login') {
       if (supabase) {
-        const { data: user } = await supabase
+        const { data: users } = await supabase
           .from('users')
           .select('*')
           .ilike('username', lowerUser)
-          .maybeSingle();
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        const user = users?.[0];
 
         if (!user) {
           return NextResponse.json({ error: 'Invalid username or password' }, { status: 401 });
