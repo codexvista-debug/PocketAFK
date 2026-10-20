@@ -86,6 +86,8 @@ import {
   ArrowUpDown,
   Upload,
   LayoutDashboard,
+  Menu,
+  X,
 } from 'lucide-react';
 import { DashboardOverview } from '../components/DashboardOverview';
 
@@ -261,6 +263,7 @@ export default function Dashboard() {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerProfile | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDangerousSettingsOpen, setIsDangerousSettingsOpen] = useState(false);
   const [isContainerOpen, setIsContainerOpen] = useState(false);
   const [isQuickCommandsModalOpen, setIsQuickCommandsModalOpen] = useState(false);
@@ -2186,14 +2189,92 @@ export default function Dashboard() {
       ) : (
         /* MINECRAFTAFK MAIN DASHBOARD LAYOUT */
         <div className="flex-1 flex flex-col md:flex-row md:min-h-screen">
-          {/* LEFT SIDEBAR */}
-          <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs">
+          {/* Mobile Top Header Bar */}
+          <div className="md:hidden flex items-center justify-between p-3.5 bg-white border-b border-slate-200/90 shrink-0 sticky top-0 z-30 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="p-1.5 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                title="Open navigation menu"
+                aria-label="Open navigation menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMainView('dashboard');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className="flex items-center gap-2 text-left group cursor-pointer"
+                title="Go to PocketAFK Dashboard"
+              >
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-xs shadow-xs ring-2 ring-emerald-500/20">
+                  ⛏
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
+                    <span className={`w-2 h-2 rounded-full ring-2 ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 ring-emerald-500/30 animate-pulse' : 'bg-rose-500 ring-rose-500/30'}`} />
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Daemon Connection Status on Mobile Top-Right */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                title={
+                  socketStatus === 'AUTHENTICATED'
+                    ? 'Daemon Active & Online (Click to configure bridge)'
+                    : 'Daemon Standby / Not Connected (Click to configure bridge)'
+                }
+                className={`relative flex items-center justify-center w-8 h-8 rounded-full border transition cursor-pointer shadow-2xs group ${
+                  socketStatus === 'AUTHENTICATED'
+                    ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400 text-emerald-600'
+                    : 'bg-sky-50 border-sky-300 hover:bg-sky-100 hover:border-sky-400 text-sky-600'
+                }`}
+              >
+                <span
+                  className={`animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 pointer-events-none ${
+                    socketStatus === 'AUTHENTICATED' ? 'bg-emerald-400' : 'bg-sky-400'
+                  }`}
+                />
+                <span
+                  className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-2xs ${
+                    socketStatus === 'AUTHENTICATED'
+                      ? 'bg-emerald-500 ring-2 ring-emerald-300 animate-pulse'
+                      : 'bg-sky-500 ring-2 ring-sky-300 animate-pulse'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Backdrop Overlay */}
+          {isMobileSidebarOpen && (
+            <div
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden animate-in fade-in duration-150"
+            />
+          )}
+
+          {/* LEFT SIDEBAR (Slide-out drawer on mobile, permanent sidebar on desktop) */}
+          <aside
+            className={`fixed md:static inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xl md:shadow-2xs transition-transform duration-200 ease-in-out ${
+              isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+            }`}
+          >
             {/* Logo Bar */}
             <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => {
                   setActiveMainView('dashboard');
+                  setIsMobileSidebarOpen(false);
                 }}
                 className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
                 title="Go to PocketAFK Dashboard"
@@ -2211,12 +2292,25 @@ export default function Dashboard() {
                   </div>
                 </div>
               </button>
+
+              {/* Close Button on Mobile Drawer */}
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="md:hidden p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                title="Close navigation"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Top Navigation Items */}
             <div className="p-3 space-y-1.5">
               <button
-                onClick={() => setActiveMainView('dashboard')}
+                onClick={() => {
+                  setActiveMainView('dashboard');
+                  setIsMobileSidebarOpen(false);
+                }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'dashboard'
                     ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
@@ -2230,7 +2324,10 @@ export default function Dashboard() {
               </button>
 
               <button
-                onClick={() => setActiveMainView('servers')}
+                onClick={() => {
+                  setActiveMainView('servers');
+                  setIsMobileSidebarOpen(false);
+                }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'servers'
                     ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
@@ -2244,7 +2341,10 @@ export default function Dashboard() {
               </button>
 
               <button
-                onClick={() => setActiveMainView('accounts')}
+                onClick={() => {
+                  setActiveMainView('accounts');
+                  setIsMobileSidebarOpen(false);
+                }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeMainView === 'accounts'
                     ? 'bg-sky-50 text-sky-900 border border-sky-200/90 shadow-xs'
@@ -2349,6 +2449,7 @@ export default function Dashboard() {
                         onClick={() => {
                           setActiveServerId(srv.id);
                           setActiveMainView('profile');
+                          setIsMobileSidebarOpen(false);
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                           isSelected && activeMainView === 'profile'
@@ -2372,7 +2473,10 @@ export default function Dashboard() {
                     {isSelected && activeMainView === 'profile' && (
                       <div className="ml-3 pl-3 border-l-2 border-slate-200 space-y-1 pt-1">
                         <button
-                          onClick={() => setActiveSubTab('connect')}
+                          onClick={() => {
+                            setActiveSubTab('connect');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'connect'
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs'
@@ -2384,7 +2488,10 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('chat')}
+                          onClick={() => {
+                            setActiveSubTab('chat');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'chat'
                               ? 'bg-sky-50 text-sky-800 border border-sky-300 shadow-2xs'
@@ -2396,7 +2503,10 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('movement')}
+                          onClick={() => {
+                            setActiveSubTab('movement');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'movement'
                               ? 'bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs'
@@ -2408,7 +2518,10 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('inventory')}
+                          onClick={() => {
+                            setActiveSubTab('inventory');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'inventory'
                               ? 'bg-purple-50 text-purple-800 border border-purple-300 shadow-2xs'
@@ -2420,7 +2533,10 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('pov')}
+                          onClick={() => {
+                            setActiveSubTab('pov');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'pov'
                               ? 'bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs'
@@ -2432,7 +2548,10 @@ export default function Dashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveSubTab('settings')}
+                          onClick={() => {
+                            setActiveSubTab('settings');
+                            setIsMobileSidebarOpen(false);
+                          }}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                             activeSubTab === 'settings'
                               ? 'bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs'
@@ -2449,8 +2568,8 @@ export default function Dashboard() {
               })}
             </div>
 
-            {/* Desktop Bottom User Pill (hidden on mobile so it does not appear in the middle) */}
-            <div className="hidden md:flex p-3 border-t border-slate-200 bg-slate-50/50 items-center justify-between gap-1 mt-auto shrink-0">
+            {/* Bottom User Pill */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-1 mt-auto shrink-0">
               <div className="flex items-center gap-2 truncate min-w-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <span className="text-xs font-bold text-slate-800 font-mono truncate">
@@ -2460,7 +2579,10 @@ export default function Dashboard() {
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsRankModalOpen(true)}
+                  onClick={() => {
+                    setIsRankModalOpen(true);
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
                   title="Click to view or upgrade Rank"
                 >
@@ -2482,7 +2604,7 @@ export default function Dashboard() {
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
             {/* Top Navigation & Status Bar */}
-            <header className="h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-6 flex items-center justify-between shrink-0 shadow-xs">
+            <header className="hidden md:flex h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-6 items-center justify-between shrink-0 shadow-xs">
               <div className="flex items-center gap-2.5 text-xs font-bold">
                 {activeMainView === 'profile' && activeServer ? (
                   <>
@@ -2540,8 +2662,32 @@ export default function Dashboard() {
               </div>
             </header>
 
+            {/* Mobile Server Profile Sub-Tabs Pill Strip */}
+            {activeMainView === 'profile' && activeServer && (
+              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto p-2.5 bg-slate-50 border-b border-slate-200 touch-pan-x shrink-0">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 shrink-0">
+                  <ServerLogo host={activeServer.serverHost} name={activeServer.name} size="w-4 h-4" />
+                  <span className="text-xs font-black text-slate-800 truncate max-w-[100px]">{activeServer.name}</span>
+                </div>
+                <div className="h-4 w-[1px] bg-slate-200 shrink-0 mx-0.5" />
+                {(['connect', 'chat', 'movement', 'inventory', 'pov', 'settings'] as SubTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveSubTab(tab)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold capitalize shrink-0 transition cursor-pointer ${
+                      activeSubTab === tab
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* TAB CONTENT PANELS */}
-            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-24 md:pb-6">
+            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-8 md:pb-6">
               {/* VIEW: DASHBOARD OVERVIEW */}
               {activeMainView === 'dashboard' && (
                 <DashboardOverview
@@ -4026,35 +4172,6 @@ export default function Dashboard() {
               )}
             </div>
           </main>
-
-          {/* Mobile Bottom User Bar (Fixed cleanly at bottom of screen on small displays) */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md p-3 flex items-center justify-between gap-1 shadow-lg">
-            <div className="flex items-center gap-2 truncate min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span className="text-xs font-bold text-slate-800 font-mono truncate">
-                @{effectiveUser}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsRankModalOpen(true)}
-                className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
-                title="Click to view or upgrade Rank"
-              >
-                <span>{currentRankConfig.gemIcon}</span>
-                <span>{currentRankConfig.name}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
