@@ -241,3 +241,39 @@ export interface ActivityLog {
   message: string;
 }
 
+export interface WebhookConfig {
+  daemonWebhookUrl: string;
+  daemonEnabled: boolean;
+  daemonNotifyOnline: boolean;
+  daemonNotifyOffline: boolean;
+  daemonNotifyErrors: boolean;
+  daemonNotifyHeartbeat: boolean;
+
+  botWebhookUrl: string;
+  botEnabled: boolean;
+  botNotifyJoined: boolean;
+  botNotifyDisconnected: boolean;
+  botNotifyAfkReward: boolean;
+  botNotifyUptime: boolean;
+  botNotifyChatMentions: boolean;
+  botNotifyLowHealth: boolean;
+}
+
+export const DEFAULT_WEBHOOK_CONFIG: WebhookConfig = {
+  daemonWebhookUrl: '',
+  daemonEnabled: true,
+  daemonNotifyOnline: true,
+  daemonNotifyOffline: true,
+  daemonNotifyErrors: true,
+  daemonNotifyHeartbeat: false,
+
+  botWebhookUrl: '',
+  botEnabled: true,
+  botNotifyJoined: true,
+  botNotifyDisconnected: true,
+  botNotifyAfkReward: true,
+  botNotifyUptime: true,
+  botNotifyChatMentions: false,
+  botNotifyLowHealth: true,
+};
+

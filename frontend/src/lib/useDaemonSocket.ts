@@ -452,6 +452,10 @@ export function useDaemonSocket(
     return sendJson({ type: 'IMPORT_ACCOUNT_TOKENS', payload: { ign, tokenCache } });
   }, [sendJson]);
 
+  const updateWebhookConfig = useCallback((config: any) => {
+    return sendJson({ type: 'UPDATE_WEBHOOK_CONFIG', payload: config });
+  }, [sendJson]);
+
   const clearMessages = useCallback((botId?: string) => {
     if (botId) {
       setMessagesByBot((prev) => {
@@ -541,6 +545,7 @@ export function useDaemonSocket(
     updateSettings,
     verifyAccount,
     importAccountTokens,
+    updateWebhookConfig,
     clearMessages,
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),

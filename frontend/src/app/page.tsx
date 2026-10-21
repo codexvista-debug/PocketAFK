@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useDaemonSocket, AccountVerifiedData } from '../lib/useDaemonSocket';
-import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState, QuickCommandItem, PlayerLogEntry, PlayerLogType, ActivityLog } from '../types';
+import { MinecraftAccount, ServerProfile, BotSettings, BotLifecycleState, QuickCommandItem, PlayerLogEntry, PlayerLogType, ActivityLog, WebhookConfig, DEFAULT_WEBHOOK_CONFIG } from '../types';
 import { Terminal } from '../components/Terminal';
 import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
@@ -18,6 +18,7 @@ import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickC
 import { AccountLogsModal } from '../components/AccountLogsModal';
 import { XaerosMinimap } from '../components/XaerosMinimap';
 import { MinecraftChatMessage } from '../components/MinecraftChatMessage';
+import { WebhookView } from '../components/WebhookView';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -35,6 +36,8 @@ import {
   loadAccountLogsFromSupabase,
   saveNotesToSupabase,
   loadNotesFromSupabase,
+  saveWebhookConfigToSupabase,
+  loadWebhookConfigFromSupabase,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -86,6 +89,7 @@ import {
   ArrowUpDown,
   Upload,
   LayoutDashboard,
+  Bell,
   Menu,
   X,
 } from 'lucide-react';
@@ -105,7 +109,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'dashboard' | 'profile' | 'servers' | 'accounts';
+type MainView = 'dashboard' | 'webhook' | 'profile' | 'servers' | 'accounts';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function safeMinecraftText(val: any): string {
@@ -279,6 +283,18 @@ export default function Dashboard() {
       } catch (e) {}
     }
     return {};
+  });
+
+  // Discord Webhooks State (Universal All-Bots & Daemon Alerts)
+  const [webhookConfig, setWebhookConfig] = useState<WebhookConfig>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('pocketafk_user') || 'guest';
+        const saved = localStorage.getItem(`pocketafk_webhooks_${u}`);
+        if (saved) return { ...DEFAULT_WEBHOOK_CONFIG, ...JSON.parse(saved) };
+      } catch (e) {}
+    }
+    return DEFAULT_WEBHOOK_CONFIG;
   });
 
   // Ensure clean light mode
@@ -573,10 +589,18 @@ export default function Dashboard() {
     updateSettings,
     verifyAccount,
     importAccountTokens,
+    updateWebhookConfig,
     clearMessages,
     msAuthData,
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
+
+  // Auto-sync Discord webhook preferences to daemon bridge on connection
+  useEffect(() => {
+    if (socketStatus === 'AUTHENTICATED' && webhookConfig) {
+      updateWebhookConfig(webhookConfig);
+    }
+  }, [socketStatus, webhookConfig, updateWebhookConfig]);
 
 
   const handleLogout = useCallback(() => {
@@ -1226,10 +1250,11 @@ export default function Dashboard() {
             return;
           }
 
-          const [remoteServers, remoteAccounts, remoteNotes] = await Promise.all([
+          const [remoteServers, remoteAccounts, remoteNotes, remoteWebhooks] = await Promise.all([
             loadServersFromSupabase(currentUser),
             loadAccountsFromSupabase(currentUser),
             loadNotesFromSupabase(currentUser),
+            loadWebhookConfigFromSupabase(currentUser),
           ]);
 
           // Handle Universal Servers:
@@ -1292,6 +1317,12 @@ export default function Dashboard() {
             // Migrate existing local notes to Supabase for this user
             await saveNotesToSupabase(currentUser, localNotes);
             setAccountNotes(localNotes);
+          }
+
+          // Handle Universal Discord Webhooks:
+          if (remoteWebhooks) {
+            setWebhookConfig(remoteWebhooks);
+            localStorage.setItem(`pocketafk_webhooks_${currentUser}`, JSON.stringify(remoteWebhooks));
           }
         } catch (err) {
           console.warn('Failed to load universal data from Supabase:', err);
@@ -2325,6 +2356,28 @@ export default function Dashboard() {
 
               <button
                 onClick={() => {
+                  setActiveMainView('webhook');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeMainView === 'webhook'
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-1 rounded-lg ${activeMainView === 'webhook' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    <Bell className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Webhook</span>
+                </div>
+                {(Boolean(webhookConfig.daemonWebhookUrl) || Boolean(webhookConfig.botWebhookUrl)) && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 ring-2 ring-indigo-200 animate-pulse" />
+                )}
+              </button>
+
+              <button
+                onClick={() => {
                   setActiveMainView('servers');
                   setIsMobileSidebarOpen(false);
                 }}
@@ -2625,8 +2678,12 @@ export default function Dashboard() {
                     </span>
                   </>
                 ) : (
-                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-200">
-                    {activeMainView}
+                  <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border ${
+                    activeMainView === 'webhook'
+                      ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                      : 'bg-slate-100 text-slate-800 border-slate-200'
+                  }`}>
+                    {activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView}
                   </span>
                 )}
               </div>
@@ -2705,6 +2762,34 @@ export default function Dashboard() {
                     setEditingServer(null);
                     setIsServerModalOpen(true);
                   }}
+                />
+              )}
+
+              {/* VIEW: DISCORD WEBHOOKS */}
+              {activeMainView === 'webhook' && (
+                <WebhookView
+                  currentUser={currentUser || 'Opera'}
+                  config={webhookConfig}
+                  onUpdateConfig={(next) => {
+                    setWebhookConfig(next);
+                    if (currentUser) {
+                      localStorage.setItem(`pocketafk_webhooks_${currentUser}`, JSON.stringify(next));
+                    }
+                    if (socketStatus === 'AUTHENTICATED') {
+                      updateWebhookConfig(next);
+                    }
+                  }}
+                  onSaveConfig={async () => {
+                    if (currentUser) {
+                      localStorage.setItem(`pocketafk_webhooks_${currentUser}`, JSON.stringify(webhookConfig));
+                      await saveWebhookConfigToSupabase(currentUser, webhookConfig);
+                    }
+                    if (socketStatus === 'AUTHENTICATED') {
+                      updateWebhookConfig(webhookConfig);
+                    }
+                  }}
+                  isDaemonConnected={socketStatus === 'AUTHENTICATED'}
+                  showToast={showToast}
                 />
               )}
 
@@ -3032,9 +3117,172 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Accounts Table */}
+                  {/* Accounts Container */}
                   <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                    <div className="overflow-x-auto touch-pan-x">
+                    {/* Mobile Wrapped Cards View (< md) - All info visible in one go */}
+                    <div className="md:hidden divide-y divide-slate-100">
+                      {accounts.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500 space-y-3">
+                          <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                          <p className="text-xs font-semibold text-slate-700">No Minecraft accounts linked yet.</p>
+                          <p className="text-[11px] text-slate-400">
+                            Click &ldquo;Add Account&rdquo; above to link your official Java Microsoft account.
+                          </p>
+                          <button
+                            onClick={() => handleStartMicrosoftLogin()}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Link Microsoft Account
+                          </button>
+                        </div>
+                      ) : (
+                        accounts
+                          .filter((a) => {
+                            const q = accountFilter.toLowerCase().trim();
+                            if (!q) return true;
+                            return (a.ign || a.username).toLowerCase().includes(q);
+                          })
+                          .map((acc) => {
+                            const isPinned = pinnedAccountIds.includes(acc.id);
+                            const connectionsCount = accountConnections[acc.id] || 1;
+                            const dateAddedStr = acc.addedAt
+                              ? new Date(acc.addedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              : 'Recent';
+
+                            return (
+                              <div key={acc.id} className="p-3.5 space-y-2.5 hover:bg-slate-50/70 transition">
+                                {/* Top Line: Avatar + IGN + Shield + Status Badge */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-300 bg-slate-100 shrink-0 shadow-2xs">
+                                      <img
+                                        src={`https://crafthead.net/helm/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/36`}
+                                        alt={acc.ign || acc.username}
+                                        className="w-full h-full object-cover [image-rendering:pixelated]"
+                                        onError={(e) => {
+                                          const img = e.target as HTMLImageElement;
+                                          if (!img.src.includes('mc-heads')) {
+                                            img.src = `https://mc-heads.net/avatar/${encodeURIComponent((acc.uuid || acc.ign || acc.username).split('@')[0])}/36`;
+                                          } else {
+                                            img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="font-black text-slate-900 text-xs flex items-center gap-1.5 truncate">
+                                        <span className="truncate">{acc.ign || acc.expectedIgn || acc.username}</span>
+                                        {acc.authError ? (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                                            Mismatch
+                                          </span>
+                                        ) : (
+                                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        {acc.uuid ? 'Java Edition' : 'Bedrock / Java'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Status Badge */}
+                                  <div className="shrink-0">
+                                    {acc.authError ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                        <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                        Failed
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Working
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Auth error display if any */}
+                                {acc.authError && (
+                                  <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-[10px] text-rose-700">
+                                    {acc.authError}
+                                  </div>
+                                )}
+
+                                {/* Bottom Info & Action Bar: Wrapped and cleanly accessible */}
+                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-[11px]">
+                                  <div className="flex items-center gap-2 text-slate-500 text-[10px]">
+                                    <span className="bg-slate-100 text-slate-700 font-mono font-bold px-1.5 py-0.5 rounded">
+                                      ⚡ {connectionsCount} {connectionsCount === 1 ? 'server' : 'servers'}
+                                    </span>
+                                    <span className="text-slate-400">{dateAddedStr}</span>
+                                  </div>
+
+                                  {/* Quick Actions */}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenAccountLogs(acc)}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 transition cursor-pointer"
+                                      title="View logs"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(acc.ign || acc.username);
+                                        showToast(`Copied ${acc.ign || acc.username} to clipboard!`, 'success');
+                                      }}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+                                      title="Copy name"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePin(acc.id)}
+                                      className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                                        isPinned
+                                          ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 border-slate-200'
+                                      }`}
+                                      title={isPinned ? 'Unpin' : 'Pin'}
+                                    >
+                                      <Pin className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    {acc.authError && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartMicrosoftLogin(acc)}
+                                        className="p-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                        title="Re-authenticate"
+                                      >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAccount(acc.id)}
+                                      className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                      )}
+                    </div>
+
+                    {/* Desktop Accounts Table View (>= md) */}
+                    <div className="hidden md:block overflow-x-auto touch-pan-x">
                       <table className="w-full text-left text-xs min-w-[720px]">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                         <tr>

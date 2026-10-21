@@ -5,22 +5,26 @@ import chalk from 'chalk';
 import { BotManager } from './bot/botManager';
 import { ClientMessage, DaemonMessage } from './types';
 import { clearTermuxNotification } from './utils/termuxNotification';
+import { notifyDaemonEvent } from './utils/discordWebhook';
 
 dotenv.config();
 
 process.on('SIGINT', () => {
   clearTermuxNotification();
+  notifyDaemonEvent('offline', { owner: DAEMON_OWNER });
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   clearTermuxNotification();
+  notifyDaemonEvent('offline', { owner: DAEMON_OWNER });
   process.exit(0);
 });
 
 // Protect daemon from crashing on server proxy packet anomalies or queue timeouts
 process.on('uncaughtException', (err: any) => {
   console.error(chalk.yellow(`[PocketAFK Daemon Exception Guard] ${err?.message || err}`));
+  notifyDaemonEvent('error', { owner: DAEMON_OWNER, errorMsg: err?.message || String(err) });
   if (err?.stack && !err.message?.includes("reading 'id'")) {
     console.error(chalk.gray(err.stack));
   }
@@ -168,4 +172,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(chalk.green(`[Server] Listening on http://0.0.0.0:${PORT}`));
   console.log(chalk.yellow(`[Security] Auth token is ${AUTH_TOKEN ? 'ENABLED' : 'DISABLED (Open)'}`));
   console.log(chalk.blue(`[Tunnel] Ready for Cloudflare Tunnel connection:\n         cloudflared tunnel --url http://localhost:${PORT}\n`));
+  notifyDaemonEvent('online', { owner: DAEMON_OWNER, port: PORT });
 });

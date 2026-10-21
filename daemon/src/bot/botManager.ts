@@ -8,6 +8,7 @@ import { BotConfig, ClientMessage, DaemonMessage } from '../types';
 import { PocketBotInstance } from './botInstance';
 import { updateTermuxNotification, clearTermuxNotification } from '../utils/termuxNotification';
 import { getAndSyncTokenFolder, ensureTokenAliases, backupTokens, computeNameHash } from './tokenManager';
+import { setDaemonWebhookConfig, notifyBotEvent, notifyDaemonEvent } from '../utils/discordWebhook';
 
 export class BotManager {
   private bots: Map<string, PocketBotInstance> = new Map();
@@ -19,6 +20,23 @@ export class BotManager {
       broadcastFn(msg);
       if (msg.type === 'BOT_STATE') {
         updateTermuxNotification(this.getAllBots());
+        const bot = this.bots.get(msg.payload.botId);
+        const host = bot?.config?.host || 'Minecraft Server';
+        const ign = msg.payload.username || bot?.config?.username || 'Bot';
+        if (msg.payload.state === 'SPAWNED') {
+          notifyBotEvent('joined', { username: ign, serverHost: host });
+        } else if (msg.payload.state === 'KICKED' || (msg.payload.state === 'DISCONNECTED' && msg.payload.reason)) {
+          notifyBotEvent('disconnected', { username: ign, serverHost: host, reason: msg.payload.reason });
+        }
+      } else if (msg.type === 'CHAT_MESSAGE') {
+        const raw = msg.payload.raw || msg.payload.formattedText || '';
+        if (/(?:afk.*reward|spin.*(?:available|ready)|reward.*(?:ready|available)|you have a spin|afk crate|daily.*reward)/i.test(raw)) {
+          notifyBotEvent('reward', {
+            username: msg.payload.accountUsername || 'Bot',
+            serverHost: 'Minecraft Server',
+            rewardText: raw.substring(0, 150),
+          });
+        }
       }
     };
     setInterval(() => {
@@ -356,6 +374,21 @@ export class BotManager {
               });
             }
           }
+        }
+        break;
+      }
+
+      case 'UPDATE_WEBHOOK_CONFIG': {
+        setDaemonWebhookConfig(msg.payload);
+        break;
+      }
+
+      case 'TEST_WEBHOOK': {
+        const { target, url } = msg.payload;
+        if (target === 'daemon') {
+          notifyDaemonEvent('online', { owner: process.env.POCKETAFK_OWNER || 'Opera', port: 8080 });
+        } else {
+          notifyBotEvent('joined', { username: 'Gambit25X51916', serverHost: 'mc.freshsmp.fun' });
         }
         break;
       }

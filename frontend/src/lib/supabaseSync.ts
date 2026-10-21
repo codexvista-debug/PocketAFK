@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { MinecraftAccount, ServerProfile, QuickCommandItem, PlayerLogEntry } from '@/types';
+import { MinecraftAccount, ServerProfile, QuickCommandItem, PlayerLogEntry, WebhookConfig, DEFAULT_WEBHOOK_CONFIG } from '@/types';
 
 /**
  * Universal Server Profiles Sync:
@@ -539,6 +539,82 @@ export async function loadNotesFromSupabase(currentUser: string): Promise<Record
     return null;
   } catch (err) {
     console.warn('Failed to load notes from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Universal Discord Webhook Settings Sync:
+ * Saves user webhook configuration centrally in Supabase under metadata row '__meta_webhooks__',
+ * syncing all Discord channels and alert toggles seamlessly across devices.
+ */
+export async function saveWebhookConfigToSupabase(currentUser: string, config: WebhookConfig) {
+  if (!supabase || !currentUser) return;
+  try {
+    const cleanUser = currentUser.trim();
+
+    const { data: existing } = await supabase
+      .from('accounts')
+      .select('id')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_webhooks__')
+      .limit(1);
+
+    const payload = {
+      config,
+      updatedAt: Date.now(),
+    };
+
+    if (existing && existing.length > 0) {
+      await supabase
+        .from('accounts')
+        .update({
+          settings: payload,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing[0].id);
+    } else {
+      await supabase.from('accounts').insert([
+        {
+          username: cleanUser,
+          bot_name: '__meta_webhooks__',
+          server_host: 'pocketafk.internal',
+          server_port: 25565,
+          settings: payload,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.warn('Failed to save webhook config to Supabase:', err);
+  }
+}
+
+/**
+ * Universal Discord Webhook Settings Loader:
+ * Fetches user webhook configuration from Supabase.
+ */
+export async function loadWebhookConfigFromSupabase(currentUser: string): Promise<WebhookConfig | null> {
+  if (!supabase || !currentUser) return null;
+  try {
+    const cleanUser = currentUser.trim();
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('settings')
+      .ilike('username', cleanUser)
+      .eq('bot_name', '__meta_webhooks__')
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const cfg = data[0]?.settings?.config;
+    if (cfg && typeof cfg === 'object') {
+      return {
+        ...DEFAULT_WEBHOOK_CONFIG,
+        ...cfg,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to load webhook config from Supabase:', err);
     return null;
   }
 }

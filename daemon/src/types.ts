@@ -180,6 +180,42 @@ export interface ContainerWindowPayload {
   slots: (ContainerSlot | null)[];
 }
 
+export interface WebhookConfig {
+  daemonWebhookUrl: string;
+  daemonEnabled: boolean;
+  daemonNotifyOnline: boolean;
+  daemonNotifyOffline: boolean;
+  daemonNotifyErrors: boolean;
+  daemonNotifyHeartbeat: boolean;
+
+  botWebhookUrl: string;
+  botEnabled: boolean;
+  botNotifyJoined: boolean;
+  botNotifyDisconnected: boolean;
+  botNotifyAfkReward: boolean;
+  botNotifyUptime: boolean;
+  botNotifyChatMentions: boolean;
+  botNotifyLowHealth: boolean;
+}
+
+export const DEFAULT_WEBHOOK_CONFIG: WebhookConfig = {
+  daemonWebhookUrl: '',
+  daemonEnabled: true,
+  daemonNotifyOnline: true,
+  daemonNotifyOffline: true,
+  daemonNotifyErrors: true,
+  daemonNotifyHeartbeat: false,
+
+  botWebhookUrl: '',
+  botEnabled: true,
+  botNotifyJoined: true,
+  botNotifyDisconnected: true,
+  botNotifyAfkReward: true,
+  botNotifyUptime: true,
+  botNotifyChatMentions: false,
+  botNotifyLowHealth: true,
+};
+
 // Client to Daemon Messages
 export type ClientMessage =
   | { type: 'AUTH'; payload: { token: string; username?: string } }
@@ -193,6 +229,8 @@ export type ClientMessage =
   | { type: 'UPDATE_SETTINGS'; payload: { botId: string; settings: Partial<BotSettings> } }
   | { type: 'VERIFY_ACCOUNT'; payload: { accountId: string; email: string } }
   | { type: 'IMPORT_ACCOUNT_TOKENS'; payload: { ign: string; tokenCache: any } }
+  | { type: 'UPDATE_WEBHOOK_CONFIG'; payload: WebhookConfig }
+  | { type: 'TEST_WEBHOOK'; payload: { target: 'daemon' | 'bot'; url: string } }
   | { type: 'REQUEST_SYNC'; payload?: { botId?: string } }
   | { type: 'PING' };
 
