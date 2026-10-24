@@ -8,6 +8,7 @@ import { ContainerModal } from '../components/ContainerModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { AccountModal } from '../components/AccountModal';
 import { ServerProfileModal } from '../components/ServerProfileModal';
+import { ServerPlayerCount } from '../components/ServerPlayerCount';
 import { AuthModal } from '../components/AuthModal';
 import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
 import { ServerLogo } from '../components/ServerLogo';
@@ -2484,6 +2485,7 @@ export default function Dashboard() {
                         >
                           <span className="pa-item-icon pa-icon-connect pa-item-icon-small" aria-hidden="true" />
                           Connect
+                          <ServerPlayerCount host={`${srv.serverHost}${srv.serverPort && Number(srv.serverPort) !== 25565 ? `:${srv.serverPort}` : ''}`} />
                         </button>
 
                         <button
