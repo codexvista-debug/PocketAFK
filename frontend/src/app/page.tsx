@@ -196,6 +196,16 @@ export default function Dashboard() {
     }
     return null;
   });
+  const [chatAutoScrollEnabled, setChatAutoScrollEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const userKey = (localStorage.getItem('pocketafk_user') || 'guest').trim().toLowerCase();
+    return localStorage.getItem(`pocketafk_chat_auto_scroll_${userKey}`) !== 'false';
+  });
+
+  useEffect(() => {
+    const userKey = (currentUser || 'guest').trim().toLowerCase();
+    setChatAutoScrollEnabled(localStorage.getItem(`pocketafk_chat_auto_scroll_${userKey}`) !== 'false');
+  }, [currentUser]);
   const [secretCode, setSecretCode] = useState<string>('');
   const [accountConnections, setAccountConnections] = useState<Record<string, number>>({});
 
@@ -2628,16 +2638,16 @@ export default function Dashboard() {
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
             {/* Top Navigation & Status Bar */}
-            <header className="hidden md:flex h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-6 items-center justify-between shrink-0 shadow-xs">
-              <div className="flex items-center gap-2.5 text-xs font-bold">
+            <header className="flex h-11 md:h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-3 md:px-6 items-center justify-between shrink-0 shadow-xs">
+              <div className="flex items-center gap-2.5 text-xs font-bold min-w-0">
                 {activeMainView === 'profile' && activeServer ? (
                   <>
                     <div className="flex items-center gap-2">
                       <ServerLogo host={activeServer.serverHost} name={activeServer.name} size="w-5 h-5" />
-                      <span className="text-slate-800 font-extrabold">{activeServer.name}</span>
+                      <span className="text-slate-800 font-extrabold truncate max-w-[42vw] md:max-w-none">{activeServer.name}</span>
                     </div>
                     <span className="text-slate-300 font-normal">/</span>
-                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border shadow-2xs ${
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider border shadow-2xs whitespace-nowrap ${
                       activeSubTab === 'connect' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
                       activeSubTab === 'chat' ? 'bg-sky-50 text-sky-800 border-sky-300' :
                       activeSubTab === 'movement' ? 'bg-amber-50 text-amber-800 border-amber-300' :
@@ -2659,7 +2669,7 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-3">
                 {/* Termux Daemon Status - Animated Icon (Green: Active, Blue: Standby) */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
@@ -3818,6 +3828,7 @@ export default function Dashboard() {
                           onSelectSender={(senderId) => setChatSenderAccountId(senderId)}
                           serverName={activeServer.name}
                           serverHost={activeServer.serverHost}
+                          autoScrollEnabled={chatAutoScrollEnabled}
                           quickCommands={activeServer.quickCommands}
                           onEditQuickCommands={() => setIsQuickCommandsModalOpen(true)}
                         />
@@ -4073,6 +4084,35 @@ export default function Dashboard() {
                               className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 font-mono"
                             />
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Chat settings (shared across all server profiles) */}
+                      <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900">Chat settings</h3>
+                          <p className="text-[11px] text-slate-500 mt-1">These preferences apply to chat on every server profile.</p>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <label className="text-xs font-bold text-slate-800">Auto-scroll chat</label>
+                            <span className="text-[11px] text-slate-400 block mt-0.5">Keep the newest messages in view as they arrive.</span>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={chatAutoScrollEnabled}
+                            aria-label="Auto-scroll chat across all servers"
+                            onClick={() => {
+                              const nextValue = !chatAutoScrollEnabled;
+                              setChatAutoScrollEnabled(nextValue);
+                              const userKey = (currentUser || 'guest').trim().toLowerCase();
+                              localStorage.setItem(`pocketafk_chat_auto_scroll_${userKey}`, String(nextValue));
+                            }}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${chatAutoScrollEnabled ? 'bg-emerald-600' : 'bg-slate-400'}`}
+                          >
+                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${chatAutoScrollEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                          </button>
                         </div>
                       </div>
 

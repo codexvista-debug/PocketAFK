@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, QuickCommandItem } from '../types';
-import { Send, ArrowDown, MessageSquare, Users, ChevronDown, Check, Pencil } from 'lucide-react';
+import { Send, MessageSquare, Users, ChevronDown, Check, Pencil } from 'lucide-react';
 import { MinecraftChatMessage, stripMinecraftFormatting } from './MinecraftChatMessage';
 import { ServerLogo } from './ServerLogo';
 
@@ -24,6 +24,7 @@ interface TerminalProps {
   onEditQuickCommands?: () => void;
   serverName?: string;
   serverHost?: string;
+  autoScrollEnabled?: boolean;
 }
 
 const DEFAULT_QUICK_COMMANDS: QuickCommandItem[] = [
@@ -48,9 +49,9 @@ export const Terminal: React.FC<TerminalProps> = ({
   onEditQuickCommands,
   serverName = 'Minecraft Server',
   serverHost = '',
+  autoScrollEnabled = true,
 }) => {
   const [input, setInput] = useState('');
-  const [autoScroll, setAutoScroll] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [isSenderDropdownOpen, setIsSenderDropdownOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -79,23 +80,16 @@ export const Terminal: React.FC<TerminalProps> = ({
   }, []);
 
   useEffect(() => {
-    if (autoScroll && scrollContainerRef.current) {
+    if (autoScrollEnabled && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [messages, autoScroll]);
+  }, [messages, autoScrollEnabled]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || composerDisabled) return;
     onSendMessage(input.trim(), selectedSenderId);
     setInput('');
-  };
-
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
-    setAutoScroll(isAtBottom);
   };
 
   const sendQuickCommand = (cmd: string) => {
@@ -156,19 +150,19 @@ export const Terminal: React.FC<TerminalProps> = ({
                 onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer shadow-2xs"
                 title="Choose which account's chat to view and send from"
-                aria-label={`Chat account: ${selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}`}
+                aria-label={`Chat account: ${selectedSenderAccount?.ign || selectedSenderAccount?.name || `All accounts (${availableSenders.length})`}`}
               >
                 {selectedSenderAccount ? (
                   <img src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/20.png`} alt="" className="w-5 h-5 rounded border border-slate-200 shrink-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : <Users className="w-4 h-4 text-slate-500" />}
-                <span className="truncate max-w-[120px]">{selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}</span>
+                <span className="truncate max-w-[120px]">{selectedSenderAccount?.ign || selectedSenderAccount?.name || `All accounts (${availableSenders.length})`}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
               {isSenderDropdownOpen && (
                 <div className="pa-chat-sender-menu absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
                   <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">Choose chat account</div>
                   <button type="button" onClick={() => { onSelectSender?.('all'); setIsSenderDropdownOpen(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${!selectedSenderId || selectedSenderId === 'all' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}>
-                    <span className="flex items-center gap-2"><Users className="w-4 h-4" /> All accounts</span>
+                    <span className="flex items-center gap-2"><Users className="w-4 h-4" /> All accounts ({availableSenders.length})</span>
                     {(!selectedSenderId || selectedSenderId === 'all') && <Check className="w-3.5 h-3.5 text-emerald-600" />}
                   </button>
                   <div className="border-t border-slate-100 my-1" />
@@ -185,21 +179,6 @@ export const Terminal: React.FC<TerminalProps> = ({
               )}
             </div>
           )}
-          {!autoScroll && (
-            <button
-              onClick={() => {
-                setAutoScroll(true);
-                if (scrollContainerRef.current) {
-                  scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-                }
-              }}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition font-bold shadow-2xs cursor-pointer"
-            >
-              <ArrowDown className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Bottom</span>
-            </button>
-          )}
-
         </div>
       </div>
 
@@ -235,7 +214,6 @@ export const Terminal: React.FC<TerminalProps> = ({
       {/* Chat Messages Stream */}
       <div
         ref={scrollContainerRef}
-        onScroll={handleScroll}
         className="pa-chat-stream flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 border-b border-slate-200 flex flex-col space-y-1"
       >
         {messages.length === 0 ? (
