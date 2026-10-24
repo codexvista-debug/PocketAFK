@@ -54,6 +54,7 @@ const POPULAR_SETUPS = [
   { name: 'Hypixel', host: 'mc.hypixel.net', port: 25565, version: 'auto' },
   { name: 'CubeCraft', host: 'play.cubecraft.net', port: 25565, version: 'auto' },
   { name: 'Lifesteal Network', host: 'play.lifesteal.net', port: 25565, version: '1.20.4' },
+  { name: 'MineSeed', host: 'play.mineseed.org', port: 25565, version: 'auto' },
 ];
 
 export const ServerProfileModal: React.FC<ServerProfileModalProps> = ({

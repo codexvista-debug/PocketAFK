@@ -103,20 +103,20 @@ export const Terminal: React.FC<TerminalProps> = ({
     onSendMessage(cmd, selectedSenderId);
   };
 
-  const playerNameForMessage = (message: ChatMessage) => {
+  const playerForMessage = (message: ChatMessage): { name: string; bedrock: boolean } | null => {
     const raw = stripMinecraftFormatting(message.raw || message.formattedText || '');
-    const sender = stripMinecraftFormatting(message.sender || '');
-    const senderIsPlayer = sender && !/^(server|system|pocketafk|autocommand|sessiondivider)$/i.test(sender);
-    if (senderIsPlayer) return sender;
+    const chatLineName = raw.match(/^\s*<([^>]{1,32})>/)?.[1]
+      || raw.match(/^\s*(?:\[[^\]]{1,24}\]\s*){0,2}([+*.~#]?[A-Za-z0-9_][A-Za-z0-9_. #]{0,15})\s*(?:▶|>|»|:)\s*/)?.[1]
+      || raw.match(/^\s*([A-Za-z0-9_]{1,16})\s+(?:has made (?:the )?advancement|has completed (?:the )?challenge|joined the game|left the game|was slain by|was shot by|was killed by)\b/i)?.[1];
 
-    const chatLineName = raw.match(/^<([+*.~#]?[a-zA-Z0-9_]{1,24})>/)?.[1]
-      || raw.match(/^(?:\[[^\]]{1,24}\]\s*)?(?:(?:[A-Z][A-Z0-9+_-]{1,15})\s+)?([+*.~#]?[a-zA-Z0-9_]{1,24})\s*(?:▶|>|»|:)\s*/)?.[1]
-      || raw.match(/^([a-zA-Z0-9_]{1,16})\s+(?:has made (?:the )?advancement|has completed (?:the )?challenge|joined the game|left the game|was slain by|was shot by|was killed by)\b/i)?.[1];
-
-    // accountUsername identifies the bot receiving chat, not the player speaking.
-    // Use a system tile when a log line has no identifiable player instead of
-    // showing the bot owner's skin on every server event.
-    return chatLineName || null;
+    // Chat payloads identify the bot receiving the message in accountUsername;
+    // only infer an avatar from the actual chat line, never from that account.
+    if (!chatLineName) return null;
+    const platform = String((message as ChatMessage & { platform?: string; edition?: string }).platform || (message as ChatMessage & { edition?: string }).edition || '').toLowerCase();
+    const isFloodgateName = /^[.*]/.test(chatLineName);
+    const name = isFloodgateName ? chatLineName.slice(1) : chatLineName;
+    const bedrock = platform.includes('bedrock') || isFloodgateName || /[ .#]/.test(name);
+    return name ? { name, bedrock } : null;
   };
 
   const relativeTime = (timestamp: number) => {
@@ -255,16 +255,23 @@ export const Terminal: React.FC<TerminalProps> = ({
           </div>
         ) : (
           messages.map((msg, idx) => {
-            const playerName = playerNameForMessage(msg);
+            const player = playerForMessage(msg);
             return (
             <div className="pa-chat-message-row" key={msg.id || idx}>
-              {playerName ? (
+              {player ? (
                 <img
-                  src={`https://minotar.net/helm/${encodeURIComponent(playerName)}/32.png`}
-                  alt=""
+                  src={player.bedrock
+                    ? `https://tabavatars.net/avatar/?username=${encodeURIComponent(player.name)}&platform=bedrock`
+                    : `https://minotar.net/helm/${encodeURIComponent(player.name)}/32.png`}
+                  alt={`${player.name} skin`}
                   className="pa-chat-message-skin"
                   loading="lazy"
-                  onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/32.png'; }}
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (player.bedrock && !img.src.includes('minotar.net')) img.src = `https://minotar.net/helm/${encodeURIComponent(player.name)}/32.png`;
+                    else if (!img.src.includes('mc-heads.net')) img.src = `https://mc-heads.net/avatar/${encodeURIComponent(player.name)}/32`;
+                    else img.src = 'https://minotar.net/helm/MHF_Steve/32.png';
+                  }}
                 />
               ) : (
                 <div className="pa-chat-system-avatar" aria-label="Server message">

@@ -272,6 +272,15 @@ body {
 .pa-dashboard-shell .pa-chat-message-body .group{min-width:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important}
 .pa-dashboard-shell .pa-chat-message-body .group:hover{background:transparent!important}
 .pa-dashboard-shell .pa-chat-relative-time{align-self:start;justify-self:end;margin-top:1px;padding:3px 7px;color:#e4dac7;background:#39362f;border:1px solid #625b4c;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;line-height:1.2;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pa-account-logs-modal .bg-emerald-50\/30{background:#293a2d!important;border-color:#5a7651!important;color:#f4efdf!important}
+.pa-account-logs-modal .bg-emerald-50\/30 p{color:#f4efdf!important}
+.pa-account-logs-modal .text-emerald-950{color:#f4efdf!important}
+.pa-account-logs-modal .bg-rose-50\/40{background:#442c2a!important;border-color:#76504a!important;color:#fff0e9!important}
+.pa-account-logs-modal .bg-rose-50\/40 p{color:#fff0e9!important}
+.pa-account-logs-modal .text-rose-950{color:#fff0e9!important}
+.pa-account-logs-modal .bg-amber-50\/30{background:#3d3524!important;border-color:#75643f!important;color:#fff1cf!important}
+.pa-account-logs-modal .bg-amber-50\/30 p{color:#fff1cf!important}
+.pa-account-logs-modal .text-amber-950{color:#fff1cf!important}
 .pa-dashboard-shell .pa-chat-send{width:44px;height:42px;padding:0!important}
 .pa-dashboard-shell .pa-chat-send svg{width:17px;height:17px}
 .pa-dashboard-shell .pa-chat-option-hint{display:block;color:#bcb3a4;font-size:9px;font-weight:500;line-height:1.35}

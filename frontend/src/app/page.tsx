@@ -434,6 +434,7 @@ export default function Dashboard() {
 
   // Handle Account Verification callback from daemon
   const handleAccountVerified = useCallback((data: AccountVerifiedData) => {
+    setIsPollingMs(false);
     if (!data.ign || data.ign.toLowerCase() === 'new_account') {
       showToast('Verification failed: No valid Minecraft Java profile found.', 'error');
       return;
@@ -582,6 +583,15 @@ export default function Dashboard() {
     msAuthData,
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
+
+  // Device-code prompts from a running bot can occur when its saved Microsoft
+  // session expires. Keep those in the background; only show the blocking auth
+  // dialog when the user explicitly started an account link/verification flow.
+  useEffect(() => {
+    if (!msAuthData || isPollingMs) return;
+    showToast(`Microsoft sign-in is needed for ${msAuthData.botId}. Open Accounts and relink it when you’re ready.`, 'info');
+    clearMsAuth();
+  }, [msAuthData, isPollingMs, showToast, clearMsAuth]);
 
   // Auto-sync Discord webhook preferences to daemon bridge on connection
   useEffect(() => {
@@ -1353,6 +1363,7 @@ export default function Dashboard() {
       const targetEmail = rawTargetEmail.toLowerCase() === 'new_account' ? '' : rawTargetEmail;
 
       showToast('Requesting Microsoft sign-in via Termux daemon...', 'info');
+      setIsPollingMs(true);
       verifyAccount(targetId, targetEmail);
       return;
     }
@@ -2047,9 +2058,9 @@ export default function Dashboard() {
       <ModernToast toast={toast} onDismiss={handleDismissToast} />
 
       {/* Microsoft In-App Device Auth Modal */}
-      {(msAuthData || apiMsAuthData) && (
+      {((isPollingMs && msAuthData) || apiMsAuthData) && (
         <MicrosoftAuthModal
-          authData={msAuthData || apiMsAuthData}
+          authData={(isPollingMs && msAuthData) || apiMsAuthData}
           onClose={() => {
             clearMsAuth();
             setApiMsAuthData(null);
