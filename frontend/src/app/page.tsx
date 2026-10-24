@@ -94,6 +94,7 @@ import {
   X,
 } from 'lucide-react';
 import { DashboardOverview } from '../components/DashboardOverview';
+import { AuthLanding } from '../components/AuthLanding';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
   physics: true,
@@ -2197,26 +2198,7 @@ export default function Dashboard() {
 
       {/* LOGGED OUT GATEWAY */}
       {!currentUser ? (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center font-black text-white text-3xl shadow-lg shadow-emerald-500/20 mx-auto">
-              P
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">PocketAFK</h1>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                24/7 Pure Java Minecraft AFK bot powered by Termux on Android. Sign in with your username to manage server profiles & bots.
-              </p>
-            </div>
-            <button
-              onClick={() => setIsAuthOpen(true)}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <LogIn className="w-4 h-4" />
-              Sign In / Register
-            </button>
-          </div>
-        </div>
+        <AuthLanding onSignIn={() => setIsAuthOpen(true)} />
       ) : (
         /* MINECRAFTAFK MAIN DASHBOARD LAYOUT */
         <div className="flex-1 flex flex-col md:flex-row md:min-h-screen">
