@@ -3,17 +3,6 @@
 import React from 'react';
 import { ArrowRight, AudioLines, Box, Check, ShieldCheck, Sparkles } from 'lucide-react';
 
-function PocketMark({ className = '' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <path d="M9 35.5 30.7 13.8l4.5 4.5L13.5 40H9v-4.5Z" fill="#B7F28B" stroke="#183B2A" strokeWidth="2.4" strokeLinejoin="round" />
-      <path d="m26.8 10 4-4 12.2 12.2-4 4-4.5-4.5-3.2 3.2-4.5-4.5 3.2-3.2-3.2-3.2Z" fill="#E9F5D5" stroke="#183B2A" strokeWidth="2.4" strokeLinejoin="round" />
-      <path d="m8 35 5 5" stroke="#34734B" strokeWidth="2.4" strokeLinecap="round" />
-      <path d="m17 28 4.5 4.5" stroke="#183B2A" strokeWidth="2" opacity=".55" />
-    </svg>
-  );
-}
-
 function Cube({ className = '' }: { className?: string }) {
   return <div className={`pa-cube ${className}`} aria-hidden="true"><i className="pa-face pa-front"/><i className="pa-face pa-right"/><i className="pa-face pa-top"/></div>;
 }
@@ -47,7 +36,7 @@ export function AuthLanding({ onSignIn }: { onSignIn: () => void }) {
     <main className="pa-landing">
       <div className="pa-atmosphere" aria-hidden="true" />
       <header className="pa-nav">
-        <a href="/" className="pa-brand" aria-label="PocketAFK home"><span className="pa-brand-mark"><PocketMark/></span><span className="pa-brand-copy"><b>PocketAFK</b><small>JAVA CONTROL DECK</small></span></a>
+        <a href="/" className="pa-brand" aria-label="PocketAFK home"><span className="pa-brand-mark"><img src="/pocketafk-emblem.png" alt=""/></span><span className="pa-brand-copy"><b>PocketAFK</b><small>JAVA CONTROL DECK</small></span></a>
         <div className="pa-nav-right"><span className="pa-edition-pill"><span/> MADE FOR JAVA</span><button onClick={onSignIn} className="pa-nav-login">Sign in <ArrowRight size={15}/></button></div>
       </header>
 
