@@ -3828,17 +3828,18 @@ export default function Dashboard() {
 
                   {/* SUB-TAB 2: CHAT */}
                   {activeSubTab === 'chat' && (
-                    <div className="flex flex-col h-[calc(100vh-140px)] min-h-[580px] space-y-3">
+                    <div className="pa-chat-workspace flex flex-col h-[calc(100vh-140px)] min-h-[580px] space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                         {/* Chat Receivers Dropdown (Matches VistaAFK) */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Chat receivers:</span>
+                        <div className="pa-chat-viewer flex flex-col sm:flex-row sm:items-center gap-2">
+                          <span className="pa-chat-viewer-label text-xs font-bold text-slate-600 whitespace-nowrap">View chat from</span>
 
                           <div className="relative w-full sm:w-auto" ref={receiverDropdownRef}>
                             <button
                               type="button"
                               onClick={() => setIsReceiverDropdownOpen((prev) => !prev)}
-                              className="flex items-center justify-between gap-3 w-full sm:min-w-[260px] px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs transition cursor-pointer text-xs"
+                              className="pa-chat-viewer-trigger flex items-center justify-between gap-3 w-full sm:min-w-[260px] px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/90 shadow-2xs transition cursor-pointer text-xs"
+                              aria-label="Choose which account chats to view"
                             >
                               <div className="flex items-center gap-2 truncate">
                                 {effectiveReceiverIds.length === 1 ? (
@@ -3846,6 +3847,11 @@ export default function Dashboard() {
                                     const singleAcc = serverProfileAccounts.find(
                                       (a) => a.id === effectiveReceiverIds[0] || a.ign === effectiveReceiverIds[0]
                                     );
+                                    const receiverBotKey = singleAcc ? `${activeServer.id}__${singleAcc.id}` : '';
+                                    const receiverState = receiverBotKey
+                                      ? botStates[receiverBotKey] || botStates[activeServer.id]
+                                      : undefined;
+                                    const receiverIsOnline = receiverState === 'SPAWNED' || receiverState === 'LOGGED_IN';
                                     return (
                                       <>
                                         <img
@@ -3861,7 +3867,10 @@ export default function Dashboard() {
                                         <span className="font-bold text-slate-800 font-mono truncate">
                                           {singleAcc?.ign || singleAcc?.username}
                                         </span>
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${receiverIsOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}
+                                          title={receiverIsOnline ? 'Account online' : 'Account offline'}
+                                        />
                                       </>
                                     );
                                   })()
@@ -3887,7 +3896,7 @@ export default function Dashboard() {
 
                             {/* Dropdown panel */}
                             {isReceiverDropdownOpen && (
-                              <div className="absolute left-0 top-full mt-2 w-full sm:w-[320px] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2.5 space-y-2">
+                              <div className="pa-chat-viewer-menu absolute left-0 top-full mt-2 w-full sm:w-[320px] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2.5 space-y-2">
                                 {/* Search input */}
                                 <div className="relative">
                                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -3895,13 +3904,15 @@ export default function Dashboard() {
                                     type="text"
                                     value={receiverSearch}
                                     onChange={(e) => setReceiverSearch(e.target.value)}
-                                    placeholder="Search.."
+                                    placeholder="Find an account..."
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-mono placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
                                   />
                                 </div>
 
                                 {/* All accounts toggle */}
-                                <div
+                                <button
+                                  type="button"
+                                  aria-pressed={isAllReceiversSelected}
                                   onClick={() => {
                                     if (isAllReceiversSelected) {
                                       setChatReceiverAccountIds([serverProfileAccounts[0]?.id].filter(Boolean));
@@ -3909,21 +3920,21 @@ export default function Dashboard() {
                                       setChatReceiverAccountIds(serverProfileAccounts.map((a) => a.id));
                                     }
                                   }}
-                                  className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-50 transition cursor-pointer border border-transparent hover:border-slate-100"
+                                  className="pa-chat-viewer-option flex w-full items-center justify-between gap-3 px-3 py-2 rounded-xl hover:bg-slate-50 transition cursor-pointer border border-transparent hover:border-slate-100 text-left"
                                 >
                                   <div className="flex items-center gap-2.5">
                                     <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center">
                                       <Users className="w-3 h-3" />
                                     </div>
-                                    <span className="text-xs font-bold text-slate-800">All accounts</span>
+                                    <span className="flex flex-col text-left">
+                                      <span className="text-xs font-bold text-slate-800">All accounts</span>
+                                      <span className="text-[10px] text-slate-500">Show chat from every account in this profile</span>
+                                    </span>
                                   </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isAllReceiversSelected}
-                                    onChange={() => {}}
-                                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 pointer-events-none cursor-pointer"
-                                  />
-                                </div>
+                                  <span className={`pa-chat-check ${isAllReceiversSelected ? 'is-checked' : ''}`} aria-hidden="true">
+                                    {isAllReceiversSelected && <Check className="w-3 h-3" />}
+                                  </span>
+                                </button>
 
                                 <div className="border-t border-slate-100" />
 
@@ -3942,9 +3953,13 @@ export default function Dashboard() {
                                       const isChecked =
                                         effectiveReceiverIds.includes(acc.id) ||
                                         effectiveReceiverIds.includes(acc.ign || '');
+                                      const accountBotState = botStates[`${activeServer.id}__${acc.id}`] || botStates[activeServer.id];
+                                      const accountIsOnline = accountBotState === 'SPAWNED' || accountBotState === 'LOGGED_IN';
                                       return (
-                                        <div
+                                        <button
+                                          type="button"
                                           key={acc.id}
+                                          aria-pressed={isChecked}
                                           onClick={() => {
                                             if (isChecked) {
                                               if (effectiveReceiverIds.length > 1) {
@@ -3958,7 +3973,7 @@ export default function Dashboard() {
                                               setChatReceiverAccountIds([...effectiveReceiverIds, acc.id]);
                                             }
                                           }}
-                                          className={`flex items-center justify-between px-3 py-2 rounded-xl transition cursor-pointer ${
+                                          className={`pa-chat-viewer-option flex w-full items-center justify-between gap-3 px-3 py-2 rounded-xl transition cursor-pointer text-left ${
                                             isChecked
                                               ? 'bg-emerald-50/60 border border-emerald-200/70'
                                               : 'hover:bg-slate-50 border border-transparent'
@@ -3978,17 +3993,15 @@ export default function Dashboard() {
                                             <span className="text-xs font-bold font-mono text-slate-800 truncate">
                                               {acc.ign || acc.username}
                                             </span>
-                                            {isActiveServerRunning && (
-                                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                                            )}
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${accountIsOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`}
+                                              title={accountIsOnline ? 'Account online' : 'Account offline'}
+                                            />
                                           </div>
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={() => {}}
-                                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 pointer-events-none cursor-pointer shrink-0"
-                                          />
-                                        </div>
+                                          <span className={`pa-chat-check ${isChecked ? 'is-checked' : ''}`} aria-hidden="true">
+                                            {isChecked && <Check className="w-3 h-3" />}
+                                          </span>
+                                        </button>
                                       );
                                     })}
                                 </div>

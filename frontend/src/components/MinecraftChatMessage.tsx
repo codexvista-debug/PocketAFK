@@ -7,6 +7,7 @@ interface MinecraftChatMessageProps {
   message: ChatMessage | any;
   showTimestamp?: boolean;
   compact?: boolean;
+  darkMode?: boolean;
 }
 
 // Light-mode optimized high-contrast Minecraft Rank colors (matches VistaAFK)
@@ -77,12 +78,23 @@ const LIGHT_MC_COLORS: Record<string, string> = {
   'u': '#7c3aed', // Material Amethyst
 };
 
-export function parseLightMinecraftColorCodes(text: string): React.ReactNode {
+const DARK_MC_COLORS: Record<string, string> = {
+  '0': '#9a9a92', '1': '#789cff', '2': '#79d88a', '3': '#69d8cf',
+  '4': '#ff7777', '5': '#d58cff', '6': '#ffc85d', '7': '#e0e0d8',
+  '8': '#aaa99f', '9': '#8fb7ff', 'a': '#96f08a', 'b': '#8be9ef',
+  'c': '#ff9292', 'd': '#f0a2ff', 'e': '#fff28a', 'f': '#fffdf3',
+  'g': '#ffd36b', 'h': '#d3d7d2', 'i': '#bfc7c2', 'j': '#c4c9c7',
+  'm': '#ff8a83', 'n': '#f3a274', 'p': '#ffce72', 'q': '#9deb91',
+  's': '#8bd5ff', 't': '#92b5ff', 'u': '#d2a0ff',
+};
+
+export function parseLightMinecraftColorCodes(text: string, darkMode = false): React.ReactNode {
   if (!text) return null;
   if (!text.includes('§')) return text;
 
   const parts = text.split(/(§[0-9a-fk-orxghijpqstu])/gi);
-  let currentColor = '#0f172a';
+  const colorPalette = darkMode ? DARK_MC_COLORS : LIGHT_MC_COLORS;
+  let currentColor = darkMode ? '#eee8dc' : '#0f172a';
   let isBold = false;
   let isItalic = false;
 
@@ -90,14 +102,14 @@ export function parseLightMinecraftColorCodes(text: string): React.ReactNode {
     if (!part) return null;
     if (part.startsWith('§')) {
       const code = part.charAt(1).toLowerCase();
-      if (LIGHT_MC_COLORS[code]) {
-        currentColor = LIGHT_MC_COLORS[code];
+      if (colorPalette[code]) {
+        currentColor = colorPalette[code];
       } else if (code === 'l') {
         isBold = true;
       } else if (code === 'o') {
         isItalic = true;
       } else if (code === 'r') {
-        currentColor = '#0f172a';
+        currentColor = darkMode ? '#eee8dc' : '#0f172a';
         isBold = false;
         isItalic = false;
       }
@@ -148,6 +160,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
   message,
   showTimestamp = true,
   compact = false,
+  darkMode = false,
 }) => {
   let rawText = message.message || message.raw || message.formattedText || '';
 
@@ -241,7 +254,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
 
           {/* Chat Body */}
           <span className="font-medium text-slate-800">
-            {rawBody && rawBody.includes('§') ? parseLightMinecraftColorCodes(rawBody) : cleanBody}
+            {rawBody && rawBody.includes('§') ? parseLightMinecraftColorCodes(rawBody, darkMode) : cleanBody}
           </span>
         </div>
       </div>
@@ -281,7 +294,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
           </span>
           <span className="text-sky-600 font-bold mr-1.5 select-none text-[10px]">▶</span>
           <span className="font-medium text-slate-800">
-            {rawBody && rawBody.includes('§') ? parseLightMinecraftColorCodes(rawBody) : cleanBody}
+            {rawBody && rawBody.includes('§') ? parseLightMinecraftColorCodes(rawBody, darkMode) : cleanBody}
           </span>
         </div>
       </div>
@@ -332,7 +345,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
           <span className="mr-1 font-bold text-slate-900 tracking-tight">{cleanSender}</span>
           <span className="text-sky-600 mr-1.5 font-bold select-none text-[10px]">▶</span>
           <span className="font-medium text-slate-800">
-            {parseLightMinecraftColorCodes(rankPrefixMatch[2])}
+            {parseLightMinecraftColorCodes(rankPrefixMatch[2], darkMode)}
           </span>
         </div>
       </div>
@@ -448,7 +461,7 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
           {showPlayerSender && (
             <span className="mr-1.5 font-bold text-sky-700 font-sans">&lt;{cleanSender}&gt;</span>
           )}
-          {parseLightMinecraftColorCodes(rawText)}
+          {parseLightMinecraftColorCodes(rawText, darkMode)}
         </div>
       </div>
     );

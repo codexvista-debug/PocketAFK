@@ -110,9 +110,9 @@ export const Terminal: React.FC<TerminalProps> = ({
   });
 
   return (
-    <div className="bg-white border border-slate-300/90 rounded-3xl overflow-hidden flex flex-col h-full shadow-lg shadow-slate-200/50">
+    <div className="pa-chat-console bg-white border border-slate-300/90 rounded-3xl overflow-hidden flex flex-col h-full shadow-lg shadow-slate-200/50">
       {/* Terminal Header & Toolbar */}
-      <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
+      <div className="pa-chat-console-head bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/90 flex items-center justify-center shrink-0 shadow-2xs">
             <TerminalIcon className="w-4 h-4 stroke-[2.5]" />
@@ -131,12 +131,12 @@ export const Terminal: React.FC<TerminalProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="pa-chat-filters flex items-center gap-2.5 shrink-0">
           {/* Segmented Filter Control */}
           <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 text-xs font-bold shadow-2xs">
             <button
               onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'all' ? 'is-active' : ''} ${
                 filter === 'all'
                   ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
                   : 'text-slate-600 hover:text-slate-900'
@@ -146,7 +146,7 @@ export const Terminal: React.FC<TerminalProps> = ({
             </button>
             <button
               onClick={() => setFilter('chat')}
-              className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'chat' ? 'is-active' : ''} ${
                 filter === 'chat'
                   ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
                   : 'text-slate-600 hover:text-slate-900'
@@ -156,7 +156,7 @@ export const Terminal: React.FC<TerminalProps> = ({
             </button>
             <button
               onClick={() => setFilter('system')}
-              className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'system' ? 'is-active' : ''} ${
                 filter === 'system'
                   ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
                   : 'text-slate-600 hover:text-slate-900'
@@ -193,7 +193,7 @@ export const Terminal: React.FC<TerminalProps> = ({
 
       {/* Quick Macro Commands Bar */}
       <div className="px-4 py-2 bg-slate-50/90 border-b border-slate-200/90 flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center space-x-2 overflow-x-auto text-xs min-w-0 flex-1">
+          <div className="pa-chat-commands flex items-center space-x-2 overflow-x-auto text-xs min-w-0 flex-1">
           <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider shrink-0 select-none mr-0.5">
             Quick:
           </span>
@@ -202,7 +202,7 @@ export const Terminal: React.FC<TerminalProps> = ({
               key={cmd}
               onClick={() => sendQuickCommand(cmd)}
               disabled={disabled}
-              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold shadow-2xs transition whitespace-nowrap cursor-pointer shrink-0 disabled:opacity-40 active:scale-95 ${color || 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-600 hover:text-white'}`}
+              className={`pa-chat-command px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold shadow-2xs transition whitespace-nowrap cursor-pointer shrink-0 disabled:opacity-40 active:scale-95 ${color || 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-600 hover:text-white'}`}
             >
               {cmd}
             </button>
@@ -224,7 +224,7 @@ export const Terminal: React.FC<TerminalProps> = ({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 border-b border-slate-200 flex flex-col space-y-1"
+        className="pa-chat-stream flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 border-b border-slate-200 flex flex-col space-y-1"
       >
         {filteredMessages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3 select-none py-16">
@@ -243,15 +243,15 @@ export const Terminal: React.FC<TerminalProps> = ({
           </div>
         ) : (
           filteredMessages.map((msg, idx) => (
-            <MinecraftChatMessage key={msg.id || idx} message={msg} />
+            <MinecraftChatMessage key={msg.id || idx} message={msg} darkMode />
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Chat Input Dock */}
-      <form onSubmit={handleSubmit} className="p-3 bg-white flex items-center gap-2.5 relative">
-        <span className="text-emerald-600 font-mono font-black text-base px-1 select-none">&gt;</span>
+      <form onSubmit={handleSubmit} className="pa-chat-composer p-3 bg-white flex items-center gap-2.5 relative">
+        <span className="pa-chat-prompt text-emerald-600 font-mono font-black text-base px-1 select-none">&gt;</span>
         <input
           type="text"
           value={input}
@@ -262,12 +262,13 @@ export const Terminal: React.FC<TerminalProps> = ({
               : 'Type message or command (e.g. /spawn, /lifesteal, hello)...'
           }
           disabled={disabled}
-          className="flex-1 min-w-0 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
+          className="pa-chat-input flex-1 min-w-0 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
         />
 
         {/* Sender Account Picker (Matches VistaAFK) */}
         {availableSenders && availableSenders.length > 0 && (
-          <div className="relative shrink-0" ref={senderDropdownRef}>
+          <div className="pa-chat-sender relative shrink-0" ref={senderDropdownRef}>
+            <span className="pa-chat-sender-label">Send as</span>
             <button
               type="button"
               onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
@@ -320,7 +321,10 @@ export const Terminal: React.FC<TerminalProps> = ({
                     <div className="w-5 h-5 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
                       <Users className="w-3 h-3" />
                     </div>
-                    <span>All accounts</span>
+                    <span className="flex flex-col text-left">
+                      <span>All accounts</span>
+                      <span className="pa-chat-option-hint">Send through every account in this profile</span>
+                    </span>
                   </div>
                   {(!selectedSenderId || selectedSenderId === 'all') && (
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -373,7 +377,7 @@ export const Terminal: React.FC<TerminalProps> = ({
         <button
           type="submit"
           disabled={disabled || !input.trim()}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl transition flex items-center gap-2 shadow-xs font-bold text-xs font-mono cursor-pointer active:scale-95 shrink-0"
+          className="pa-chat-send px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl transition flex items-center gap-2 shadow-xs font-bold text-xs font-mono cursor-pointer active:scale-95 shrink-0"
         >
           <Send className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Send</span>
