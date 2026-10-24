@@ -2,6 +2,28 @@ import { supabase } from './supabaseClient';
 import { MinecraftAccount, ServerProfile, QuickCommandItem, PlayerLogEntry, WebhookConfig, DEFAULT_WEBHOOK_CONFIG } from '@/types';
 
 /**
+ * A lightweight revision for the rows that hold a user's PocketAFK state.
+ * The app uses its own PocketAFK login (not Supabase Auth), so we poll this
+ * revision instead of subscribing to Postgres Changes on the shared accounts
+ * table. That table is not scoped by Supabase Auth/RLS today.
+ */
+export async function loadSharedDataRevision(currentUser: string): Promise<string | null> {
+  if (!supabase || !currentUser) return null;
+  try {
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id, updated_at')
+      .ilike('username', currentUser.trim())
+      .order('id', { ascending: true });
+    if (error || !data) return null;
+    return data.map((row) => `${row.id}:${row.updated_at || ''}`).join('|');
+  } catch (error) {
+    console.warn('Could not check shared PocketAFK data revision:', error);
+    return null;
+  }
+}
+
+/**
  * Universal Server Profiles Sync:
  * Saves server profiles centrally in Supabase under a metadata row '__meta_servers__',
  * ensuring all devices (mobile, PC, tablet) always see the exact same server profiles.

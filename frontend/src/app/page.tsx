@@ -39,6 +39,7 @@ import {
   loadNotesFromSupabase,
   saveWebhookConfigToSupabase,
   loadWebhookConfigFromSupabase,
+  loadSharedDataRevision,
 } from '../lib/supabaseSync';
 import { 
   Play, 
@@ -1429,16 +1430,19 @@ export default function Dashboard() {
     loadData();
   }, [currentUser, handleLogout]);
 
-  // A daemon connection already broadcasts bot, chat, inventory, and telemetry events
-  // to every authenticated browser socket. Refresh shared profile/account configuration
-  // from Supabase too, because server assignments and settings are not daemon state.
+  // Bot/chat/inventory/telemetry events are broadcast live by the daemon. User-owned
+  // configuration is stored separately in Supabase, so watch its lightweight revision
+  // and refresh the authoritative records as soon as another browser changes them.
   useEffect(() => {
     if (!currentUser || !supabase) return;
     let cancelled = false;
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let revisionTimer: number | null = null;
+    let lastRevision: string | null = null;
+    let refreshing = false;
 
-    const refreshSharedConfiguration = async () => {
-      if (cancelled) return;
+    const refreshSharedData = async () => {
+      if (cancelled || refreshing) return;
+      refreshing = true;
       try {
         let preferredAccounts: MinecraftAccount[] = [];
         try {
@@ -1446,7 +1450,11 @@ export default function Dashboard() {
           if (saved) preferredAccounts = sanitizeAccounts(JSON.parse(saved));
         } catch {}
 
-        const remoteServers = await loadServersFromSupabase(currentUser);
+        const [remoteServers, remoteNotes, remoteWebhooks] = await Promise.all([
+          loadServersFromSupabase(currentUser),
+          loadNotesFromSupabase(currentUser),
+          loadWebhookConfigFromSupabase(currentUser),
+        ]);
         const referencedAccountIds = (remoteServers || []).flatMap((server) => [
           ...(server.assignedAccountIds || []),
           ...(server.accountId ? [server.accountId] : []),
@@ -1455,13 +1463,17 @@ export default function Dashboard() {
         if (cancelled) return;
 
         if (remoteServers) {
+          const serversWithCommands = await Promise.all(remoteServers.map(async (server) => {
+            const commands = await loadQuickCommandsFromSupabase(currentUser, server.id);
+            return commands ? { ...server, quickCommands: commands } : server;
+          }));
           const key = `pocketafk_servers_${currentUser}`;
-          const serialized = JSON.stringify(remoteServers);
+          const serialized = JSON.stringify(serversWithCommands);
           if (localStorage.getItem(key) !== serialized) {
             localStorage.setItem(key, serialized);
-            setServers(remoteServers);
-            if (remoteServers.length) {
-              setActiveServerId((previous) => remoteServers.some((server) => server.id === previous) ? previous : remoteServers[0].id);
+            setServers(serversWithCommands);
+            if (serversWithCommands.length) {
+              setActiveServerId((previous) => serversWithCommands.some((server) => server.id === previous) ? previous : serversWithCommands[0].id);
             } else {
               setActiveServerId('');
             }
@@ -1476,18 +1488,55 @@ export default function Dashboard() {
             localStorage.setItem(key, serialized);
             setAccounts(synchronized);
           }
+
+          const logEntries = await Promise.all(synchronized.map(async (account) => {
+            const name = (account.ign || account.expectedIgn || account.username || '').replace(/^@/, '').trim();
+            if (!name) return null;
+            return [name, await loadAccountLogsFromSupabase(currentUser, name)] as const;
+          }));
+          if (cancelled) return;
+          const refreshedLogs: Record<string, PlayerLogEntry[]> = {};
+          logEntries.forEach((entry) => { if (entry) refreshedLogs[entry[0]] = entry[1]; });
+          localStorage.setItem(`pocketafk_player_logs_${currentUser}`, JSON.stringify(refreshedLogs));
+          setAccountLogsMap(refreshedLogs);
+        }
+
+        if (remoteNotes) {
+          localStorage.setItem(`pocketafk_notes_${currentUser}`, JSON.stringify(remoteNotes));
+          setAccountNotes(remoteNotes);
+        }
+        if (remoteWebhooks) {
+          localStorage.setItem(`pocketafk_webhooks_${currentUser}`, JSON.stringify(remoteWebhooks));
+          setWebhookConfig(remoteWebhooks);
         }
       } catch (error) {
         console.warn('Could not refresh shared PocketAFK configuration:', error);
       } finally {
-        if (!cancelled) refreshTimer = setTimeout(refreshSharedConfiguration, 2500);
+        refreshing = false;
       }
     };
 
-    refreshTimer = setTimeout(refreshSharedConfiguration, 2500);
+    const checkRevision = async () => {
+      const revision = await loadSharedDataRevision(currentUser);
+      if (cancelled || revision === null) return;
+      if (lastRevision === null) {
+        lastRevision = revision;
+        return;
+      }
+      if (revision !== lastRevision) {
+        lastRevision = revision;
+        void refreshSharedData();
+      }
+    };
+
+    void checkRevision();
+    revisionTimer = window.setInterval(() => { void checkRevision(); }, 900);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') void checkRevision(); };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       cancelled = true;
-      if (refreshTimer) clearTimeout(refreshTimer);
+      if (revisionTimer) clearInterval(revisionTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [currentUser]);
 
@@ -2889,6 +2938,8 @@ export default function Dashboard() {
                   sessions={daemonSessions}
                   loading={daemonSessionsLoading}
                   daemonOnline={socketStatus === 'AUTHENTICATED'}
+                  accounts={accounts}
+                  servers={servers}
                   onRefresh={refreshDaemonSessions}
                 />
               )}
