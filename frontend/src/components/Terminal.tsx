@@ -2,9 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, QuickCommandItem } from '../types';
-import { Send, MessageSquare, Users, ChevronDown, Check, Pencil } from 'lucide-react';
+import { Send, MessageSquare, Users, ChevronDown, Check, Pencil, ArrowDownToLine, Pause } from 'lucide-react';
 import { MinecraftChatMessage, stripMinecraftFormatting } from './MinecraftChatMessage';
-import { ServerLogo } from './ServerLogo';
 
 export interface ChatAccountItem {
   id: string;
@@ -22,9 +21,8 @@ interface TerminalProps {
   onSelectSender?: (senderId: string) => void;
   quickCommands?: QuickCommandItem[];
   onEditQuickCommands?: () => void;
-  serverName?: string;
-  serverHost?: string;
   autoScrollEnabled?: boolean;
+  onToggleAutoScroll?: () => void;
 }
 
 const DEFAULT_QUICK_COMMANDS: QuickCommandItem[] = [
@@ -47,9 +45,8 @@ export const Terminal: React.FC<TerminalProps> = ({
   onSelectSender,
   quickCommands,
   onEditQuickCommands,
-  serverName = 'Minecraft Server',
-  serverHost = '',
   autoScrollEnabled = true,
+  onToggleAutoScroll,
 }) => {
   const [input, setInput] = useState('');
   const [now, setNow] = useState(() => Date.now());
@@ -73,9 +70,6 @@ export const Terminal: React.FC<TerminalProps> = ({
     (s) => s.id === selectedSenderId || s.ign === selectedSenderId
   );
   const onlineSenders = availableSenders.filter((sender) => sender.isOnline).length;
-  const receivingSenders = selectedSenderId === 'all' || !selectedSenderId
-    ? availableSenders.filter((sender) => sender.isOnline)
-    : [];
   const composerDisabled = disabled || availableSenders.length === 0 || (selectedSenderAccount ? !selectedSenderAccount.isOnline : onlineSenders === 0);
 
   useEffect(() => {
@@ -143,20 +137,17 @@ export const Terminal: React.FC<TerminalProps> = ({
     <div className="pa-chat-console bg-white border border-slate-300/90 rounded-3xl overflow-hidden flex flex-col h-full shadow-lg shadow-slate-200/50">
       {/* Terminal Header & Toolbar */}
       <div className="pa-chat-console-head bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="pa-chat-account-icon w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/90 flex items-center justify-center shrink-0 shadow-2xs">
-            <ServerLogo host={serverHost} name={serverName} size="w-full h-full" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="pa-chat-account-name font-extrabold text-slate-900 tracking-tight truncate text-xs">{serverName}</span>
-              <span className={`pa-chat-online-indicator ${onlineSenders ? 'is-online' : 'is-offline'}`} />
-            </div>
-            <span className="pa-chat-account-caption">
-              {onlineSenders}/{availableSenders.length} accounts connected{serverHost ? ` · ${serverHost}` : ''}
-            </span>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onToggleAutoScroll}
+          disabled={!onToggleAutoScroll}
+          aria-label={`Auto-scroll ${autoScrollEnabled ? 'on' : 'off'}`}
+          aria-pressed={autoScrollEnabled}
+          title={`Auto-scroll ${autoScrollEnabled ? 'on' : 'off'} — click to ${autoScrollEnabled ? 'pause' : 'resume'}`}
+          className={`pa-chat-scroll-toggle flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition ${autoScrollEnabled ? 'is-enabled' : 'is-disabled'}`}
+        >
+          {autoScrollEnabled ? <ArrowDownToLine className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+        </button>
 
         <div className="flex items-center gap-2 shrink-0">
           {availableSenders.length > 0 && (
@@ -193,45 +184,6 @@ export const Terminal: React.FC<TerminalProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-          )}
-          {receivingSenders.length > 0 && (
-            <div className="pa-chat-recipients relative flex items-center pl-1" aria-label={`${receivingSenders.length} online account${receivingSenders.length === 1 ? '' : 's'} will receive this message`}>
-              <span className="sr-only">Receiving accounts:</span>
-              {receivingSenders.map((account, index) => {
-                const username = account.ign || account.name;
-                const isTooltipOpen = openRecipientTooltip === account.id;
-                return (
-                  <div key={account.id} className="relative" style={{ zIndex: receivingSenders.length - index }}>
-                    <button
-                      type="button"
-                      onClick={() => setOpenRecipientTooltip(isTooltipOpen ? null : account.id)}
-                      className={`pa-chat-recipient-head -ml-1.5 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-[#292824] bg-[#39372f] shadow-sm transition hover:z-20 hover:scale-110 focus-visible:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 ${index === 0 ? '!ml-0' : ''}`}
-                      aria-label={`Receiving account ${username}`}
-                      aria-expanded={isTooltipOpen}
-                      title={username}
-                    >
-                      <img
-                        src={`https://minotar.net/helm/${encodeURIComponent(username)}/24.png`}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(event) => {
-                          if (event.currentTarget.src.includes('minotar.net')) {
-                            event.currentTarget.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/24`;
-                          } else {
-                            event.currentTarget.style.visibility = 'hidden';
-                          }
-                        }}
-                      />
-                    </button>
-                    {isTooltipOpen && (
-                      <span role="tooltip" className="absolute right-0 top-full z-50 mt-2 whitespace-nowrap rounded-md border border-[#625d50] bg-[#1f1e1b] px-2 py-1 text-[10px] font-bold text-[#f2ecdf] shadow-lg">
-                        {username}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>
@@ -289,6 +241,12 @@ export const Terminal: React.FC<TerminalProps> = ({
         ) : (
           messages.map((msg, idx) => {
             const player = playerForMessage(msg);
+            const accountName = (msg.accountUsername || '').toLowerCase();
+            const messageAccount = availableSenders.find((account) =>
+              [account.ign, account.name, account.id].some((name) => name?.toLowerCase() === accountName)
+            );
+            const accountLabel = messageAccount ? (messageAccount.ign || messageAccount.name) : msg.accountUsername;
+            const isTooltipOpen = Boolean(messageAccount && openRecipientTooltip === msg.id);
             return (
             <div className="pa-chat-message-row" key={msg.id || idx}>
               {player ? (
@@ -314,13 +272,38 @@ export const Terminal: React.FC<TerminalProps> = ({
               <div className="pa-chat-message-body">
                 <MinecraftChatMessage message={msg} showTimestamp={false} compact darkMode />
               </div>
-              <time
-                className="pa-chat-relative-time"
-                dateTime={new Date(msg.timestamp || now).toISOString()}
-                title={new Date(msg.timestamp || now).toLocaleString()}
-              >
-                {relativeTime(msg.timestamp || now)}
-              </time>
+              <div className="pa-chat-message-meta">
+                {messageAccount && (
+                  <span className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenRecipientTooltip(isTooltipOpen ? null : msg.id)}
+                      className="pa-chat-recipient-head"
+                      aria-label={`Received by ${accountLabel}`}
+                      aria-expanded={isTooltipOpen}
+                      title={accountLabel}
+                    >
+                      <img
+                        src={`https://minotar.net/helm/${encodeURIComponent(accountLabel || '')}/24.png`}
+                        alt=""
+                        loading="lazy"
+                        onError={(event) => {
+                          if (event.currentTarget.src.includes('minotar.net')) event.currentTarget.src = `https://mc-heads.net/avatar/${encodeURIComponent(accountLabel || '')}/24`;
+                          else event.currentTarget.style.visibility = 'hidden';
+                        }}
+                      />
+                    </button>
+                    {isTooltipOpen && <span role="tooltip" className="pa-chat-recipient-tooltip">{accountLabel}</span>}
+                  </span>
+                )}
+                <time
+                  className="pa-chat-relative-time"
+                  dateTime={new Date(msg.timestamp || now).toISOString()}
+                  title={new Date(msg.timestamp || now).toLocaleString()}
+                >
+                  {relativeTime(msg.timestamp || now)}
+                </time>
+              </div>
             </div>
           );})
         )}

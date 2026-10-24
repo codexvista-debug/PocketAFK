@@ -4036,9 +4036,13 @@ export default function Dashboard() {
                           availableSenders={availableChatSenders}
                           selectedSenderId={chatSenderAccountId}
                           onSelectSender={(senderId) => setChatSenderAccountId(senderId)}
-                          serverName={activeServer.name}
-                          serverHost={activeServer.serverHost}
                           autoScrollEnabled={chatAutoScrollEnabled}
+                          onToggleAutoScroll={() => {
+                            const nextValue = !chatAutoScrollEnabled;
+                            setChatAutoScrollEnabled(nextValue);
+                            const userKey = (currentUser || 'guest').trim().toLowerCase();
+                            localStorage.setItem(`pocketafk_chat_auto_scroll_${userKey}`, String(nextValue));
+                          }}
                           quickCommands={activeServer.quickCommands}
                           onEditQuickCommands={() => setIsQuickCommandsModalOpen(true)}
                         />
@@ -4294,35 +4298,6 @@ export default function Dashboard() {
                               className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 font-mono"
                             />
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Chat settings (shared across all server profiles) */}
-                      <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
-                        <div>
-                          <h3 className="font-bold text-sm text-slate-900">Chat settings</h3>
-                          <p className="text-[11px] text-slate-500 mt-1">These preferences apply to chat on every server profile.</p>
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="min-w-0">
-                            <label className="text-xs font-bold text-slate-800">Auto-scroll chat</label>
-                            <span className="text-[11px] text-slate-400 block mt-0.5">Keep the newest messages in view as they arrive.</span>
-                          </div>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={chatAutoScrollEnabled}
-                            aria-label="Auto-scroll chat across all servers"
-                            onClick={() => {
-                              const nextValue = !chatAutoScrollEnabled;
-                              setChatAutoScrollEnabled(nextValue);
-                              const userKey = (currentUser || 'guest').trim().toLowerCase();
-                              localStorage.setItem(`pocketafk_chat_auto_scroll_${userKey}`, String(nextValue));
-                            }}
-                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${chatAutoScrollEnabled ? 'bg-emerald-600' : 'bg-slate-400'}`}
-                          >
-                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${chatAutoScrollEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                          </button>
                         </div>
                       </div>
 
