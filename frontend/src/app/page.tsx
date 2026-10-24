@@ -2196,7 +2196,7 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col md:flex-row md:min-h-screen">
           {/* Mobile Top Header Bar */}
           <div className="md:hidden flex items-center justify-between p-3.5 bg-white border-b border-slate-200/90 shrink-0 sticky top-0 z-30 shadow-xs">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(true)}
@@ -2207,24 +2207,18 @@ export default function Dashboard() {
                 <Menu className="w-5 h-5" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveMainView('dashboard');
-                  setIsMobileSidebarOpen(false);
-                }}
-                className="flex items-center gap-2 text-left group cursor-pointer"
-                title="Go to PocketAFK Dashboard"
-              >
-                <div className="pa-dashboard-logo pa-dashboard-logo-mobile">
-                  <img src="/pocketafk-emblem.png" alt="" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
-                  </div>
-                </div>
-              </button>
+              <div className="pa-mobile-breadcrumb flex items-center gap-2 min-w-0 text-xs font-bold">
+                {activeMainView === 'profile' && activeServer ? (
+                  <>
+                    <ServerLogo host={activeServer.serverHost} name={activeServer.name} size="w-5 h-5" />
+                    <span className="truncate max-w-[36vw] text-slate-800">{activeServer.name}</span>
+                    <span className="text-slate-400">/</span>
+                    <span className="px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 uppercase text-[10px] font-black shrink-0">{activeSubTab}</span>
+                  </>
+                ) : (
+                  <span className="truncate text-slate-800 uppercase tracking-wide">{activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView}</span>
+                )}
+              </div>
             </div>
 
             {/* Daemon Connection Status on Mobile Top-Right */}
@@ -2618,7 +2612,7 @@ export default function Dashboard() {
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
             {/* Top Navigation & Status Bar */}
-            <header className="flex h-11 md:h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-3 md:px-6 items-center justify-between shrink-0 shadow-xs">
+            <header className="hidden md:flex h-14 border-b border-slate-200/90 bg-white/95 backdrop-blur-md px-6 items-center justify-between shrink-0 shadow-xs">
               <div className="flex items-center gap-2.5 text-xs font-bold min-w-0">
                 {activeMainView === 'profile' && activeServer ? (
                   <>
@@ -3422,7 +3416,7 @@ export default function Dashboard() {
                     <div className="space-y-4">
                       {/* Top Action Bar */}
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
+                        <div className="pa-connect-actions flex flex-wrap items-center gap-2.5">
                           <button
                             onClick={handleConnectSelected}
                             disabled={socketStatus !== 'AUTHENTICATED' || selectedAccountIds.length === 0}
@@ -3442,14 +3436,14 @@ export default function Dashboard() {
                         </div>
 
                         {/* Search / Filter Input */}
-                        <div className="relative">
+                        <div className="pa-connect-search relative w-full sm:w-auto">
                           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                           <input
                             type="text"
                             placeholder="Filter accounts..."
                             value={accountFilter}
                             onChange={(e) => setAccountFilter(e.target.value)}
-                            className="pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition shadow-2xs"
+                            className="pa-connect-filter w-full sm:w-auto pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition shadow-2xs"
                           />
                         </div>
                       </div>
@@ -3457,7 +3451,7 @@ export default function Dashboard() {
                       {/* Accounts Table for this Server Profile */}
                       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
                         <div className="overflow-x-auto touch-pan-x">
-                          <table className="w-full text-left text-xs min-w-[680px]">
+                          <table className="pa-profile-accounts-table w-full text-left text-xs">
                           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
                             <tr>
                               <th className="p-3 w-8">
@@ -3477,7 +3471,7 @@ export default function Dashboard() {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {assignedAccounts.length === 0 ? (
-                              <tr>
+                              <tr className="pa-profile-accounts-empty-row">
                                 <td colSpan={6} className="p-8 text-center text-slate-500">
                                   <div className="space-y-2">
                                     <p className="text-xs">No accounts assigned to this server profile yet.</p>

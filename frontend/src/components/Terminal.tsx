@@ -269,6 +269,12 @@ export const Terminal: React.FC<TerminalProps> = ({
             </div>
           );})
         )}
+        {messages.length > 0 && !messages.some((message) => message.type === 'chat') && (
+          <div className="pa-chat-waiting-note mx-auto mt-5 max-w-lg rounded-xl border px-4 py-3 text-center">
+            <p className="text-xs font-bold">Connected — waiting for server chat</p>
+            <p className="mt-1 text-[11px]">This feed has connection events, but {serverName} hasn’t sent any chat messages to this account yet.</p>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 

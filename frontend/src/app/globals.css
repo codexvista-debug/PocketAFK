@@ -156,6 +156,31 @@ body {
 }
 @media(min-width:640px) and (max-width:1279px){.pa-dashboard-shell .pa-rank-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+@media(max-width:767px){
+  .pa-dashboard-shell .pa-mobile-breadcrumb{flex:1;max-width:calc(100vw - 110px)}
+  .pa-dashboard-shell .pa-profile-accounts-table{display:block;width:100%;min-width:0!important}
+  .pa-dashboard-shell .pa-profile-accounts-table thead{display:none}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody{display:block;width:100%}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row){display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;column-gap:7px;padding:7px 8px;border-bottom:1px solid #49463e}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td{display:block;min-width:0;padding:5px 2px!important}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(1){grid-column:1;grid-row:1 / span 2;align-self:center}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(2){grid-column:2;grid-row:1}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(3){grid-column:3;grid-row:1;justify-self:end}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(4){grid-column:3;grid-row:2;justify-self:end}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(5){grid-column:2 / 4;grid-row:3}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(6){grid-column:1 / 4;grid-row:4}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(2)>div{min-width:0}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(2)>div>div{min-width:0}
+  .pa-dashboard-shell .pa-profile-accounts-table tbody tr:not(.pa-profile-accounts-empty-row)>td:nth-child(2)>div>div>div:first-child>span{min-width:0;overflow-wrap:anywhere}
+  .pa-dashboard-shell .pa-profile-accounts-table td:nth-child(5) input{max-width:none;width:100%}
+  .pa-dashboard-shell .pa-profile-accounts-table td:nth-child(6)>div{justify-content:flex-start}
+  .pa-dashboard-shell .pa-connect-actions{width:100%}
+  .pa-dashboard-shell .pa-connect-actions>button{flex:1 1 145px;justify-content:center;white-space:normal;text-align:center;min-height:42px;padding-left:9px;padding-right:9px}
+  .pa-dashboard-shell .pa-connect-search{width:100%}
+  .pa-dashboard-shell .pa-chat-waiting-note{background:#272923;border-color:#575344;color:#eee7d8}
+  .pa-dashboard-shell .pa-chat-waiting-note p+p{color:#bcb3a4}
+}
+
 /* Minecraft-inspired chat console */
 .pa-dashboard-shell .pa-chat-workspace{min-width:0}
 .pa-dashboard-shell .pa-chat-viewer-label{color:#dfd7c7!important;font-size:11px}
