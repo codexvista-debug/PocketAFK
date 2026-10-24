@@ -7,9 +7,10 @@ const userTunnels = sharedUserTunnels;
 
 export const dynamic = 'force-dynamic';
 
-// 65-second timeout: daemons send heartbeats every 20 seconds.
-// If no heartbeat is received in 65s, the daemon is considered offline.
-const TUNNEL_TIMEOUT_MS = 65000;
+// The daemon wrapper checks the local process every 3 seconds and sends a
+// cloud heartbeat every 15 seconds. Leave room for transient network delays,
+// while bounding how long a forcibly stopped Termux process stays online.
+const TUNNEL_TIMEOUT_MS = 45000;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);

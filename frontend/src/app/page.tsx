@@ -605,7 +605,7 @@ export default function Dashboard() {
       setDaemonSessions([]);
       return;
     }
-    setDaemonSessionsLoading(true);
+    if (daemonSessions.length === 0) setDaemonSessionsLoading(true);
     try {
       const response = await fetch('/api/daemon-sessions', {
         method: 'POST',
@@ -620,13 +620,13 @@ export default function Dashboard() {
     } finally {
       setDaemonSessionsLoading(false);
     }
-  }, [currentUser, secretCode, authToken]);
+  }, [currentUser, secretCode, authToken, daemonSessions.length]);
 
   useEffect(() => {
     void refreshDaemonSessions();
-    const timer = window.setInterval(() => void refreshDaemonSessions(), 15000);
+    const timer = window.setInterval(() => void refreshDaemonSessions(), 3000);
     return () => window.clearInterval(timer);
-  }, [refreshDaemonSessions]);
+  }, [refreshDaemonSessions, socketStatus]);
 
   useEffect(() => {
     const username = currentUser?.trim().toLowerCase();

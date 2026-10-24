@@ -232,20 +232,37 @@ else
   echo -e "      ${YELLOW}✓ Registered tunnel. Dashboard syncing in progress.${NC}"
 fi
 
-# 5. Start background heartbeat to keep tunnel alive in dashboard (every 15s)
+# 5. Keep the dashboard tunnel alive and notice when the daemon process exits.
+# The heartbeat helper can outlive the Java core, so verify the local daemon
+# before telling the website that this Termux session is still online.
 run_heartbeat_loop() {
   exec -a pocketafk_heartbeat bash -c '
     APP_USER="$1"
     WSS_URL="$2"
     APP_SECRET="$3"
     DASHBOARD_SYNC_URL="$4"
+    HEALTH_URL="http://127.0.0.1:8080/"
+    LAST_HEARTBEAT=0
     while true; do
-      sleep 15
-      RESP=$(curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
-        -H "Content-Type: application/json" \
-        -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" 2>/dev/null)
-      if echo "$RESP" | grep -q "\"stale\":true"; then
+      sleep 3
+      if ! curl -fsS --connect-timeout 1 --max-time 2 "$HEALTH_URL" 2>/dev/null | grep -q "PocketAFK Daemon"; then
+        # Java core exited unexpectedly. Stop refreshing its tunnel and close
+        # the active session now instead of leaving it marked RUNNING.
+        curl -s --connect-timeout 3 --max-time 5 -X POST "$DASHBOARD_SYNC_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\":\"$APP_USER\",\"url\":\"\",\"token\":\"$APP_SECRET\",\"action\":\"disconnect\"}" >/dev/null 2>&1 || true
         exit 0
+      fi
+
+      LAST_HEARTBEAT=$((LAST_HEARTBEAT + 3))
+      if [ "$LAST_HEARTBEAT" -ge 15 ]; then
+        LAST_HEARTBEAT=0
+        RESP=$(curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" 2>/dev/null)
+        if echo "$RESP" | grep -q "\"stale\":true"; then
+          exit 0
+        fi
       fi
     done
   ' _ "$APP_USER" "$WSS_URL" "$APP_SECRET" "$DASHBOARD_SYNC_URL"
