@@ -98,15 +98,22 @@ export const Terminal: React.FC<TerminalProps> = ({
   };
 
   const playerForMessage = (message: ChatMessage): { name: string; bedrock: boolean } | null => {
-    if (message.type === 'system') return null;
     const raw = stripMinecraftFormatting(message.raw || message.formattedText || '');
-    const rankedLine = raw.match(/^\s*\[([^\]]{1,24})\]\s*([+*.~#]?[A-Za-z0-9_]{1,16})(?=\s|[:>»▶])/);
-    const nonPlayerLabels = new Set(['server', 'system', 'pocketafk', 'autocommand', 'broadcast']);
-    const rankedName = rankedLine && !nonPlayerLabels.has(rankedLine[1].trim().toLowerCase()) ? rankedLine[2] : undefined;
-    const chatLineName = raw.match(/^\s*<([^>]{1,32})>/)?.[1]
-      || rankedName
-      || raw.match(/^\s*(?:\[[^\]]{1,24}\]\s*){0,2}([+*.~#]?[A-Za-z0-9_][A-Za-z0-9_. #]{0,15})\s*(?:▶|>|»|:)\s*/)?.[1]
-      || raw.match(/^\s*([A-Za-z0-9_]{1,16})\s+(?:has made (?:the )?advancement|has completed (?:the )?challenge|joined the game|left the game|was slain by|was shot by|was killed by)\b/i)?.[1];
+    const nonPlayerLabels = new Set(['server', 'system', 'pocketafk', 'autocommand', 'broadcast', 'invitation']);
+    const validPlayerName = (candidate?: string) => {
+      const value = candidate?.replace(/^[+*.~#]+/, '').trim();
+      return value && !nonPlayerLabels.has(value.toLowerCase()) ? candidate : undefined;
+    };
+
+    // Match names from the message's visible prefix instead of relying on the
+    // protocol packet label: many servers send player chat in system-chat packets.
+    const rankedName = raw.match(/^\s*\[[^\]]{1,32}\]\s*([+*.~#]?[A-Za-z0-9_]{1,16})\s*(?:▶|>|»|:)\s*/)?.[1];
+    const whisperName = raw.match(/^\s*\[([A-Za-z0-9_]{1,16})\s*(?:→|->)\s*me\]\s*/i)?.[1];
+    const chatLineName = validPlayerName(raw.match(/^\s*<([^>]{1,32})>\s*/)?.[1])
+      || validPlayerName(whisperName)
+      || validPlayerName(rankedName)
+      || validPlayerName(raw.match(/^\s*(?:\[[^\]]{1,32}\]\s*){0,2}([+*.~#]?[A-Za-z0-9_][A-Za-z0-9_. #]{0,15})\s*(?:▶|>|»|:)\s*/)?.[1])
+      || validPlayerName(raw.match(/^\s*([A-Za-z0-9_]{1,16})\s+(?:has made (?:the )?advancement|has completed (?:the )?challenge|joined the game|left the game|was slain by|was shot by|was killed by)\b/i)?.[1]);
 
     // Chat payloads identify the bot receiving the message in accountUsername;
     // only infer an avatar from the actual chat line, never from that account.
