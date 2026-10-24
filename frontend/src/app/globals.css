@@ -281,6 +281,25 @@ body {
 .pa-account-logs-modal .bg-amber-50\/30{background:#3d3524!important;border-color:#75643f!important;color:#fff1cf!important}
 .pa-account-logs-modal .bg-amber-50\/30 p{color:#fff1cf!important}
 .pa-account-logs-modal .text-amber-950{color:#fff1cf!important}
+.pa-account-logs-modal .pa-logs-dialog{background:linear-gradient(145deg,#24231f,#1b1b18)!important;border-color:#625c4c!important;box-shadow:0 28px 90px #000b,0 0 0 1px #ffffff0a!important}
+.pa-account-logs-modal .pa-logs-header{background:linear-gradient(110deg,#34332d,#242622 72%,#26382d)!important;border-color:#514d42!important}
+.pa-account-logs-modal .pa-logs-header h2{color:#fff6e5!important;font-size:16px;letter-spacing:-.2px}
+.pa-account-logs-modal .pa-logs-toolbar{background:#25241f!important;border-color:#4c483f!important}
+.pa-account-logs-modal .pa-logs-toolbar>div:first-child{color:#e8e1d4!important}
+.pa-account-logs-modal .pa-logs-stream{background:radial-gradient(ellipse at 15% 0%,#33403555,transparent 48%),#1c1c19!important}
+.pa-account-logs-modal .pa-log-entry{border-radius:8px!important;box-shadow:0 5px 14px #070a0826!important}
+.pa-account-logs-modal .pa-log-entry:not(.bg-emerald-50\/30):not(.bg-rose-50\/40):not(.bg-amber-50\/30){background:#292824!important;border-color:#4d493f!important;color:#eee8dc!important}
+.pa-account-logs-modal .pa-logs-copy{width:38px;height:38px;background:#302e29!important;border-color:#5c564a!important;color:#d9d1c3!important}
+.pa-account-logs-modal .pa-logs-copy:hover{background:#3a3832!important;border-color:#8aaa6d!important;color:#fff!important}
+.pa-account-logs-modal .pa-logs-footer{background:#25241f!important;border-color:#4c483f!important;color:#c9c1b3!important}
+.pa-account-logs-modal .pa-logs-footer .text-slate-800{color:#fff3df!important}
+@media(max-width:639px){
+  .pa-account-logs-modal{padding:8px!important}
+  .pa-account-logs-modal .pa-logs-dialog{max-height:94dvh!important}
+  .pa-account-logs-modal .pa-logs-header{padding:12px!important}
+  .pa-account-logs-modal .pa-logs-toolbar{padding:10px 12px!important;gap:8px}
+  .pa-account-logs-modal .pa-logs-stream{padding:10px!important;min-height:240px}
+}
 .pa-dashboard-shell .pa-chat-send{width:44px;height:42px;padding:0!important}
 .pa-dashboard-shell .pa-chat-send svg{width:17px;height:17px}
 .pa-dashboard-shell .pa-chat-option-hint{display:block;color:#bcb3a4;font-size:9px;font-weight:500;line-height:1.35}

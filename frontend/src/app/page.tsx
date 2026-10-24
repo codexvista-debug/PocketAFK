@@ -391,25 +391,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleClearAccountLogs = () => {
-    if (!selectedLogsAccount) return;
-    const cleanName = (selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '')
-      .replace(/^@/, '')
-      .trim();
-    setAccountLogsMap((prev) => {
-      const updated = { ...prev, [cleanName]: [] };
-      if (typeof window !== 'undefined') {
-        const u = currentUser || 'guest';
-        localStorage.setItem(`pocketafk_player_logs_${u}`, JSON.stringify(updated));
-      }
-      return updated;
-    });
-    if (currentUser && cleanName) {
-      saveAccountLogsToSupabase(currentUser, cleanName, []).catch(() => {});
-    }
-    showToast(`Logs cleared for @${cleanName}`, 'info');
-  };
-
   // In-app Microsoft OAuth Polling state
   const [isPollingMs, setIsPollingMs] = useState(false);
   const [apiMsAuthData, setApiMsAuthData] = useState<{
@@ -2195,7 +2176,6 @@ export default function Dashboard() {
             : []
         }
         activityLogs={selectedAccountActivityLogs}
-        onClearLogs={handleClearAccountLogs}
         isLiveConnected={
           Boolean(
             selectedLogsAccount &&
