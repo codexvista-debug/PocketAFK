@@ -51,20 +51,17 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
   };
 
   const handleOpenMicrosoftSignIn = () => {
-    // Open the tab synchronously from the click so popup blockers allow it;
-    // sign out first, then send that same tab to the device-code login page.
-    const authTab = window.open('about:blank', '_blank');
+    // Microsoft supports prompt=login for a fresh sign-in without routing
+    // through a separate logout page (which can redirect to MSN first).
+    const authTab = window.open(forceAccountUrl, '_blank');
     if (!authTab) {
       setPopupBlocked(true);
       return;
     }
+    try { authTab.opener = null; } catch {}
     setPopupBlocked(false);
     setOpeningSignIn(true);
-    authTab.location.href = 'https://login.live.com/logout.srf';
-    window.setTimeout(() => {
-      if (!authTab.closed) authTab.location.href = forceAccountUrl;
-      setOpeningSignIn(false);
-    }, 1600);
+    window.setTimeout(() => setOpeningSignIn(false), 900);
   };
 
   return (
@@ -125,7 +122,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
           )}
 
           <p className="text-xs text-slate-600 leading-relaxed">
-            Microsoft requires you to verify ownership of your Minecraft account. Enter this code at the Microsoft link below:
+            Microsoft will fill in this verification code for you. Sign in with the Microsoft account that owns Minecraft Java, then approve the <b>Allow access</b> screen to continue.
           </p>
 
           {/* Big Code Card */}
@@ -149,9 +146,9 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
           <div className="space-y-2 pt-1">
             <button type="button" onClick={handleOpenMicrosoftSignIn} disabled={openingSignIn} className="pa-ms-auth-primary w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition disabled:opacity-75">
               <ExternalLink className="w-4 h-4" />
-              {openingSignIn ? 'Signing out, then opening sign-in…' : 'Sign Out & Open Microsoft Sign-In'}
+              {openingSignIn ? 'Microsoft sign-in opened' : 'Open Microsoft Minecraft Sign-In'}
             </button>
-            {popupBlocked && <p className="text-[11px] text-amber-200">Allow pop-ups for PocketAFK so it can sign out first and then open Microsoft sign-in.</p>}
+            {popupBlocked && <p className="text-[11px] text-amber-200">Allow pop-ups for PocketAFK to open Microsoft sign-in in a new tab.</p>}
 
             <div className="grid grid-cols-1 gap-2">
               <button
@@ -171,7 +168,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
               <span>Private Multi-Account Authentication</span>
             </div>
             <p className="text-[11px] text-slate-600 leading-relaxed">
-              Every sign-in forces a fresh login prompt (<code>prompt=login</code>). When Microsoft opens, sign in with the <b>different Microsoft email</b> that owns your second or third Minecraft account.
+              Every sign-in requests a fresh Microsoft login (<code>prompt=login</code>), skipping the separate logout and MSN pages. Microsoft still requires you to review and approve access yourself. Sign in with the <b>different Microsoft email</b> that owns your next Minecraft account.
             </p>
           </div>
         </div>
