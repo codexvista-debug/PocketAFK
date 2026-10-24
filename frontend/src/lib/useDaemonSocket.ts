@@ -67,6 +67,8 @@ export function useDaemonSocket(
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const failedConnectionAttemptsRef = useRef(0);
+  const lastDaemonPongAtRef = useRef(0);
   const onAccountVerifiedRef = useRef(onAccountVerified);
   onAccountVerifiedRef.current = onAccountVerified;
 
@@ -96,6 +98,7 @@ export function useDaemonSocket(
     
     setDaemonUrl(nextUrl);
     setAuthToken(nextToken);
+    failedConnectionAttemptsRef.current = 0;
     setStatus('DISCONNECTED');
     setDaemonConnections(null);
     setBotStates({});
@@ -115,6 +118,7 @@ export function useDaemonSocket(
     const cleanUrl = url.trim();
     setDaemonUrl(cleanUrl);
     setAuthToken(token);
+    failedConnectionAttemptsRef.current = 0;
     if (typeof window !== 'undefined') {
       const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
       if (cleanUrl) {
@@ -157,11 +161,18 @@ export function useDaemonSocket(
       return;
     }
 
-    setStatus('CONNECTING');
+    // A saved but stopped Termux tunnel should settle to the true offline state
+    // instead of glowing indefinitely while background retries continue.
+    setStatus(failedConnectionAttemptsRef.current < 2 ? 'CONNECTING' : 'DISCONNECTED');
     setDaemonConnections(null);
     try {
       const ws = new WebSocket(daemonUrl);
       socketRef.current = ws;
+      const authTimeout = window.setTimeout(() => {
+        if (socketRef.current !== ws || ws.readyState === WebSocket.CLOSED) return;
+        setStatus('DISCONNECTED');
+        try { ws.close(); } catch {}
+      }, 10000);
 
       ws.onopen = () => {
         setStatus('CONNECTED');
@@ -184,12 +195,20 @@ export function useDaemonSocket(
           const data = JSON.parse(event.data);
           switch (data.type) {
             case 'AUTH_RESULT':
+              clearTimeout(authTimeout);
               if (data.payload.success) {
+                failedConnectionAttemptsRef.current = 0;
+                lastDaemonPongAtRef.current = Date.now();
                 setStatus('AUTHENTICATED');
                 // Start keepalive PING every 10s to prevent Cloudflare tunnel & mobile carrier NAT timeout
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
                 pingIntervalRef.current = setInterval(() => {
                   if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    if (Date.now() - lastDaemonPongAtRef.current > 25000) {
+                      setStatus('DISCONNECTED');
+                      try { socketRef.current.close(); } catch {}
+                      return;
+                    }
                     try {
                       socketRef.current.send(JSON.stringify({ type: 'PING' }));
                     } catch (e) {}
@@ -206,6 +225,10 @@ export function useDaemonSocket(
                   socketRef.current = null;
                 }
               }
+              break;
+
+            case 'PONG':
+              lastDaemonPongAtRef.current = Date.now();
               break;
 
             case 'CONNECTION_STATUS':
@@ -329,6 +352,9 @@ export function useDaemonSocket(
       };
 
       ws.onclose = () => {
+        if (socketRef.current !== ws) return;
+        clearTimeout(authTimeout);
+        failedConnectionAttemptsRef.current += 1;
         setStatus('DISCONNECTED');
         setDaemonConnections(null);
         socketRef.current = null;
@@ -351,6 +377,8 @@ export function useDaemonSocket(
       };
 
       ws.onerror = () => {
+        if (socketRef.current !== ws) return;
+        clearTimeout(authTimeout);
         setStatus('DISCONNECTED');
         setDaemonConnections(null);
         setBotStates({});

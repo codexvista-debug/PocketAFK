@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2, LogOut } from 'lucide-react';
+import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface MicrosoftAuthModalProps {
   authData: {
@@ -25,6 +25,8 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [openingSignIn, setOpeningSignIn] = useState(false);
+  const [popupBlocked, setPopupBlocked] = useState(false);
 
   if (!authData) return null;
 
@@ -48,11 +50,28 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleOpenMicrosoftSignIn = () => {
+    // Open the tab synchronously from the click so popup blockers allow it;
+    // sign out first, then send that same tab to the device-code login page.
+    const authTab = window.open('about:blank', '_blank');
+    if (!authTab) {
+      setPopupBlocked(true);
+      return;
+    }
+    setPopupBlocked(false);
+    setOpeningSignIn(true);
+    authTab.location.href = 'https://login.live.com/logout.srf';
+    window.setTimeout(() => {
+      if (!authTab.closed) authTab.location.href = forceAccountUrl;
+      setOpeningSignIn(false);
+    }, 1600);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+    <div className="pa-ms-auth-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="pa-ms-auth-dialog bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-slate-50">
+        <div className="pa-ms-auth-header px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
               <KeyRound className="w-4 h-4" />
@@ -71,7 +90,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 text-center overflow-y-auto">
+        <div className="pa-ms-auth-body p-6 space-y-4 text-center overflow-y-auto">
           {errorMessage && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold text-left flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
@@ -84,7 +103,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
           {/* Active Waiting & Auto-Close Loading Animation Indicator */}
           {!errorMessage && (
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border border-emerald-200/90 shadow-2xs text-left relative overflow-hidden">
+            <div className="pa-ms-auth-status p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border border-emerald-200/90 shadow-2xs text-left relative overflow-hidden">
               <div className="flex items-center gap-3 relative z-10">
                 <div className="relative flex items-center justify-center shrink-0 w-8 h-8">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
@@ -128,28 +147,13 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
 
           {/* Action Buttons */}
           <div className="space-y-2 pt-1">
-            <a
-              href={forceAccountUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
-            >
+            <button type="button" onClick={handleOpenMicrosoftSignIn} disabled={openingSignIn} className="pa-ms-auth-primary w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition disabled:opacity-75">
               <ExternalLink className="w-4 h-4" />
-              Open Microsoft Sign-In (Private Login)
-            </a>
+              {openingSignIn ? 'Signing out, then opening sign-in…' : 'Sign Out & Open Microsoft Sign-In'}
+            </button>
+            {popupBlocked && <p className="text-[11px] text-amber-200">Allow pop-ups for PocketAFK so it can sign out first and then open Microsoft sign-in.</p>}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <a
-                href="https://login.live.com/logout.srf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs transition border border-amber-200 cursor-pointer flex items-center justify-center gap-1.5"
-                title="Log out of current Microsoft account in browser"
-              >
-                <LogOut className="w-3.5 h-3.5 text-amber-700" />
-                <span>Sign Out of Microsoft</span>
-              </a>
-
+            <div className="grid grid-cols-1 gap-2">
               <button
                 onClick={handleCopyLink}
                 className="py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-200 cursor-pointer flex items-center justify-center gap-1.5"
@@ -161,7 +165,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
           </div>
 
           {/* Multi-Account Advice Box */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-left space-y-1.5">
+          <div className="pa-ms-auth-note p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-left space-y-1.5">
             <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
               <KeyRound className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Private Multi-Account Authentication</span>
@@ -173,7 +177,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+        <div className="pa-ms-auth-footer px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition cursor-pointer"
