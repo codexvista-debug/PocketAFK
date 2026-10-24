@@ -2666,30 +2666,6 @@ export default function Dashboard() {
               </div>
             </header>
 
-            {/* Mobile Server Profile Sub-Tabs Pill Strip */}
-            {activeMainView === 'profile' && activeServer && (
-              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto p-2.5 bg-slate-50 border-b border-slate-200 touch-pan-x shrink-0">
-                <div className="flex items-center gap-1.5 px-2 py-0.5 shrink-0">
-                  <ServerLogo host={activeServer.serverHost} name={activeServer.name} size="w-4 h-4" />
-                  <span className="text-xs font-black text-slate-800 truncate max-w-[100px]">{activeServer.name}</span>
-                </div>
-                <div className="h-4 w-[1px] bg-slate-200 shrink-0 mx-0.5" />
-                {(['connect', 'chat', 'movement', 'inventory', 'pov', 'settings'] as SubTab[]).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveSubTab(tab)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold capitalize shrink-0 transition cursor-pointer ${
-                      activeSubTab === tab
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* TAB CONTENT PANELS */}
             <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-8 md:pb-6">
               {activeMainView === 'account' && currentUser && (

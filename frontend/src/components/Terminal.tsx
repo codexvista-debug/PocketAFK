@@ -100,12 +100,18 @@ export const Terminal: React.FC<TerminalProps> = ({
 
   const playerNameForMessage = (message: ChatMessage) => {
     const raw = stripMinecraftFormatting(message.raw || message.formattedText || '');
-    const chatName = raw.match(/^<([+*.~#]?[a-zA-Z0-9_]{1,24})>/)?.[1]
-      || raw.match(/^(?:\[[^\]]{1,24}\]\s*)?(?:(?:[A-Z][A-Z0-9+_-]{1,15})\s+)?([+*.~#]?[a-zA-Z0-9_]{1,24})\s*(?:▶|>|»|:)\s*/)?.[1];
     const sender = stripMinecraftFormatting(message.sender || '');
     const senderIsPlayer = sender && !/^(server|system|pocketafk|autocommand|sessiondivider)$/i.test(sender);
-    const accountName = stripMinecraftFormatting(message.accountUsername || '');
-    return chatName || (senderIsPlayer ? sender : '') || accountName || 'MHF_Steve';
+    if (senderIsPlayer) return sender;
+
+    const chatLineName = raw.match(/^<([+*.~#]?[a-zA-Z0-9_]{1,24})>/)?.[1]
+      || raw.match(/^(?:\[[^\]]{1,24}\]\s*)?(?:(?:[A-Z][A-Z0-9+_-]{1,15})\s+)?([+*.~#]?[a-zA-Z0-9_]{1,24})\s*(?:▶|>|»|:)\s*/)?.[1]
+      || raw.match(/^([a-zA-Z0-9_]{1,16})\s+(?:has made (?:the )?advancement|has completed (?:the )?challenge|joined the game|left the game|was slain by|was shot by|was killed by)\b/i)?.[1];
+
+    // accountUsername identifies the bot receiving chat, not the player speaking.
+    // Use a system tile when a log line has no identifiable player instead of
+    // showing the bot owner's skin on every server event.
+    return chatLineName || null;
   };
 
   const relativeTime = (timestamp: number) => {
@@ -221,15 +227,23 @@ export const Terminal: React.FC<TerminalProps> = ({
             )}
           </div>
         ) : (
-          messages.map((msg, idx) => (
+          messages.map((msg, idx) => {
+            const playerName = playerNameForMessage(msg);
+            return (
             <div className="pa-chat-message-row" key={msg.id || idx}>
-              <img
-                src={`https://minotar.net/helm/${encodeURIComponent(playerNameForMessage(msg))}/32.png`}
-                alt=""
-                className="pa-chat-message-skin"
-                loading="lazy"
-                onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/32.png'; }}
-              />
+              {playerName ? (
+                <img
+                  src={`https://minotar.net/helm/${encodeURIComponent(playerName)}/32.png`}
+                  alt=""
+                  className="pa-chat-message-skin"
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/32.png'; }}
+                />
+              ) : (
+                <div className="pa-chat-system-avatar" aria-label="Server message">
+                  <span className="pa-item-icon pa-icon-daemon-lamp" aria-hidden="true" />
+                </div>
+              )}
               <div className="pa-chat-message-body">
                 <MinecraftChatMessage message={msg} showTimestamp={false} compact darkMode />
               </div>
@@ -241,7 +255,7 @@ export const Terminal: React.FC<TerminalProps> = ({
                 {relativeTime(msg.timestamp || now)}
               </time>
             </div>
-          ))
+          );})
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -373,11 +387,11 @@ export const Terminal: React.FC<TerminalProps> = ({
         <button
           type="submit"
           disabled={composerDisabled || !input.trim()}
-          className="pa-chat-send px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl transition flex items-center gap-2 shadow-xs font-bold text-xs font-mono cursor-pointer active:scale-95 shrink-0"
+          className="pa-chat-send p-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl transition flex items-center justify-center shadow-xs cursor-pointer active:scale-95 shrink-0"
+          aria-label="Send message"
+          title="Send message"
         >
           <Send className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Send</span>
-          <kbd className="hidden md:inline text-[9px] bg-emerald-800/60 px-1.5 py-0.5 rounded text-emerald-100 font-sans">↵</kbd>
         </button>
       </form>
     </div>
