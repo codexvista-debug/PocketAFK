@@ -2232,7 +2232,6 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="font-black text-sm text-slate-900 tracking-tight">PocketAFK</span>
-                    <span className={`w-2 h-2 rounded-full ring-2 ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 ring-emerald-500/30 animate-pulse' : 'bg-rose-500 ring-rose-500/30'}`} />
                   </div>
                 </div>
               </button>
@@ -2287,7 +2286,6 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-sm text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors">PocketAFK</span>
-                    <span className={`w-2 h-2 rounded-full ring-2 ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500 ring-emerald-500/30 animate-pulse' : 'bg-rose-500 ring-rose-500/30'}`} />
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-slate-500 font-mono font-medium">v2.4 Java Core</span>
