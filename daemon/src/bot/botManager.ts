@@ -238,6 +238,32 @@ export class BotManager {
         break;
       }
 
+      case 'SHUTDOWN_DAEMON': {
+        console.log(chalk.yellow('[Daemon] Shutdown requested from dashboard. Stopping all bot instances...'));
+        for (const bot of this.bots.values()) {
+          try { bot.stop(); } catch (e) {}
+        }
+        this.bots.clear();
+        clearTermuxNotification();
+        this.broadcastFn({
+          type: 'AUTH_RESULT',
+          payload: { success: true, message: 'Daemon shutdown requested. Termux is cleaning up the tunnel and stopping.' }
+        });
+
+        setTimeout(() => {
+          const supervisorPid = Number(process.env.POCKETAFK_SUPERVISOR_PID);
+          if (process.env.TERMUX_SUPERVISOR === '1' && Number.isSafeInteger(supervisorPid) && supervisorPid > 1) {
+            try { process.kill(supervisorPid, 'SIGTERM'); } catch (error) {
+              console.error(chalk.red(`[Daemon] Could not stop Termux launcher: ${error}`));
+              process.kill(process.pid, 'SIGTERM');
+            }
+          } else {
+            process.kill(process.pid, 'SIGTERM');
+          }
+        }, 350);
+        break;
+      }
+
       case 'SEND_CHAT': {
         const { botId, message, targetAccount } = msg.payload;
         // 1. If botId matches a direct bot instance:

@@ -491,6 +491,12 @@ export function useDaemonSocket(
     return sendJson({ type: 'RESTART_DAEMON', payload: { reason } });
   }, [sendJson]);
 
+  const shutdownDaemon = useCallback((reason = 'User requested daemon shutdown from Termux Stream') => {
+    setBotStates({});
+    setBotStateReasons({});
+    return sendJson({ type: 'SHUTDOWN_DAEMON', payload: { reason } });
+  }, [sendJson]);
+
   const sendChat = useCallback((botId: string, message: string, targetAccount?: string) => {
     return sendJson({ type: 'SEND_CHAT', payload: { botId, message, targetAccount } });
   }, [sendJson]);
@@ -617,6 +623,7 @@ export function useDaemonSocket(
     stopBot,
     restartBot,
     restartDaemon,
+    shutdownDaemon,
     sendChat,
     clickSlot,
     closeWindow,

@@ -138,6 +138,7 @@ ENVEOF
 
 run_daemon_loop() {
   export TERMUX_SUPERVISOR=1
+  export POCKETAFK_SUPERVISOR_PID="$$"
   export POCKETAFK_OWNER="$APP_USER"
   while true; do
     npm run start >> daemon.log 2>&1

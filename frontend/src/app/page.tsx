@@ -81,7 +81,6 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  FileText,
   Heart,
   Utensils,
   Terminal as TerminalIcon,
@@ -292,6 +291,7 @@ export default function Dashboard() {
   const [isQuickCommandsModalOpen, setIsQuickCommandsModalOpen] = useState(false);
   const [autoSynced, setAutoSynced] = useState(false);
   const [selectedLogsAccount, setSelectedLogsAccount] = useState<MinecraftAccount | null>(null);
+  const [selectedLogsServerContext, setSelectedLogsServerContext] = useState<{ id: string; host: string } | null>(null);
   const [isAccountLogsOpen, setIsAccountLogsOpen] = useState(false);
   const [accountLogsMap, setAccountLogsMap] = useState<Record<string, PlayerLogEntry[]>>(() => {
     if (typeof window !== 'undefined') {
@@ -378,6 +378,12 @@ export default function Dashboard() {
 
   const handleOpenAccountLogs = async (acc: MinecraftAccount) => {
     setSelectedLogsAccount(acc);
+    const selectedServer = servers.find((server) => server.id === activeServerId);
+    setSelectedLogsServerContext(
+      activeMainView === 'profile' && activeSubTab === 'connect' && selectedServer
+        ? { id: selectedServer.id, host: selectedServer.serverHost }
+        : null
+    );
     setIsAccountLogsOpen(true);
     const cleanName = (acc.ign || acc.expectedIgn || acc.username || '').replace(/^@/, '').trim();
     if (currentUser && cleanName) {
@@ -574,6 +580,7 @@ export default function Dashboard() {
     stopBot,
     restartBot,
     restartDaemon,
+    shutdownDaemon,
     sendChat,
     clickSlot,
     closeWindow,
@@ -1966,24 +1973,31 @@ export default function Dashboard() {
   const selectedAccountActivityLogs = useMemo(() => {
     if (!selectedLogsAccount) return [];
     const accIgn = (selectedLogsAccount.ign || selectedLogsAccount.username || '').toLowerCase();
-    const accId = selectedLogsAccount.id;
+    const accId = selectedLogsAccount.id.toLowerCase();
     const matching = Object.entries(activityLogs || {})
       .filter(([bId]) => {
         const lower = bId.toLowerCase();
+        if (selectedLogsServerContext) {
+          const prefix = `${selectedLogsServerContext.id.toLowerCase()}__`;
+          return lower.startsWith(prefix) && (lower.endsWith(`__${accId}`) || lower.includes(accIgn));
+        }
         return (
-          bId === accId ||
+          lower === accId ||
           lower === accIgn ||
-          lower.endsWith(`__${accId.toLowerCase()}`) ||
-          (activeServer && lower.startsWith(`${activeServer.id.toLowerCase()}__`) && lower.includes(accId.toLowerCase()))
+          lower.endsWith(`__${accId}`) ||
+          (activeServer && lower.startsWith(`${activeServer.id.toLowerCase()}__`) && lower.includes(accId))
         );
       })
       .flatMap(([, l]) => l);
 
-    const combined = [...matching, ...(currentActivityLogs || [])];
+    const includeCurrentLogs = !selectedLogsServerContext || activeServer?.id === selectedLogsServerContext.id;
+    const combined = [...matching, ...(includeCurrentLogs ? currentActivityLogs || [] : [])];
     const unique = new Map<string, ActivityLog>();
-    combined.forEach((l) => unique.set(l.id, l));
+    combined
+      .filter((log) => !selectedLogsServerContext || log.botId.toLowerCase().startsWith(`${selectedLogsServerContext.id.toLowerCase()}__`))
+      .forEach((l) => unique.set(l.id, l));
     return Array.from(unique.values()).sort((a, b) => a.timestamp - b.timestamp);
-  }, [selectedLogsAccount, activityLogs, currentActivityLogs, activeServer]);
+  }, [selectedLogsAccount, selectedLogsServerContext, activityLogs, currentActivityLogs, activeServer]);
 
   const handleSendChatMessage = (msg: string, senderId?: string) => {
     if (!activeServer) return;
@@ -2190,12 +2204,14 @@ export default function Dashboard() {
         onClose={() => {
           setIsAccountLogsOpen(false);
           setSelectedLogsAccount(null);
+          setSelectedLogsServerContext(null);
         }}
         account={selectedLogsAccount}
-        serverHost={activeServer?.serverHost}
+        serverHost={selectedLogsServerContext?.host || activeServer?.serverHost}
         logs={
           selectedLogsAccount
-            ? accountLogsMap[(selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '').replace(/^@/, '').trim()] || []
+            ? (accountLogsMap[(selectedLogsAccount.ign || selectedLogsAccount.expectedIgn || selectedLogsAccount.username || '').replace(/^@/, '').trim()] || [])
+                .filter((entry) => !selectedLogsServerContext || entry.serverHost.trim().toLowerCase() === selectedLogsServerContext.host.trim().toLowerCase())
             : []
         }
         activityLogs={selectedAccountActivityLogs}
@@ -2750,6 +2766,12 @@ export default function Dashboard() {
                   messages={allMessages}
                   activityLogs={allActivityLogs}
                   servers={servers}
+                  onShutdown={() => {
+                    const sent = shutdownDaemon();
+                    showToast(sent ? 'Shutdown requested. Termux is stopping the daemon and bots.' : 'Connect to the Termux daemon before shutting it down.', sent ? 'info' : 'error');
+                    return sent;
+                  }}
+                  onShutdownTimeout={() => showToast('No shutdown response. Restart the Termux launcher once so it can receive the shutdown update.', 'error')}
                 />
               )}
 
@@ -3214,7 +3236,7 @@ export default function Dashboard() {
                                       className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 transition cursor-pointer"
                                       title="View logs"
                                     >
-                                      <FileText className="w-3.5 h-3.5" />
+                                      <span className="pa-item-icon pa-icon-chat pa-logbook-icon" aria-hidden="true" />
                                     </button>
 
                                     <button
@@ -3355,7 +3377,7 @@ export default function Dashboard() {
                                             className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition cursor-pointer shadow-2xs ml-0.5 group"
                                             title="View connection & audit logs for this account"
                                           >
-                                            <FileText className="w-3 h-3 group-hover:scale-110 transition-transform text-slate-500 hover:text-emerald-600" />
+                                            <span className="pa-item-icon pa-icon-chat pa-logbook-icon" aria-hidden="true" />
                                           </button>
                                         </div>
                                         {acc.authError ? (
@@ -3634,7 +3656,7 @@ export default function Dashboard() {
                                               className="p-1 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 transition cursor-pointer shadow-2xs ml-0.5 group"
                                               title="View connection & audit logs for this account"
                                             >
-                                              <FileText className="w-3 h-3 group-hover:scale-110 transition-transform text-slate-500 hover:text-emerald-600" />
+                                              <span className="pa-item-icon pa-icon-chat pa-logbook-icon" aria-hidden="true" />
                                             </button>
                                           </div>
                                           {acc.authError && (

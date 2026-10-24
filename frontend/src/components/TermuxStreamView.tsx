@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog, ChatMessage, ServerProfile } from '../types';
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Copy, Radio, Terminal as TerminalIcon } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock3, Copy, Power, Radio, Terminal as TerminalIcon } from 'lucide-react';
 import { stripMinecraftFormatting } from './MinecraftChatMessage';
 
 interface TermuxStreamViewProps {
@@ -13,6 +13,8 @@ interface TermuxStreamViewProps {
   messages: ChatMessage[];
   activityLogs: ActivityLog[];
   servers: ServerProfile[];
+  onShutdown: () => boolean;
+  onShutdownTimeout: () => void;
 }
 
 type StreamLine = {
@@ -51,15 +53,30 @@ export function TermuxStreamView({
   messages,
   activityLogs,
   servers,
+  onShutdown,
+  onShutdownTimeout,
 }: TermuxStreamViewProps) {
   const [now, setNow] = useState(Date.now());
   const [copied, setCopied] = useState(false);
   const [followStream, setFollowStream] = useState(true);
+  const [shutdownPending, setShutdownPending] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
+  const shutdownTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (socketStatus === 'AUTHENTICATED') return;
+    if (shutdownTimerRef.current !== null) window.clearTimeout(shutdownTimerRef.current);
+    shutdownTimerRef.current = null;
+    setShutdownPending(false);
+  }, [socketStatus]);
+
+  useEffect(() => () => {
+    if (shutdownTimerRef.current !== null) window.clearTimeout(shutdownTimerRef.current);
   }, []);
 
   const lines = useMemo(() => {
@@ -113,6 +130,17 @@ export function TermuxStreamView({
     } catch {}
   };
 
+  const requestShutdown = () => {
+    if (!window.confirm('Shut down the Termux daemon and disconnect all running Minecraft bots? You will need to start it again from Termux.')) return;
+    if (!onShutdown()) return;
+    setShutdownPending(true);
+    shutdownTimerRef.current = window.setTimeout(() => {
+      shutdownTimerRef.current = null;
+      setShutdownPending(false);
+      onShutdownTimeout();
+    }, 8000);
+  };
+
   return (
     <section className="pa-termux-stream mx-auto flex h-[calc(100dvh-120px)] min-h-[480px] max-w-7xl flex-col overflow-hidden rounded-2xl border border-[#514d42] bg-[#211f1c] text-[#eee8dc] shadow-2xl">
       <header className="flex flex-col gap-4 border-b border-[#4b473e] bg-gradient-to-r from-[#302e29] via-[#282722] to-[#29332b] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -130,6 +158,9 @@ export function TermuxStreamView({
             <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400 shadow-[0_0_8px_#6acb72]' : 'bg-[#7c786e]'}`} />
             {isOnline ? 'Daemon online' : 'Daemon offline'}
           </span>
+          <button type="button" onClick={requestShutdown} disabled={!isOnline || shutdownPending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#704a42] bg-[#392724] px-3 text-xs font-bold text-[#e8b7a9] transition hover:border-[#a15f51] hover:bg-[#472c28] disabled:cursor-not-allowed disabled:opacity-40" title="Shut down Termux and disconnect all bots">
+            <Power className="h-3.5 w-3.5" /> {shutdownPending ? 'Shutting down…' : 'Shut down'}
+          </button>
           <button type="button" onClick={copyLines} disabled={!lines.length} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#565145] bg-[#302e29] px-3 text-xs font-bold text-[#ded6c7] transition hover:border-emerald-700 hover:bg-[#38362f] disabled:opacity-40" title="Copy visible stream lines">
             <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy'}
           </button>

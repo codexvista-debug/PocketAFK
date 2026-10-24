@@ -3,7 +3,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   X,
-  FileText,
   Search,
   Copy,
   Check,
@@ -262,7 +261,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
         {/* Filter and Action Bar */}
         <div className="pa-logs-toolbar px-5 py-3 border-b border-slate-100 bg-white flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-200 shrink-0">
-            <span className="w-7 h-7 rounded-lg bg-emerald-950/60 border border-emerald-700/60 grid place-items-center text-emerald-300"><FileText className="w-3.5 h-3.5" /></span>
+            <span className="w-7 h-7 rounded-lg bg-emerald-950/60 border border-emerald-700/60 grid place-items-center"><span className="pa-item-icon pa-icon-chat pa-logbook-icon" aria-hidden="true" /></span>
             <span>All events</span>
             <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-300">{unifiedLogs.length}</span>
           </div>
