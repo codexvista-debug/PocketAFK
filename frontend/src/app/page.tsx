@@ -602,7 +602,6 @@ export default function Dashboard() {
     daemonConnections,
     authToken,
     saveSettings,
-    reconnect: reconnectDaemon,
     startBot,
     stopBot,
     restartBot,
@@ -1127,8 +1126,6 @@ export default function Dashboard() {
               console.log(`[PocketAFK] Auto-syncing discovered daemon tunnel for @${currentUser}:`, targetUrl);
               saveSettings(targetUrl, targetToken);
               setAutoSynced(true);
-            } else if (socketStatus === 'DISCONNECTED') {
-              reconnectDaemon();
             }
           }
         }
@@ -1149,7 +1146,7 @@ export default function Dashboard() {
       isMounted = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings, reconnectDaemon]);
+  }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings]);
 
   // Whenever user opens the Termux Daemon Bridge modal, fetch fresh tunnel from API immediately
   useEffect(() => {
@@ -2345,15 +2342,6 @@ export default function Dashboard() {
           showToast('Termux daemon bridge settings saved.', 'success');
         }}
         termuxCommand={termuxCommand}
-        onRestartDaemon={async () => {
-          restartDaemon('Dashboard reset requested by user');
-          setSessionStartTimes({});
-          if (currentUser) {
-            localStorage.removeItem(`pocketafk_sessions_${currentUser}`);
-          }
-          showToast('Restarting daemon: all Minecraft sessions & sockets reset.', 'info');
-        }}
-        isDaemonOnline={socketStatus === 'AUTHENTICATED'}
       />
 
       {/* Dangerous Settings Modal */}
@@ -2980,6 +2968,17 @@ export default function Dashboard() {
                     return sent;
                   }}
                   onShutdownTimeout={() => showToast('No shutdown response. Restart the Termux launcher once so it can receive the shutdown update.', 'error')}
+                  onRestart={() => {
+                    const sent = restartDaemon('Dashboard restart requested by user');
+                    if (sent) {
+                      setSessionStartTimes({});
+                      showToast('Restart requested. Waiting for the daemon to reconnect…', 'info');
+                    } else {
+                      showToast('Could not restart: connect to the Termux daemon first.', 'error');
+                    }
+                    return sent;
+                  }}
+                  onRestartTimeout={() => showToast('The daemon has not reconnected yet. Check that Termux is still running and that its tunnel is online.', 'error')}
                 />
               )}
 

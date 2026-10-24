@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatMessage, QuickCommandItem } from '../types';
 import { Send, MessageSquare, Users, ChevronDown, Check, Pencil, ArrowDownToLine, Pause } from 'lucide-react';
 import { MinecraftChatMessage, stripMinecraftFormatting } from './MinecraftChatMessage';
@@ -71,6 +71,43 @@ export const Terminal: React.FC<TerminalProps> = ({
   );
   const onlineSenders = availableSenders.filter((sender) => sender.isOnline).length;
   const composerDisabled = disabled || availableSenders.length === 0 || (selectedSenderAccount ? !selectedSenderAccount.isOnline : onlineSenders === 0);
+  const messageGroups = useMemo(() => {
+    type MessageGroup = {
+      message: ChatMessage;
+      recipients: Array<{ id: string; username: string }>;
+      recipientKeys: Set<string>;
+      lastTimestamp: number;
+    };
+    const groups: MessageGroup[] = [];
+    const groupsBySignature = new Map<string, MessageGroup[]>();
+    const sorted = [...messages].sort((a, b) => a.timestamp - b.timestamp);
+    for (const message of sorted) {
+      const username = (message.accountUsername || '').trim();
+      const normalizedText = stripMinecraftFormatting(message.raw || message.formattedText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const serverKey = message.serverId || (message.botId.includes('__') ? message.botId.split('__')[0] : message.botId);
+      const signature = `${serverKey}|${normalizedText}`;
+      const accountKey = username.toLowerCase();
+      const sameSignatureGroups = groupsBySignature.get(signature) || [];
+      const matchingGroup = username && normalizedText
+        ? [...sameSignatureGroups].reverse().find((group) => message.timestamp - group.lastTimestamp <= 3000 && !group.recipientKeys.has(accountKey))
+        : undefined;
+      if (matchingGroup) {
+        matchingGroup.recipients.push({ id: username, username });
+        matchingGroup.recipientKeys.add(accountKey);
+        matchingGroup.lastTimestamp = message.timestamp;
+      } else {
+        const group: MessageGroup = {
+          message,
+          recipients: username ? [{ id: username, username }] : [],
+          recipientKeys: new Set(username ? [accountKey] : []),
+          lastTimestamp: message.timestamp,
+        };
+        groups.push(group);
+        groupsBySignature.set(signature, [...sameSignatureGroups, group]);
+      }
+    }
+    return groups.map(({ message, recipients }) => ({ message, recipients }));
+  }, [messages]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -223,7 +260,7 @@ export const Terminal: React.FC<TerminalProps> = ({
         ref={scrollContainerRef}
         className="pa-chat-stream flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 border-b border-slate-200 flex flex-col space-y-1"
       >
-        {messages.length === 0 ? (
+        {messageGroups.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3 select-none py-16">
             <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-300">
               <MessageSquare className="h-6 w-6 stroke-[1.5]" />
@@ -239,14 +276,8 @@ export const Terminal: React.FC<TerminalProps> = ({
             )}
           </div>
         ) : (
-          messages.map((msg, idx) => {
+          messageGroups.map(({ message: msg, recipients }, idx) => {
             const player = playerForMessage(msg);
-            const accountName = (msg.accountUsername || '').toLowerCase();
-            const messageAccount = availableSenders.find((account) =>
-              [account.ign, account.name, account.id].some((name) => name?.toLowerCase() === accountName)
-            );
-            const accountLabel = messageAccount ? (messageAccount.ign || messageAccount.name) : msg.accountUsername;
-            const isTooltipOpen = Boolean(messageAccount && openRecipientTooltip === msg.id);
             return (
             <div className="pa-chat-message-row" key={msg.id || idx}>
               {player ? (
@@ -273,29 +304,37 @@ export const Terminal: React.FC<TerminalProps> = ({
                 <MinecraftChatMessage message={msg} showTimestamp={false} compact darkMode />
               </div>
               <div className="pa-chat-message-meta">
-                {messageAccount && (
-                  <span className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setOpenRecipientTooltip(isTooltipOpen ? null : msg.id)}
-                      className="pa-chat-recipient-head"
-                      aria-label={`Received by ${accountLabel}`}
-                      aria-expanded={isTooltipOpen}
-                      title={accountLabel}
-                    >
-                      <img
-                        src={`https://minotar.net/helm/${encodeURIComponent(accountLabel || '')}/24.png`}
-                        alt=""
-                        loading="lazy"
-                        onError={(event) => {
-                          if (event.currentTarget.src.includes('minotar.net')) event.currentTarget.src = `https://mc-heads.net/avatar/${encodeURIComponent(accountLabel || '')}/24`;
-                          else event.currentTarget.style.visibility = 'hidden';
-                        }}
-                      />
-                    </button>
-                    {isTooltipOpen && <span role="tooltip" className="pa-chat-recipient-tooltip">{accountLabel}</span>}
-                  </span>
-                )}
+                {recipients.map((recipient) => {
+                  const account = availableSenders.find((candidate) =>
+                    [candidate.ign, candidate.name, candidate.id].some((name) => name?.trim().toLowerCase() === recipient.username.toLowerCase())
+                  );
+                  const accountLabel = account?.ign || account?.name || recipient.username;
+                  const tooltipKey = `${msg.id}:${recipient.id}`;
+                  const isTooltipOpen = openRecipientTooltip === tooltipKey;
+                  return (
+                    <span key={recipient.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenRecipientTooltip(isTooltipOpen ? null : tooltipKey)}
+                        className="pa-chat-recipient-head"
+                        aria-label={`Received by ${accountLabel}`}
+                        aria-expanded={isTooltipOpen}
+                        title={accountLabel}
+                      >
+                        <img
+                          src={`https://minotar.net/helm/${encodeURIComponent(accountLabel)}/20.png`}
+                          alt=""
+                          loading="lazy"
+                          onError={(event) => {
+                            if (event.currentTarget.src.includes('minotar.net')) event.currentTarget.src = `https://mc-heads.net/avatar/${encodeURIComponent(accountLabel)}/20`;
+                            else event.currentTarget.style.visibility = 'hidden';
+                          }}
+                        />
+                      </button>
+                      {isTooltipOpen && <span role="tooltip" className="pa-chat-recipient-tooltip">{accountLabel}</span>}
+                    </span>
+                  );
+                })}
                 <time
                   className="pa-chat-relative-time"
                   dateTime={new Date(msg.timestamp || now).toISOString()}

@@ -148,6 +148,13 @@ export function useDaemonSocket(
   }, [currentUser]);
 
   const connect = useCallback(() => {
+    // The page can request an immediate reconnect while the socket close
+    // handler already has a retry queued. Cancel that retry before opening a
+    // new socket so its timer cannot replace a slower, still-connecting socket.
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (!enabled) {
       if (socketRef.current) {
         try {
@@ -401,6 +408,15 @@ export function useDaemonSocket(
         if (!sessionRevokedRef.current && enabled && daemonUrl && !daemonUrl.includes('localhost')) {
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
+            const userKey = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+            const latestUrl = localStorage.getItem(`pocketafk_daemon_url_${userKey}`) || daemonUrl;
+            const latestToken = localStorage.getItem(`pocketafk_daemon_token_${userKey}`) || authToken;
+            if (latestUrl !== daemonUrl || latestToken !== authToken) {
+              setDaemonUrl(latestUrl);
+              setAuthToken(latestToken);
+              return;
+            }
             connect();
           }, 2000);
         }
