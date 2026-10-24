@@ -78,8 +78,8 @@ export async function loadServersFromSupabase(currentUser: string): Promise<Serv
  * Universal Minecraft Accounts Loader:
  * Fetches all verified Minecraft accounts stored in Supabase for this user.
  */
-export async function loadAccountsFromSupabase(currentUser: string): Promise<MinecraftAccount[]> {
-  if (!supabase || !currentUser) return [];
+export async function loadAccountsFromSupabase(currentUser: string, preferredAccounts: MinecraftAccount[] = []): Promise<MinecraftAccount[] | null> {
+  if (!supabase || !currentUser) return null;
   try {
     const cleanUser = currentUser.trim();
     const { data, error } = await supabase
@@ -88,10 +88,15 @@ export async function loadAccountsFromSupabase(currentUser: string): Promise<Min
       .ilike('username', cleanUser)
       .order('created_at', { ascending: true });
 
-    if (error || !data) return [];
+    if (error || !data) return null;
 
     const accounts: MinecraftAccount[] = [];
     const seen = new Set<string>();
+    const preferredIds = new Map(
+      preferredAccounts
+        .filter((account) => account.id && (account.ign || account.username))
+        .map((account) => [(account.ign || account.username).trim().toLowerCase(), account.id])
+    );
 
     data.forEach((row) => {
       const botName = (row.bot_name || '').trim();
@@ -102,7 +107,9 @@ export async function loadAccountsFromSupabase(currentUser: string): Promise<Min
       if (!seen.has(key)) {
         seen.add(key);
         accounts.push({
-          id: `acc_${row.id}`,
+          // Keep IDs created by the first browser that linked this account. Server profiles
+          // store these IDs, so replacing them with the database UUID orphaned assignments.
+          id: row.settings?.pocketafk_account_id || preferredIds.get(key) || `acc_${row.id}`,
           username: botName,
           ign: botName,
           auth_type: 'microsoft',
@@ -142,8 +149,14 @@ export async function syncAllToSupabase(
     // 2. Fetch current real account rows for this user in Supabase
     const { data: existingRows } = await supabase
       .from('accounts')
-      .select('id, bot_name, server_host')
+      .select('id, bot_name, server_host, settings')
       .ilike('username', cleanUser);
+
+    const rowsByBotName = new Map(
+      (existingRows || [])
+        .map((row) => [(row.bot_name || '').trim().toLowerCase(), row] as const)
+        .filter(([name]) => name && !name.startsWith('__'))
+    );
 
     const existingBotNames = new Set(
       (existingRows || [])
@@ -167,10 +180,21 @@ export async function syncAllToSupabase(
             server_host: firstServer?.serverHost || 'donutsmp.net',
             server_port: firstServer?.serverPort || 25565,
             server_version: firstServer?.serverVersion || 'auto',
-            settings: acc.settings || {},
+            settings: { ...(acc.settings || {}), pocketafk_account_id: acc.id },
           },
         ]);
         existingBotNames.add(ign.toLowerCase());
+      } else {
+        const row = rowsByBotName.get(ign.toLowerCase());
+        if (row && !row.settings?.pocketafk_account_id) {
+          await supabase
+            .from('accounts')
+            .update({
+              settings: { ...(row.settings || {}), pocketafk_account_id: acc.id },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', row.id);
+        }
       }
     }
   } catch (err) {

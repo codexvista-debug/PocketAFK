@@ -34,7 +34,8 @@ export function useDaemonSocket(
   activeBotId?: string | null,
   onAccountVerified?: (data: AccountVerifiedData) => void,
   enabled: boolean = true,
-  currentUser?: string | null
+  currentUser?: string | null,
+  onSessionRevoked?: () => void
 ) {
   const [daemonUrl, setDaemonUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -78,11 +79,15 @@ export function useDaemonSocket(
   const lastDaemonPongAtRef = useRef(0);
   const onAccountVerifiedRef = useRef(onAccountVerified);
   onAccountVerifiedRef.current = onAccountVerified;
+  const onSessionRevokedRef = useRef(onSessionRevoked);
+  onSessionRevokedRef.current = onSessionRevoked;
+  const sessionRevokedRef = useRef(false);
 
   // Seamless user switching: close old socket and reload credentials when switching account
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+    sessionRevokedRef.current = false;
     
     // Close existing socket connection immediately
     if (socketRef.current) {
@@ -253,6 +258,16 @@ export function useDaemonSocket(
               });
               break;
 
+            case 'SESSION_REVOKED':
+              sessionRevokedRef.current = true;
+              if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+              }
+              setStatus('DISCONNECTED');
+              onSessionRevokedRef.current?.();
+              break;
+
             case 'BOT_STATE': {
               const { botId, state, reason, connectedAt, uptime, username, version } = data.payload;
               if (botId) {
@@ -383,7 +398,7 @@ export function useDaemonSocket(
           clearInterval(pingIntervalRef.current);
           pingIntervalRef.current = null;
         }
-        if (enabled && daemonUrl && !daemonUrl.includes('localhost')) {
+        if (!sessionRevokedRef.current && enabled && daemonUrl && !daemonUrl.includes('localhost')) {
           if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
@@ -495,6 +510,11 @@ export function useDaemonSocket(
     setBotStates({});
     setBotStateReasons({});
     return sendJson({ type: 'SHUTDOWN_DAEMON', payload: { reason } });
+  }, [sendJson]);
+
+  const revokeDaemonConnection = useCallback((connectionId: string) => {
+    if (!connectionId) return false;
+    return sendJson({ type: 'REVOKE_CONNECTION', payload: { connectionId } });
   }, [sendJson]);
 
   const sendChat = useCallback((botId: string, message: string, targetAccount?: string) => {
@@ -624,6 +644,7 @@ export function useDaemonSocket(
     restartBot,
     restartDaemon,
     shutdownDaemon,
+    revokeDaemonConnection,
     sendChat,
     clickSlot,
     closeWindow,

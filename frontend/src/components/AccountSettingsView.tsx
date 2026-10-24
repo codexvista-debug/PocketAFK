@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Activity, AlertCircle, Check, CheckCircle2, Clock3, Copy, KeyRound, Link2, LockKeyhole, Radio, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
+import { Activity, AlertCircle, Check, CheckCircle2, Clock3, Copy, KeyRound, Link2, LockKeyhole, LogOut, Radio, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
 import { DaemonConnectionSnapshot, SocketStatus } from '../lib/useDaemonSocket';
 
 interface AccountSettingsViewProps {
@@ -10,6 +10,7 @@ interface AccountSettingsViewProps {
   daemonUrl: string;
   daemonConnections: DaemonConnectionSnapshot | null;
   onPasswordChanged: (secretCode: string) => void;
+  onDisconnectConnection: (connectionId: string) => boolean;
 }
 
 function safeEndpoint(value: string) {
@@ -29,7 +30,7 @@ function statusLabel(status: SocketStatus) {
   return 'Disconnected';
 }
 
-export function AccountSettingsView({ username, socketStatus, daemonUrl, daemonConnections, onPasswordChanged }: AccountSettingsViewProps) {
+export function AccountSettingsView({ username, socketStatus, daemonUrl, daemonConnections, onPasswordChanged, onDisconnectConnection }: AccountSettingsViewProps) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,8 +38,17 @@ export function AccountSettingsView({ username, socketStatus, daemonUrl, daemonC
   const [updatedInstallerCommand, setUpdatedInstallerCommand] = useState('');
   const [commandCopied, setCommandCopied] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const connected = socketStatus === 'AUTHENTICATED';
   const endpoint = useMemo(() => safeEndpoint(daemonUrl), [daemonUrl]);
+
+  const disconnectSession = (connectionId: string, isCurrent: boolean) => {
+    const targetLabel = isCurrent ? 'this browser' : 'this browser session';
+    if (!window.confirm(`Disconnect ${targetLabel}? It will be signed out and must enter the PocketAFK username and password to sign in again.`)) return;
+    if (!onDisconnectConnection(connectionId)) return;
+    setDisconnectingId(connectionId);
+    window.setTimeout(() => setDisconnectingId((active) => active === connectionId ? null : active), 3000);
+  };
 
   const handlePasswordChange = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -117,7 +127,7 @@ export function AccountSettingsView({ username, socketStatus, daemonUrl, daemonC
               <div className="pa-ws-list-title"><span>Connected browser sessions</span><span>{daemonConnections.connections.length}</span></div>
               {daemonConnections.connections.length ? daemonConnections.connections.map((connection, index) => {
                 const isCurrent = connection.id === daemonConnections.currentConnectionId;
-                return <div key={connection.id} className="pa-ws-row"><span className={`pa-ws-session-icon ${isCurrent ? 'is-current' : ''}`}><Wifi size={14}/></span><div className="pa-ws-session-copy"><b>{isCurrent ? 'This dashboard' : `Browser session ${index + 1}`}</b><small><Clock3 size={12}/> Connected {new Date(connection.connectedAt).toLocaleString()}</small></div><span className="pa-ws-session-id">{connection.id.slice(0, 8)}</span></div>;
+                return <div key={connection.id} className="pa-ws-row"><span className={`pa-ws-session-icon ${isCurrent ? 'is-current' : ''}`}><Wifi size={14}/></span><div className="pa-ws-session-copy"><b>{isCurrent ? 'This dashboard' : `Browser session ${index + 1}`}</b><small><Clock3 size={12}/> Connected {new Date(connection.connectedAt).toLocaleString()}</small></div><span className="pa-ws-session-id">{connection.id.slice(0, 8)}</span><button type="button" className="pa-ws-disconnect" onClick={() => disconnectSession(connection.id, isCurrent)} disabled={disconnectingId === connection.id} title={isCurrent ? 'Sign out this dashboard' : 'Disconnect this browser session'} aria-label={isCurrent ? 'Sign out this dashboard' : `Disconnect browser session ${index + 1}`}><LogOut size={13}/><span>{disconnectingId === connection.id ? 'Requested' : isCurrent ? 'Sign out' : 'Disconnect'}</span></button></div>;
               }) : <div className="pa-ws-empty">No browser sessions are currently attached.</div>}
             </div>
           ) : connected ? (

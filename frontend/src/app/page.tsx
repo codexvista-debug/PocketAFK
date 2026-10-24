@@ -197,6 +197,7 @@ export default function Dashboard() {
     }
     return null;
   });
+  const sessionRevokedHandlerRef = useRef<() => void>(() => {});
   const [chatAutoScrollEnabled, setChatAutoScrollEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     const userKey = (localStorage.getItem('pocketafk_user') || 'guest').trim().toLowerCase();
@@ -581,6 +582,7 @@ export default function Dashboard() {
     restartBot,
     restartDaemon,
     shutdownDaemon,
+    revokeDaemonConnection,
     sendChat,
     clickSlot,
     closeWindow,
@@ -590,7 +592,7 @@ export default function Dashboard() {
     updateWebhookConfig,
     msAuthData,
     clearMsAuth,
-  } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser);
+  } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser, () => sessionRevokedHandlerRef.current());
 
   // Device-code prompts from a running bot can occur when its saved Microsoft
   // session expires. Keep those in the background; only show the blocking auth
@@ -620,6 +622,7 @@ export default function Dashboard() {
     saveSettings('', '');
     setToast(null);
   }, [currentUser, saveSettings]);
+  sessionRevokedHandlerRef.current = handleLogout;
 
   // Helper to resolve an account for a server profile
   const resolveServerAccount = useCallback(
@@ -1271,7 +1274,7 @@ export default function Dashboard() {
 
           const [remoteServers, remoteAccounts, remoteNotes, remoteWebhooks] = await Promise.all([
             loadServersFromSupabase(currentUser),
-            loadAccountsFromSupabase(currentUser),
+            loadAccountsFromSupabase(currentUser, localAccs),
             loadNotesFromSupabase(currentUser),
             loadWebhookConfigFromSupabase(currentUser),
           ]);
@@ -1316,6 +1319,8 @@ export default function Dashboard() {
             }
             setAccounts(sanitized);
             localStorage.setItem(accKey, JSON.stringify(sanitized));
+            // Persist stable client account IDs so profiles stay assigned across devices.
+            syncAllToSupabase(currentUser, sanitized, finalServers).catch(() => {});
           } else {
             setAccounts([]);
             localStorage.setItem(accKey, JSON.stringify([]));
@@ -1351,6 +1356,66 @@ export default function Dashboard() {
 
     loadData();
   }, [currentUser, handleLogout]);
+
+  // A daemon connection already broadcasts bot, chat, inventory, and telemetry events
+  // to every authenticated browser socket. Refresh shared profile/account configuration
+  // from Supabase too, because server assignments and settings are not daemon state.
+  useEffect(() => {
+    if (!currentUser || !supabase) return;
+    let cancelled = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const refreshSharedConfiguration = async () => {
+      if (cancelled) return;
+      try {
+        let preferredAccounts: MinecraftAccount[] = [];
+        try {
+          const saved = localStorage.getItem(`pocketafk_accounts_${currentUser}`);
+          if (saved) preferredAccounts = sanitizeAccounts(JSON.parse(saved));
+        } catch {}
+
+        const [remoteServers, remoteAccounts] = await Promise.all([
+          loadServersFromSupabase(currentUser),
+          loadAccountsFromSupabase(currentUser, preferredAccounts),
+        ]);
+        if (cancelled) return;
+
+        if (remoteServers) {
+          const key = `pocketafk_servers_${currentUser}`;
+          const serialized = JSON.stringify(remoteServers);
+          if (localStorage.getItem(key) !== serialized) {
+            localStorage.setItem(key, serialized);
+            setServers(remoteServers);
+            if (remoteServers.length) {
+              setActiveServerId((previous) => remoteServers.some((server) => server.id === previous) ? previous : remoteServers[0].id);
+            } else {
+              setActiveServerId('');
+            }
+          }
+        }
+
+        if (remoteAccounts) {
+          const synchronized = sanitizeAccounts(remoteAccounts);
+          const key = `pocketafk_accounts_${currentUser}`;
+          const serialized = JSON.stringify(synchronized);
+          if (localStorage.getItem(key) !== serialized) {
+            localStorage.setItem(key, serialized);
+            setAccounts(synchronized);
+          }
+        }
+      } catch (error) {
+        console.warn('Could not refresh shared PocketAFK configuration:', error);
+      } finally {
+        if (!cancelled) refreshTimer = setTimeout(refreshSharedConfiguration, 2500);
+      }
+    };
+
+    refreshTimer = setTimeout(refreshSharedConfiguration, 2500);
+    return () => {
+      cancelled = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [currentUser]);
 
   // Microsoft OAuth Device Code Sign-In with Target Identity Verification Guard
   const handleStartMicrosoftLogin = async (target?: MinecraftAccount | string) => {
@@ -2725,6 +2790,12 @@ export default function Dashboard() {
                   socketStatus={socketStatus}
                   daemonUrl={daemonUrl}
                   daemonConnections={daemonConnections}
+                  onDisconnectConnection={(connectionId) => {
+                    const sent = revokeDaemonConnection(connectionId);
+                    if (!sent) showToast('Could not disconnect this browser session. Reconnect to the daemon and try again.', 'error');
+                    else showToast('Browser session disconnect requested. It will need the PocketAFK password to sign in again.', 'info');
+                    return sent;
+                  }}
                   onPasswordChanged={(newSecret) => {
                     const userKey = currentUser.trim().toLowerCase();
                     localStorage.setItem(`pocketafk_secret_${currentUser}`, newSecret);

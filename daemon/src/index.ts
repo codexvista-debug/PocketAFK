@@ -178,6 +178,19 @@ wss.on('connection', (ws: WebSocket, req) => {
         return;
       }
 
+      if (parsed.type === 'REVOKE_CONNECTION') {
+        const targetId = typeof parsed.payload?.connectionId === 'string' ? parsed.payload.connectionId : '';
+        const target = Array.from(clientConnections.entries()).find(([, connection]) => connection.id === targetId)?.[0];
+        if (!target || !authenticatedClients.has(target)) {
+          ws.send(JSON.stringify({ type: 'CONNECTION_REVOKE_RESULT', payload: { connectionId: targetId, success: false } }));
+          return;
+        }
+        target.send(JSON.stringify({ type: 'SESSION_REVOKED', payload: { reason: 'This browser session was disconnected from PocketAFK.' } }));
+        setTimeout(() => target.close(4001, 'Reauthentication required'), 100);
+        ws.send(JSON.stringify({ type: 'CONNECTION_REVOKE_RESULT', payload: { connectionId: targetId, success: true } }));
+        return;
+      }
+
       // Forward to bot manager
       botManager.handleClientMessage(parsed);
     } catch (err: any) {
