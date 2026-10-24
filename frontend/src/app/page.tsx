@@ -93,7 +93,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { DashboardOverview } from '../components/DashboardOverview';
+import { DashboardOverview, DaemonSession } from '../components/DashboardOverview';
 import { AuthLanding } from '../components/AuthLanding';
 import { AccountSettingsView } from '../components/AccountSettingsView';
 import { TermuxStreamView } from '../components/TermuxStreamView';
@@ -263,6 +263,9 @@ export default function Dashboard() {
     lastDisconnectedAt: number | null;
     statusStorageAvailable: boolean;
   }>({ daemonStartedAt: null, lastDisconnectedAt: null, statusStorageAvailable: false });
+  const [daemonSessions, setDaemonSessions] = useState<DaemonSession[]>([]);
+  const [daemonSessionsLoading, setDaemonSessionsLoading] = useState(false);
+  const daemonHistoryEventIdsRef = useRef(new Set<string>());
 
   // Connect table state
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -593,6 +596,71 @@ export default function Dashboard() {
     msAuthData,
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser, () => sessionRevokedHandlerRef.current());
+
+  const refreshDaemonSessions = useCallback(async () => {
+    const username = currentUser?.trim().toLowerCase();
+    const token = (secretCode || authToken || '').trim();
+    if (!username || !token) {
+      setDaemonSessions([]);
+      return;
+    }
+    setDaemonSessionsLoading(true);
+    try {
+      const response = await fetch('/api/daemon-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'read', username, token }),
+        cache: 'no-store',
+      });
+      const data = await response.json();
+      if (response.ok && Array.isArray(data.sessions)) setDaemonSessions(data.sessions);
+    } catch {
+      // Keep the last successfully loaded session list visible during brief outages.
+    } finally {
+      setDaemonSessionsLoading(false);
+    }
+  }, [currentUser, secretCode, authToken]);
+
+  useEffect(() => {
+    void refreshDaemonSessions();
+    const timer = window.setInterval(() => void refreshDaemonSessions(), 15000);
+    return () => window.clearInterval(timer);
+  }, [refreshDaemonSessions]);
+
+  useEffect(() => {
+    const username = currentUser?.trim().toLowerCase();
+    const token = (secretCode || authToken || '').trim();
+    const startedAt = daemonRuntimeInfo?.startedAt ?? daemonStatusHistory.daemonStartedAt;
+    if (!username || !token || socketStatus !== 'AUTHENTICATED' || !startedAt) return;
+
+    const recentEvents = allActivityLogs.filter((log) =>
+      (log.type === 'spawn' || log.type === 'disconnect') &&
+      Number(log.timestamp) >= Number(startedAt) &&
+      !daemonHistoryEventIdsRef.current.has(`${log.botId}:${log.id}`)
+    );
+    for (const log of recentEvents) {
+      const [serverKey, accountKey] = log.botId.split('__');
+      const profile = servers.find((server) => server.id === (log.serverId || serverKey));
+      const account = accounts.find((item) => item.id === accountKey || item.ign?.toLowerCase() === accountKey?.toLowerCase() || item.ign?.toLowerCase() === log.accountName?.toLowerCase());
+      const eventId = `${log.botId}:${log.id}`;
+      daemonHistoryEventIdsRef.current.add(eventId);
+      void fetch('/api/daemon-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'event', username, token, eventId,
+          eventType: log.type,
+          botId: log.botId,
+          accountName: log.accountName || account?.ign || account?.username || accountKey || log.botId,
+          serverHost: log.serverHost || profile?.serverHost || profile?.name || 'Unknown server',
+          occurredAt: new Date(Number(log.timestamp)).toISOString(),
+        }),
+      }).then((response) => {
+        if (response.ok) void refreshDaemonSessions();
+        else daemonHistoryEventIdsRef.current.delete(eventId);
+      }).catch(() => daemonHistoryEventIdsRef.current.delete(eventId));
+    }
+  }, [allActivityLogs, accounts, servers, currentUser, secretCode, authToken, socketStatus, daemonRuntimeInfo?.startedAt, daemonStatusHistory.daemonStartedAt, refreshDaemonSessions]);
 
   // Device-code prompts from a running bot can occur when its saved Microsoft
   // session expires. Keep those in the background; only show the blocking auth
@@ -2817,20 +2885,10 @@ export default function Dashboard() {
               {/* VIEW: DASHBOARD OVERVIEW */}
               {activeMainView === 'dashboard' && (
                 <DashboardOverview
-                  accounts={accounts}
-                  servers={servers}
-                  socketStatus={socketStatus}
-                  currentUser={currentUser}
-                  userRank={userRank}
-                  onNavigate={(view, srvId) => {
-                    setActiveMainView(view);
-                    if (srvId) setActiveServerId(srvId);
-                  }}
-                  onOpenAddAccount={() => handleStartMicrosoftLogin()}
-                  onOpenAddServer={() => {
-                    setEditingServer(null);
-                    setIsServerModalOpen(true);
-                  }}
+                  sessions={daemonSessions}
+                  loading={daemonSessionsLoading}
+                  daemonOnline={socketStatus === 'AUTHENTICATED'}
+                  onRefresh={refreshDaemonSessions}
                 />
               )}
 

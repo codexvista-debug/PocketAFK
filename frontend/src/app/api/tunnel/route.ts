@@ -96,6 +96,11 @@ export async function GET(req: NextRequest) {
           p_is_online: false,
           p_last_disconnected_at: new Date(lastHeartbeatAt).toISOString(),
         });
+        await supabase?.rpc('finish_daemon_session', {
+          p_username: username,
+          p_daemon_token: daemonToken,
+          p_ended_at: new Date(lastHeartbeatAt).toISOString(),
+        });
       } catch {
         // Uptime display still has the current request's inferred disconnect time.
       }
@@ -200,6 +205,11 @@ export async function POST(req: NextRequest) {
             p_daemon_token: cleanToken,
             p_is_online: false,
             p_last_disconnected_at: new Date(disconnectedAt).toISOString(),
+          });
+          await supabase.rpc('finish_daemon_session', {
+            p_username: cleanUsername,
+            p_daemon_token: cleanToken,
+            p_ended_at: new Date(disconnectedAt).toISOString(),
           });
 
           // Automatically mark all connected bot accounts for this user as disconnected
@@ -310,6 +320,13 @@ export async function POST(req: NextRequest) {
           p_daemon_started_at: action === 'heartbeat' ? null : new Date(record.updatedAt).toISOString(),
           p_last_heartbeat_at: new Date(record.updatedAt).toISOString(),
         });
+        if (action !== 'heartbeat') {
+          await supabase.rpc('begin_daemon_session', {
+            p_username: cleanUsername,
+            p_daemon_token: record.token,
+            p_started_at: new Date(record.updatedAt).toISOString(),
+          });
+        }
       } catch (e) {
         console.warn('Supabase tunnel registration error:', e);
       }

@@ -1,300 +1,137 @@
 'use client';
 
-import React from 'react';
-import {
-  Server,
-  Users,
-  ShieldCheck,
-  Cpu,
-  Zap,
-  Lock,
-  RefreshCw,
-  Smartphone,
-  Sparkles,
-  Layers,
-  ArrowRight,
-  Activity,
-  CheckCircle2,
-  HardDrive,
-  KeyRound,
-  ExternalLink,
-} from 'lucide-react';
-import { MinecraftAccount, ServerProfile, UserRank } from '../types';
-import { getRankConfig } from '../lib/ranks';
+import React, { useEffect, useState } from 'react';
+import { Activity, CalendarClock, ChevronRight, Clock3, RefreshCw, Server, Users, X } from 'lucide-react';
 
-interface DashboardOverviewProps {
-  accounts: MinecraftAccount[];
-  servers: ServerProfile[];
-  socketStatus: string;
-  currentUser: string | null;
-  userRank: UserRank;
-  onNavigate: (view: 'dashboard' | 'profile' | 'servers' | 'accounts', serverId?: string) => void;
-  onOpenAddAccount: () => void;
-  onOpenAddServer: () => void;
+export interface DaemonSessionBot {
+  id: string;
+  botId: string;
+  accountName: string;
+  serverHost: string;
+  connectedAt: string;
+  disconnectedAt: string | null;
 }
 
-export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
-  accounts,
-  servers,
-  socketStatus,
-  currentUser,
-  userRank,
-  onNavigate,
-  onOpenAddAccount,
-  onOpenAddServer,
-}) => {
-  const rankConfig = getRankConfig(userRank);
-  const isOnline = socketStatus === 'AUTHENTICATED';
-  const verifiedAccounts = accounts.filter((a) => a.verified);
+export interface DaemonSession {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  bots: DaemonSessionBot[];
+}
+
+interface DashboardOverviewProps {
+  sessions: DaemonSession[];
+  loading: boolean;
+  daemonOnline: boolean;
+  onRefresh: () => void;
+}
+
+const durationLabel = (from: string | number, to: string | number | null) => {
+  const ms = Math.max(0, (to ? new Date(to).getTime() : Date.now()) - new Date(from).getTime());
+  const seconds = Math.floor(ms / 1000);
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return [days && `${days}d`, (days || hours) && `${hours}h`, (days || hours || minutes) && `${minutes}m`, `${secs}s`].filter(Boolean).join(' ');
+};
+
+const dateLabel = (date: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
+
+export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sessions, loading, daemonOnline, onRefresh }) => {
+  const [selected, setSelected] = useState<DaemonSession | null>(null);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!selected) return;
+    const handleKey = (event: KeyboardEvent) => event.key === 'Escape' && setSelected(null);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selected]);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-in fade-in duration-200">
-      {/* 1. HERO BANNER */}
-      <div className="relative overflow-hidden rounded-3xl bg-white text-slate-900 p-6 sm:p-8 border border-slate-200 shadow-xs">
-        {/* Glow ambient effects */}
-        <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-emerald-100/50 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-16 w-80 h-80 bg-sky-100/40 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold tracking-wide">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              <span>PocketAFK v2.4 Java Core • 24/7 Mobile AFK Engine</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900">
-              Your 24/7 Minecraft AFK Operations Hub
-            </h1>
-
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              PocketAFK runs headless Java Minecraft bots directly on Android via Termux or lightweight background servers.
-              Keep cobblestone generators running, chunks loaded, and accounts active around the clock with zero computer power consumption.
-            </p>
-
-            <div className="flex items-center gap-3 pt-2 flex-wrap">
-              <button
-                onClick={() => onNavigate('servers')}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
-              >
-                <Server className="w-4 h-4" />
-                <span>Go to Servers</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('accounts')}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold transition shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
-              >
-                <Users className="w-4 h-4 text-slate-600" />
-                <span>Manage Accounts ({accounts.length}/{rankConfig.maxAccounts})</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column: Theme Switcher & Quick Metrics */}
-          {/* Quick Metrics Badge Card */}
-          <div className="grid grid-cols-2 gap-3 shrink-0 lg:w-72 bg-slate-50/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Daemon Status</span>
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-rose-500'}`} />
-                <span className="text-xs font-extrabold text-slate-900">{isOnline ? 'Active Online' : 'Standby / Offline'}</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">User Rank</span>
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="text-xs">{rankConfig.gemIcon}</span>
-                <span className="text-xs font-extrabold text-amber-600 truncate">{rankConfig.name}</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Server Profiles</span>
-              <span className="text-base font-black text-slate-900">{servers.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxServers}</span></span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-              <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Linked Java IGNs</span>
-              <span className="text-base font-black text-emerald-600">{verifiedAccounts.length} <span className="text-xs text-slate-400 font-normal">/ {rankConfig.maxAccounts}</span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. THE THREE CORE KNOWLEDGE CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Card 1: What is PocketAFK */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-slate-300 transition group">
-          <div className="space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-              <Smartphone className="w-5 h-5" />
-            </div>
-
+    <div className="mx-auto max-w-5xl animate-in fade-in duration-200 pb-10 text-[#eee9dc]">
+      <section className="overflow-hidden rounded-2xl border border-[#514d43] bg-[#252421]/95 shadow-2xl">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#454239] bg-gradient-to-r from-[#2e3028] to-[#252421] px-5 py-5 sm:px-7">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-700/60 bg-emerald-950/50 text-emerald-300"><CalendarClock className="h-5 w-5" /></span>
             <div>
-              <h3 className="font-extrabold text-base text-slate-900">What is PocketAFK?</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                A purpose-built Minecraft Java client engineered to run headless 24/7 on Android smartphones via Termux or background Linux instances.
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a8a18f]">Daemon history</p>
+              <h1 className="text-xl font-black sm:text-2xl">Recent sessions</h1>
+              <p className="mt-0.5 text-xs text-[#bcb5a6]">Your latest five Termux runs, newest first.</p>
             </div>
-
-            <ul className="space-y-2 text-xs text-slate-600 pt-1">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span><b>Zero Battery Drain:</b> Consumes under ~50MB RAM with zero 3D GPU rendering required.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span><b>24/7 Persistence:</b> Keeps chunk loaders active and mob farms harvesting all night without heating your PC.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span><b>Autonomous Reconnect:</b> Automatically logs back in after server restarts or network hiccups.</span>
-              </li>
-            </ul>
           </div>
-
-          <div className="pt-4 border-t border-slate-100 mt-4">
-            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60 inline-flex items-center gap-1.5">
-              <Zap className="w-3 h-3" />
-              Native Node.js Protocol
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${daemonOnline ? 'border-emerald-700/70 bg-emerald-950/50 text-emerald-300' : 'border-[#514d43] bg-[#302e29] text-[#bcb5a6]'}`}>
+              <span className={`h-2 w-2 rounded-full ${daemonOnline ? 'bg-emerald-400 animate-pulse' : 'bg-[#847e71]'}`} />{daemonOnline ? 'Daemon online' : 'Daemon offline'}
             </span>
+            <button onClick={onRefresh} aria-label="Refresh sessions" title="Refresh sessions" className="rounded-lg border border-[#514d43] bg-[#302e29] p-2 text-[#d8d1c2] transition hover:border-emerald-700 hover:text-emerald-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
           </div>
+        </header>
+
+        <div className="px-4 py-4 sm:px-7 sm:py-6">
+          {loading && sessions.length === 0 ? (
+            <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-[#bcb5a6]"><RefreshCw className="h-4 w-4 animate-spin" /> Loading daemon sessions…</div>
+          ) : sessions.length === 0 ? (
+            <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-[#514d43] bg-[#211f1c]/70 px-5 text-center">
+              <Activity className="mb-3 h-8 w-8 text-emerald-500/80" />
+              <h2 className="font-bold">No daemon sessions recorded yet</h2>
+              <p className="mt-1 max-w-md text-xs leading-relaxed text-[#bcb5a6]">Your next Termux start will appear here with its uptime. Bot connection details are collected while the dashboard is connected to the daemon.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sessions.slice(0, 5).map((session, index) => {
+                const active = !session.endedAt;
+                return (
+                  <button key={session.id} onClick={() => setSelected(session)} className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-[#4c493f] bg-[#2b2925] px-4 py-4 text-left transition hover:border-emerald-700/80 hover:bg-[#302f29] sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-5">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#575246] bg-[#353229] text-[#d7c99d]"><Server className="h-4 w-4" /></span>
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2 font-bold text-[#eee9dc]">Session {index + 1}<span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${active ? 'bg-emerald-900/70 text-emerald-300' : 'bg-[#403d35] text-[#c8c0b0]'}`}>{active ? 'RUNNING' : 'ENDED'}</span></span>
+                        <span className="mt-1 block truncate text-xs text-[#bcb5a6]">Started {dateLabel(session.startedAt)}</span>
+                      </span>
+                    </span>
+                    <span className="text-right sm:min-w-28 sm:text-left">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-[#928c7e]">Uptime</span>
+                      <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-extrabold text-emerald-200"><Clock3 className="h-3.5 w-3.5" />{durationLabel(session.startedAt, session.endedAt)}</span>
+                    </span>
+                    <span className="hidden items-center gap-1.5 text-xs text-[#aaa393] sm:inline-flex"><Users className="h-3.5 w-3.5" />{session.bots.length} bot{session.bots.length === 1 ? '' : 's'}<ChevronRight className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" /></span>
+                    <span className="col-span-2 flex items-center justify-between border-t border-[#454239] pt-2 text-[11px] text-[#aaa393] sm:hidden"><span>{session.bots.length} bot{session.bots.length === 1 ? '' : 's'}</span><span>Tap for details <ChevronRight className="inline h-3.5 w-3.5" /></span></span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[#454239] bg-[#211f1c]/70 px-5 py-3 text-[11px] text-[#9f998c] sm:px-7">
+          <span>Showing {Math.min(sessions.length, 5)} of the latest 5 sessions</span><span>Session details update as new activity arrives</span>
+        </footer>
+      </section>
 
-        {/* Card 2: How Accounts Are Stored */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-slate-300 transition group">
-          <div className="space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-              <ShieldCheck className="w-5 h-5" />
+      {selected && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => event.target === event.currentTarget && setSelected(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="daemon-session-title" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#5a5549] bg-[#262522] text-[#eee9dc] shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-[#454239] bg-gradient-to-r from-[#303128] to-[#262522] px-5 py-4 sm:px-6">
+              <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#a8a18f]">Daemon session details</p><h2 id="daemon-session-title" className="mt-1 text-lg font-black">Started {dateLabel(selected.startedAt)}</h2><p className="mt-1 text-xs text-[#bcb5a6]">{selected.endedAt ? `Ended ${dateLabel(selected.endedAt)}` : 'Still running'} · Uptime {durationLabel(selected.startedAt, selected.endedAt)}</p></div>
+              <button onClick={() => setSelected(null)} aria-label="Close details" className="rounded-lg p-2 text-[#bcb5a6] hover:bg-[#403d35] hover:text-white"><X className="h-5 w-5" /></button>
+            </header>
+            <div className="overflow-y-auto p-4 sm:p-6">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold"><Users className="h-4 w-4 text-emerald-300" />Bots in this session <span className="rounded-full bg-[#403d35] px-2 py-0.5 text-xs text-[#d6cfbf]">{selected.bots.length}</span></div>
+              {selected.bots.length ? <div className="space-y-2">{selected.bots.map((bot) => (
+                <div key={bot.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border border-[#4c493f] bg-[#2d2b27] p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:p-4">
+                  <div className="min-w-0"><div className="truncate font-bold">{bot.accountName}</div><div className="mt-1 truncate text-xs text-[#bcb5a6]">{bot.serverHost}</div></div>
+                  <div className="text-right sm:text-left"><div className="text-[10px] uppercase tracking-wider text-[#928c7e]">Connected</div><div className="mt-1 text-xs font-semibold">{dateLabel(bot.connectedAt)}</div></div>
+                  <div className="col-span-2 border-t border-[#454239] pt-2 text-xs text-[#c7c0b1] sm:col-span-1 sm:border-0 sm:pt-0 sm:text-right"><span className="text-[#928c7e]">Online for </span><b className="text-emerald-200">{durationLabel(bot.connectedAt, bot.disconnectedAt || selected.endedAt)}</b></div>
+                </div>
+              ))}</div> : <p className="rounded-xl border border-dashed border-[#514d43] p-5 text-center text-sm text-[#bcb5a6]">No bot connection details were captured for this session.</p>}
             </div>
-
-            <div>
-              <h3 className="font-extrabold text-base text-slate-900">How Are Accounts Stored?</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                PocketAFK uses official Microsoft OAuth 2.0 Device Code authorization (the exact same method used by Xbox &amp; Nintendo Switch).
-              </p>
-            </div>
-
-            <ul className="space-y-2 text-xs text-slate-600 pt-1">
-              <li className="flex items-start gap-2">
-                <Lock className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                <span><b>Zero Passwords:</b> You never type your Microsoft password on PocketAFK. Microsoft handles authentication directly.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <HardDrive className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                <span><b>Local 90-Day Tokens:</b> Rolling refresh tokens are saved locally in Termux (<code>~/.pocketafk_tokens/</code>) and survive restarts.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <KeyRound className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                <span><b>Private Isolation:</b> Every verification forces <code>prompt=login</code> so you can safely link multiple Microsoft accounts.</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 mt-4">
-            <span className="text-[11px] font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-200/60 inline-flex items-center gap-1.5">
-              <Lock className="w-3 h-3" />
-              100% Official Microsoft OAuth
-            </span>
-          </div>
+            <footer className="flex justify-end border-t border-[#454239] px-5 py-3 sm:px-6"><button onClick={() => setSelected(null)} className="rounded-lg border border-[#5a5549] bg-[#34312b] px-4 py-2 text-xs font-bold hover:border-emerald-700 hover:text-emerald-200">Close</button></footer>
+          </section>
         </div>
-
-        {/* Card 3: How Does It Work */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-slate-300 transition group">
-          <div className="space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-              <Cpu className="w-5 h-5" />
-            </div>
-
-            <div>
-              <h3 className="font-extrabold text-base text-slate-900">How Does It Work?</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                A distributed architecture connecting your phone or browser to the background daemon via real-time WebSockets.
-              </p>
-            </div>
-
-            <ul className="space-y-2 text-xs text-slate-600 pt-1">
-              <li className="flex items-start gap-2">
-                <Layers className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                <span><b>Dashboard UI:</b> Beautiful Next.js frontend gives full control over bots, live inventory, chat, and POV minimap.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Activity className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                <span><b>Live Telemetry:</b> Coordinates, health, yaw, nearby machines, and online players stream instantly in real-time.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Zap className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                <span><b>Automated Survival:</b> Background handlers manage Auto-Eat, Anti-AFK rotations, Totem equipping, and mob attacks.</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 mt-4">
-            <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60 inline-flex items-center gap-1.5">
-              <Activity className="w-3 h-3" />
-              WebSocket Bidirectional Sync
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. ARCHITECTURE VISUALIZATION */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-6">
-        <div>
-          <h2 className="text-lg font-black text-slate-900">Architecture &amp; Pipeline Overview</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            How PocketAFK orchestrates communication from your browser to your Minecraft server.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative">
-          {/* Step 1 */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              1
-            </div>
-            <h4 className="font-bold text-xs text-slate-900">Web Dashboard</h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Provides responsive controls, quick commands, inventory slots, chat receiver switching, and live player activity logs.
-            </p>
-          </div>
-
-          {/* Step 2 */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              2
-            </div>
-            <h4 className="font-bold text-xs text-slate-900">WebSocket Bridge</h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Maintains secure bidirectional communication between the dashboard and the background daemon on port 3001.
-            </p>
-          </div>
-
-          {/* Step 3 */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              3
-            </div>
-            <h4 className="font-bold text-xs text-slate-900">Termux Daemon</h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Runs in the background on your phone 24/7. Manages Mineflayer bot instances, token cache, and reconnect loops.
-            </p>
-          </div>
-
-          {/* Step 4 */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              4
-            </div>
-            <h4 className="font-bold text-xs text-slate-900">Minecraft Java Server</h4>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Connects to Paper, Purpur, Spigot, or Vanilla servers. Emulates official client packets to prevent kicks.
-            </p>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -236,6 +236,9 @@ export interface PlayerLogEntry {
 export interface ActivityLog {
   id: string;
   botId: string;
+  serverId?: string;
+  accountName?: string;
+  serverHost?: string;
   timestamp: number;
   type: 'status' | 'connect' | 'spawn' | 'command' | 'survival' | 'anti_afk' | 'disconnect' | 'reconnect' | 'chat' | 'control';
   message: string;
