@@ -2018,9 +2018,9 @@ export default function Dashboard() {
       case 'CONNECTING':
       case 'RECONNECTING':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs group-hover:bg-amber-200 transition">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-            Connecting...
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-[#3a3326] text-[#e7c985] border border-[#76633f] shadow-[inset_0_1px_0_#ffffff10] group-hover:bg-[#443b2b] transition">
+            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-[#d5ad5e] opacity-40 animate-ping" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#e5c16f]" /></span>
+            {state === 'RECONNECTING' ? 'Retrying' : 'Connecting'}
           </span>
         );
       case 'KICKED':
@@ -3643,7 +3643,7 @@ export default function Dashboard() {
                                           </button>
                                           {currentBotReason && (currentBotState === 'KICKED' || currentBotState === 'ERROR' || currentBotState === 'RECONNECTING') && (
                                             <span
-                                              className="text-[10px] text-rose-600 font-semibold max-w-[190px] truncate block leading-tight"
+                                              className={`mt-1 inline-flex max-w-[220px] items-center rounded-full border px-2 py-0.5 text-[10px] font-medium leading-tight ${currentBotState === 'RECONNECTING' ? 'border-[#65563b] bg-[#332e24] text-[#cfb978]' : 'border-rose-200 bg-rose-50 text-rose-700'}`}
                                               title={currentBotReason}
                                             >
                                               {currentBotReason}

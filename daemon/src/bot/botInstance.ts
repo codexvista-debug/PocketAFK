@@ -338,7 +338,7 @@ export class PocketBotInstance {
     }
 
     // Chat / Message handler
-    this.bot.on('message', (jsonMsg: any) => {
+    this.bot.on('message', (jsonMsg: any, position?: string) => {
       const rawText = jsonMsg.toString();
       let sourceText = '';
       try {
@@ -354,7 +354,9 @@ export class PocketBotInstance {
       const formatted = minecraftToHtml(sourceText || rawText);
 
       this.logConsole({
-        type: 'chat',
+        // Mineflayer emits both playerChat and systemChat through this event.
+        // Keep server notices in the feed, but don't label them as player chat.
+        type: position === 'chat' ? 'chat' : 'system',
         raw: rawText,
         formattedText: formatted || rawText
       });

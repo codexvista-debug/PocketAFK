@@ -121,14 +121,14 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'spawned':
       case 'connected':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             SPAWNED
           </span>
         );
       case 'handshake':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
             <ShieldCheck className="w-3 h-3 text-purple-600" />
             HANDSHAKE
           </span>
@@ -136,7 +136,7 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'connect':
       case 'connecting':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
             <Radio className="w-3 h-3 text-sky-600 animate-pulse" />
             CONNECTING
           </span>
@@ -144,40 +144,40 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'reconnecting':
       case 'reconnect':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
             <Clock className="w-3 h-3 text-amber-600" />
             RECONNECTING
           </span>
         );
       case 'anti_afk':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
             <Zap className="w-3 h-3 text-teal-600" />
             ANTI-AFK
           </span>
         );
       case 'survival':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
             SURVIVAL
           </span>
         );
       case 'command':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
             COMMAND
           </span>
         );
       case 'kicked':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
             <XCircle className="w-3 h-3 text-rose-600" />
             KICKED
           </span>
         );
       case 'error':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
             <AlertTriangle className="w-3 h-3 text-rose-600" />
             ERROR
           </span>
@@ -185,20 +185,20 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
       case 'disconnected':
       case 'disconnect':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
             DISCONNECTED
           </span>
         );
       case 'chat':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
             <MessageSquare className="w-3 h-3 text-indigo-600" />
             CHAT
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+          <span className="pa-log-type-badge inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
             ACTIVITY
           </span>
         );
@@ -319,41 +319,32 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
               return (
                 <div
                   key={entry.id}
-                  className={`pa-log-entry p-3.5 rounded-xl border transition shadow-2xs ${
-                    isError
-                      ? 'border-l-4 border-l-rose-500 bg-rose-50/40 border-rose-200 text-rose-950'
-                      : isWarning
-                      ? 'border-l-4 border-l-amber-500 bg-amber-50/30 border-amber-200 text-amber-950'
-                      : isSuccess
-                      ? 'border-l-4 border-l-emerald-500 bg-emerald-50/30 border-emerald-200 text-emerald-950'
-                      : entry.type === 'connecting' || entry.type === 'connect'
-                      ? 'border-l-4 border-l-sky-500 bg-white border-slate-200 text-slate-800'
-                      : 'border-l-4 border-l-slate-300 bg-white border-slate-200 text-slate-800'
-                  }`}
+                  data-log-status={isError ? 'error' : isWarning ? 'warning' : isSuccess ? 'success' : 'neutral'}
+                  className="pa-log-entry p-3.5 rounded-xl border transition"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-mono font-medium text-slate-400 select-none">
+                      <span className="pa-log-time text-[10px] font-mono font-medium select-none">
                         [{timeStr}]
                       </span>
                       {getTypeBadge(entry.type, entry.status)}
                       {entry.serverHost && (
-                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/70">
+                        <span className="pa-log-server text-[10px] font-mono px-1.5 py-0.5 rounded border">
                           {entry.serverHost}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <p className="text-xs font-mono font-medium mt-1 leading-relaxed break-words text-slate-800">
+                  <p className="pa-log-message text-[13px] font-medium mt-2 leading-relaxed break-words">
                     {entry.message}
                   </p>
 
                   {/* Clean subtle light details badge (NO big black block!) */}
                   {entry.details && (
-                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 font-mono text-[11px] border border-slate-200/80 max-w-fit">
-                      <span className="text-slate-400 text-[9px] uppercase font-bold tracking-wider">Detail:</span>
-                      <span className="font-semibold text-slate-700">{entry.details}</span>
+                    <div className="pa-log-detail mt-2 inline-flex flex-wrap items-center gap-1.5 px-2.5 py-1 rounded-md font-mono text-[11px] border max-w-full">
+                      <span className="text-[9px] uppercase font-bold tracking-wider">Detail:</span>
+                      <span className="font-medium break-all">{entry.details}</span>
                     </div>
                   )}
                 </div>

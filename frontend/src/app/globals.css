@@ -297,6 +297,20 @@ body {
 .pa-dashboard-shell .pa-chat-message-body .group{min-width:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important}
 .pa-dashboard-shell .pa-chat-message-body .group:hover{background:transparent!important}
 .pa-dashboard-shell .pa-chat-relative-time{align-self:start;justify-self:end;margin-top:1px;padding:3px 7px;color:#e4dac7;background:#39362f;border:1px solid #625b4c;border-radius:999px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;line-height:1.2;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pa-account-logs-modal .pa-log-entry{background:#292824!important;border:1px solid #49463e!important;border-left:3px solid #6a665a!important;border-radius:10px!important;box-shadow:0 2px 8px #070a0820!important;color:#e9e2d5!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="error"]{border-left-color:#986a63!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="warning"]{border-left-color:#a08754!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="success"]{border-left-color:#6d8a64!important}
+.pa-account-logs-modal .pa-log-time{display:inline-flex;align-items:center;min-height:22px;padding:2px 7px;background:#22211e;border:1px solid #454239;border-radius:999px;color:#c2b9a8!important;font-variant-numeric:tabular-nums}
+.pa-account-logs-modal .pa-log-server{background:#34322c!important;border-color:#504c42!important;color:#c7bead!important}
+.pa-account-logs-modal .pa-log-message{color:#eee7d9!important;font-family:ui-sans-serif,system-ui,sans-serif;letter-spacing:.005em}
+.pa-account-logs-modal .pa-log-detail{background:#24231f!important;border-color:#454239!important;color:#c9c0b0!important}
+.pa-account-logs-modal .pa-log-detail span:last-child{color:#e2d9c9!important}
+.pa-account-logs-modal .pa-log-type-badge{background:#35332d!important;border-color:#565145!important;color:#ded6c7!important;box-shadow:none!important}
+.pa-account-logs-modal .pa-log-type-badge svg{color:#c5b98f!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="error"] .pa-log-type-badge{background:#3b2c2a!important;border-color:#69504a!important;color:#dfb4aa!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="warning"] .pa-log-type-badge{background:#393326!important;border-color:#65563b!important;color:#e3cb91!important}
+.pa-account-logs-modal .pa-log-entry[data-log-status="success"] .pa-log-type-badge{background:#2e382c!important;border-color:#506348!important;color:#c0d4ad!important}
 .pa-account-logs-modal .bg-emerald-50\/30{background:#293a2d!important;border-color:#5a7651!important;color:#f4efdf!important}
 .pa-account-logs-modal .bg-emerald-50\/30 p{color:#f4efdf!important}
 .pa-account-logs-modal .text-emerald-950{color:#f4efdf!important}
