@@ -245,6 +245,7 @@ export interface ActivityLog {
 // Daemon to Client Messages
 export type DaemonMessage =
   | { type: 'AUTH_RESULT'; payload: { success: boolean; message?: string } }
+  | { type: 'CONNECTION_STATUS'; payload: { connections: Array<{ id: string; connectedAt: number }>; currentConnectionId: string } }
   | { type: 'BOT_STATE'; payload: { botId: string; serverId?: string; username?: string; accountId?: string; version?: string; state: BotLifecycleState; reason?: string; connectedAt?: number; uptime?: number } }
   | { type: 'CHAT_MESSAGE'; payload: ChatMessagePayload }
   | { type: 'TELEMETRY'; payload: TelemetryPayload }

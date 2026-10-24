@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import * as http from 'http';
 import * as dotenv from 'dotenv';
+import { randomUUID } from 'crypto';
 import chalk from 'chalk';
 import { BotManager } from './bot/botManager';
 import { ClientMessage, DaemonMessage } from './types';
@@ -51,6 +52,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 const authenticatedClients = new Set<WebSocket>();
+const clientConnections = new Map<WebSocket, { id: string; connectedAt: number }>();
 
 function broadcast(message: DaemonMessage) {
   const json = JSON.stringify(message);
@@ -61,6 +63,33 @@ function broadcast(message: DaemonMessage) {
   }
 }
 
+function publishConnectionStatus() {
+  const connections = Array.from(authenticatedClients)
+    .filter((client) => client.readyState === WebSocket.OPEN)
+    .map((client) => clientConnections.get(client))
+    .filter((connection): connection is { id: string; connectedAt: number } => Boolean(connection));
+
+  for (const client of authenticatedClients) {
+    if (client.readyState !== WebSocket.OPEN) continue;
+    const message: DaemonMessage = {
+      type: 'CONNECTION_STATUS',
+      payload: {
+        connections,
+        currentConnectionId: clientConnections.get(client)?.id || '',
+      },
+    };
+    client.send(JSON.stringify(message));
+  }
+}
+
+function registerAuthenticatedClient(client: WebSocket) {
+  authenticatedClients.add(client);
+  if (!clientConnections.has(client)) {
+    clientConnections.set(client, { id: randomUUID(), connectedAt: Date.now() });
+  }
+  publishConnectionStatus();
+}
+
 const botManager = new BotManager(broadcast);
 
 wss.on('connection', (ws: WebSocket, req) => {
@@ -69,7 +98,7 @@ wss.on('connection', (ws: WebSocket, req) => {
 
   // If no auth token and no owner are configured, allow connection
   if (!AUTH_TOKEN && !DAEMON_OWNER) {
-    authenticatedClients.add(ws);
+    registerAuthenticatedClient(ws);
     ws.send(JSON.stringify({
       type: 'AUTH_RESULT',
       payload: { success: true, message: 'Connected without authentication requirement.' }
@@ -117,7 +146,7 @@ wss.on('connection', (ws: WebSocket, req) => {
           }
         }
 
-        authenticatedClients.add(ws);
+        registerAuthenticatedClient(ws);
         ws.send(JSON.stringify({
           type: 'AUTH_RESULT',
           payload: { success: true, message: 'Authentication successful' }
@@ -154,6 +183,8 @@ wss.on('connection', (ws: WebSocket, req) => {
   ws.on('close', () => {
     clearInterval(pingInterval);
     authenticatedClients.delete(ws);
+    clientConnections.delete(ws);
+    publishConnectionStatus();
     console.log(chalk.gray(`[Connection] WebSocket disconnected (${ip})`));
   });
 

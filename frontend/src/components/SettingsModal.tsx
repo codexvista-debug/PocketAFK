@@ -105,7 +105,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Quick Copy Command Card - Modern Light Mode */}
             <div className="bg-gradient-to-br from-emerald-50/70 via-white to-slate-50 p-4 rounded-2xl border border-emerald-200/90 space-y-3 shadow-xs">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span className="pa-settings-command-label text-xs font-bold text-emerald-950 flex items-center gap-1.5">
                   <span>📱</span> Run this command in Termux:
                 </span>
                 <div className="flex items-center gap-2">

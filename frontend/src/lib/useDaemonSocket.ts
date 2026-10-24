@@ -5,6 +5,11 @@ import { BotLifecycleState, ChatMessage, ContainerWindow, Telemetry, BotSettings
 
 export type SocketStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'AUTHENTICATED' | 'AUTH_ERROR';
 
+export interface DaemonConnectionSnapshot {
+  connections: Array<{ id: string; connectedAt: number }>;
+  currentConnectionId: string;
+}
+
 export interface MsAuthData {
   botId: string;
   userCode: string;
@@ -47,6 +52,7 @@ export function useDaemonSocket(
   });
 
   const [status, setStatus] = useState<SocketStatus>('DISCONNECTED');
+  const [daemonConnections, setDaemonConnections] = useState<DaemonConnectionSnapshot | null>(null);
   
   // Per-bot dictionaries to support multiple running server instances simultaneously
   const [botStates, setBotStates] = useState<Record<string, BotLifecycleState>>({});
@@ -91,6 +97,7 @@ export function useDaemonSocket(
     setDaemonUrl(nextUrl);
     setAuthToken(nextToken);
     setStatus('DISCONNECTED');
+    setDaemonConnections(null);
     setBotStates({});
     setBotStateReasons({});
     setBotVersions({});
@@ -132,6 +139,7 @@ export function useDaemonSocket(
         socketRef.current = null;
       }
       setStatus('DISCONNECTED');
+      setDaemonConnections(null);
       return;
     }
 
@@ -145,10 +153,12 @@ export function useDaemonSocket(
 
     if (!daemonUrl || daemonUrl.trim() === '' || daemonUrl.includes('localhost') || daemonUrl.includes('127.0.0.1')) {
       setStatus('DISCONNECTED');
+      setDaemonConnections(null);
       return;
     }
 
     setStatus('CONNECTING');
+    setDaemonConnections(null);
     try {
       const ws = new WebSocket(daemonUrl);
       socketRef.current = ws;
@@ -188,6 +198,7 @@ export function useDaemonSocket(
               } else {
                 console.warn('[Daemon Auth Rejected]', data.payload?.message);
                 setStatus('AUTH_ERROR');
+                setDaemonConnections(null);
                 if (socketRef.current) {
                   try {
                     socketRef.current.close();
@@ -195,6 +206,13 @@ export function useDaemonSocket(
                   socketRef.current = null;
                 }
               }
+              break;
+
+            case 'CONNECTION_STATUS':
+              setDaemonConnections({
+                connections: Array.isArray(data.payload?.connections) ? data.payload.connections : [],
+                currentConnectionId: typeof data.payload?.currentConnectionId === 'string' ? data.payload.currentConnectionId : '',
+              });
               break;
 
             case 'BOT_STATE': {
@@ -312,6 +330,7 @@ export function useDaemonSocket(
 
       ws.onclose = () => {
         setStatus('DISCONNECTED');
+        setDaemonConnections(null);
         socketRef.current = null;
         setBotStates({});
         setBotStateReasons({});
@@ -333,6 +352,7 @@ export function useDaemonSocket(
 
       ws.onerror = () => {
         setStatus('DISCONNECTED');
+        setDaemonConnections(null);
         setBotStates({});
         setBotStateReasons({});
         setTelemetries({});
@@ -348,6 +368,7 @@ export function useDaemonSocket(
       };
     } catch (e) {
       setStatus('DISCONNECTED');
+      setDaemonConnections(null);
     }
   }, [daemonUrl, authToken, enabled, currentUser]);
 
@@ -370,6 +391,7 @@ export function useDaemonSocket(
         socketRef.current = null;
       }
       setStatus('DISCONNECTED');
+      setDaemonConnections(null);
     }
     return () => {
       if (reconnectTimeoutRef.current) {
@@ -532,6 +554,7 @@ export function useDaemonSocket(
     telemetries: isDaemonAuthenticated ? telemetries : {},
     messagesByBot,
     daemonUrl,
+    daemonConnections,
     authToken,
     saveSettings,
     reconnect: connect,

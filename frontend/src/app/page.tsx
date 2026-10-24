@@ -95,6 +95,7 @@ import {
 } from 'lucide-react';
 import { DashboardOverview } from '../components/DashboardOverview';
 import { AuthLanding } from '../components/AuthLanding';
+import { AccountSettingsView } from '../components/AccountSettingsView';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
   physics: true,
@@ -110,7 +111,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'dashboard' | 'webhook' | 'profile' | 'servers' | 'accounts';
+type MainView = 'dashboard' | 'webhook' | 'profile' | 'servers' | 'accounts' | 'account';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function safeMinecraftText(val: any): string {
@@ -207,7 +208,7 @@ export default function Dashboard() {
       const tab = params.get('tab') || params.get('view');
       if (tab === 'dashboard') {
         setActiveMainView('dashboard');
-      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile') {
+      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile' || tab === 'account') {
         setActiveMainView(tab as MainView);
       }
     } catch (e) {}
@@ -577,6 +578,7 @@ export default function Dashboard() {
     botStateReasons,
     botVersions,
     daemonUrl,
+    daemonConnections,
     authToken,
     saveSettings,
     reconnect: reconnectDaemon,
@@ -2587,9 +2589,18 @@ export default function Dashboard() {
             <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between gap-1 mt-auto shrink-0">
               <div className="flex items-center gap-2 truncate min-w-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-xs font-bold text-slate-800 font-mono truncate">
-                  @{effectiveUser}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMainView('account');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className="pa-account-link text-xs font-bold text-slate-800 font-mono truncate"
+                  title="Open your account settings"
+                  aria-label={`Open account settings for ${effectiveUser}`}
+                >
+                  <span>@{effectiveUser}</span><ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
@@ -2645,7 +2656,7 @@ export default function Dashboard() {
                       ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
                       : 'bg-slate-100 text-slate-800 border-slate-200'
                   }`}>
-                    {activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView}
+                    {activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView}
                   </span>
                 )}
               </div>
@@ -2694,6 +2705,24 @@ export default function Dashboard() {
 
             {/* TAB CONTENT PANELS */}
             <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-8 md:pb-6">
+              {activeMainView === 'account' && currentUser && (
+                <AccountSettingsView
+                  username={currentUser}
+                  socketStatus={socketStatus}
+                  daemonUrl={daemonUrl}
+                  daemonConnections={daemonConnections}
+                  onPasswordChanged={(newSecret) => {
+                    const userKey = currentUser.trim().toLowerCase();
+                    localStorage.setItem(`pocketafk_secret_${currentUser}`, newSecret);
+                    localStorage.setItem(`pocketafk_secret_${userKey}`, newSecret);
+                    setSecretCode(newSecret);
+                    const nextDaemonToken = !authToken || authToken === secretCode ? newSecret : authToken;
+                    saveSettings(daemonUrl, nextDaemonToken);
+                    showToast('Password updated. Run the refreshed Termux command once to update its tunnel key.', 'success');
+                  }}
+                />
+              )}
+
               {/* VIEW: DASHBOARD OVERVIEW */}
               {activeMainView === 'dashboard' && (
                 <DashboardOverview

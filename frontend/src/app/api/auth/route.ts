@@ -43,7 +43,67 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, username, password } = await req.json();
+    const { action, username, password, currentPassword, newPassword } = await req.json();
+
+    if (action === 'change_password') {
+      if (typeof username !== 'string' || typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return NextResponse.json({ error: 'Username and both password fields are required.' }, { status: 400 });
+      }
+
+      const cleanUsername = username.trim();
+      const lowerUser = cleanUsername.toLowerCase();
+      if (!USERNAME_REGEX.test(cleanUsername)) {
+        return NextResponse.json({ error: 'Your PocketAFK username is not valid.' }, { status: 400 });
+      }
+      if (newPassword.length < 8) {
+        return NextResponse.json({ error: 'Choose a new password with at least 8 characters.' }, { status: 400 });
+      }
+      if (newPassword.length > 128) {
+        return NextResponse.json({ error: 'The new password is too long.' }, { status: 400 });
+      }
+
+      const oldHash = hashPassword(currentPassword);
+      const newHash = hashPassword(newPassword);
+      let savedUsername = cleanUsername;
+
+      if (supabase) {
+        const { data: users, error: readError } = await supabase
+          .from('users')
+          .select('id, username, password_hash')
+          .ilike('username', lowerUser)
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (readError) {
+          return NextResponse.json({ error: 'Could not load your account. Please try again.' }, { status: 500 });
+        }
+        const user = users?.[0];
+        if (!user || (user.password_hash !== oldHash && user.password_hash !== currentPassword)) {
+          return NextResponse.json({ error: 'Your current password did not match.' }, { status: 401 });
+        }
+
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ password_hash: newHash })
+          .eq('id', user.id);
+
+        if (updateError) {
+          return NextResponse.json({ error: 'Could not update your password. Please try again.' }, { status: 500 });
+        }
+        savedUsername = user.username;
+      } else {
+        const storedHash = localUsers.get(lowerUser);
+        if (!storedHash || (storedHash !== oldHash && storedHash !== currentPassword)) {
+          return NextResponse.json({ error: 'Your current password did not match.' }, { status: 401 });
+        }
+        localUsers.set(lowerUser, newHash);
+      }
+
+      return NextResponse.json({
+        success: true,
+        secretCode: generateSecretCode(savedUsername, newHash),
+      });
+    }
 
     if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
