@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, QuickCommandItem } from '../types';
-import { Send, Trash2, ArrowDown, Terminal as TerminalIcon, MessageSquare, Radio, Users, ChevronDown, Check, Pencil } from 'lucide-react';
-import { MinecraftChatMessage } from './MinecraftChatMessage';
+import { Send, ArrowDown, MessageSquare, Users, ChevronDown, Check, Pencil } from 'lucide-react';
+import { MinecraftChatMessage, stripMinecraftFormatting } from './MinecraftChatMessage';
 
 export interface ChatAccountItem {
   id: string;
@@ -15,11 +15,7 @@ export interface ChatAccountItem {
 interface TerminalProps {
   messages: ChatMessage[];
   onSendMessage: (msg: string, senderAccountId?: string) => void;
-  onClear: () => void;
   disabled?: boolean;
-  serverName?: string;
-  serverHost?: string;
-  serverPort?: number;
   availableSenders?: ChatAccountItem[];
   selectedSenderId?: string;
   onSelectSender?: (senderId: string) => void;
@@ -41,11 +37,7 @@ const DEFAULT_QUICK_COMMANDS: QuickCommandItem[] = [
 export const Terminal: React.FC<TerminalProps> = ({
   messages,
   onSendMessage,
-  onClear,
   disabled = false,
-  serverName,
-  serverHost,
-  serverPort,
   availableSenders = [],
   selectedSenderId = 'all',
   onSelectSender,
@@ -53,8 +45,8 @@ export const Terminal: React.FC<TerminalProps> = ({
   onEditQuickCommands,
 }) => {
   const [input, setInput] = useState('');
-  const [filter, setFilter] = useState<'all' | 'chat' | 'system'>('all');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
   const [isSenderDropdownOpen, setIsSenderDropdownOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -73,16 +65,23 @@ export const Terminal: React.FC<TerminalProps> = ({
   const selectedSenderAccount = availableSenders.find(
     (s) => s.id === selectedSenderId || s.ign === selectedSenderId
   );
+  const onlineSenders = availableSenders.filter((sender) => sender.isOnline).length;
+  const composerDisabled = disabled || availableSenders.length === 0 || (selectedSenderAccount ? !selectedSenderAccount.isOnline : onlineSenders === 0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (autoScroll && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [messages, autoScroll, filter]);
+  }, [messages, autoScroll]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || disabled) return;
+    if (!input.trim() || composerDisabled) return;
     onSendMessage(input.trim(), selectedSenderId);
     setInput('');
   };
@@ -95,77 +94,64 @@ export const Terminal: React.FC<TerminalProps> = ({
   };
 
   const sendQuickCommand = (cmd: string) => {
-    if (disabled) return;
+    if (composerDisabled) return;
     onSendMessage(cmd, selectedSenderId);
   };
 
-  const filteredMessages = messages.filter((msg) => {
-    if (filter === 'chat') {
-      return msg.type === 'chat' || (!msg.type && !msg.sender?.includes('System') && !msg.sender?.includes('Server'));
-    }
-    if (filter === 'system') {
-      return msg.type === 'system' || msg.type === 'session_divider' || msg.type === 'death' || msg.type === 'error';
-    }
-    return true;
-  });
+  const playerNameForMessage = (message: ChatMessage) => {
+    const raw = stripMinecraftFormatting(message.raw || message.formattedText || '');
+    const chatName = raw.match(/^<([+*.~#]?[a-zA-Z0-9_]{1,24})>/)?.[1]
+      || raw.match(/^(?:\[[^\]]{1,24}\]\s*)?(?:(?:[A-Z][A-Z0-9+_-]{1,15})\s+)?([+*.~#]?[a-zA-Z0-9_]{1,24})\s*(?:▶|>|»|:)\s*/)?.[1];
+    const sender = stripMinecraftFormatting(message.sender || '');
+    const senderIsPlayer = sender && !/^(server|system|pocketafk|autocommand|sessiondivider)$/i.test(sender);
+    const accountName = stripMinecraftFormatting(message.accountUsername || '');
+    return chatName || (senderIsPlayer ? sender : '') || accountName || 'MHF_Steve';
+  };
+
+  const relativeTime = (timestamp: number) => {
+    const elapsedSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+    if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    if (elapsedHours < 24) return `${elapsedHours}h`;
+    return `${Math.floor(elapsedHours / 24)}d`;
+  };
 
   return (
     <div className="pa-chat-console bg-white border border-slate-300/90 rounded-3xl overflow-hidden flex flex-col h-full shadow-lg shadow-slate-200/50">
       {/* Terminal Header & Toolbar */}
       <div className="pa-chat-console-head bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/90 flex items-center justify-center shrink-0 shadow-2xs">
-            <TerminalIcon className="w-4 h-4 stroke-[2.5]" />
+          <div className="pa-chat-account-icon w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/90 flex items-center justify-center shrink-0 shadow-2xs">
+            {selectedSenderAccount ? (
+              <img
+                src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/36.png`}
+                alt=""
+                className="w-full h-full object-cover [image-rendering:pixelated]"
+                onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/36.png'; }}
+              />
+            ) : (
+              <Users className="w-4 h-4" />
+            )}
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-slate-900 tracking-tight truncate text-xs">
-                {serverName || 'Live Game Console'}
+            <span className="pa-chat-account-kicker">CHAT ACCOUNT</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="pa-chat-account-name font-extrabold text-slate-900 tracking-tight truncate text-xs">
+                {selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}
               </span>
+              <span className={`pa-chat-online-indicator ${selectedSenderAccount ? (selectedSenderAccount.isOnline ? 'is-online' : 'is-offline') : (onlineSenders ? 'is-online' : 'is-offline')}`} />
             </div>
-            {serverHost && (
-              <span className="hidden sm:block text-[11px] text-slate-500 font-mono truncate mt-0.5">
-                {serverHost}{serverPort ? `:${serverPort}` : ''}
-              </span>
-            )}
+            <span className="pa-chat-account-caption">
+              {selectedSenderAccount
+                ? (selectedSenderAccount.isOnline ? 'Showing and sending as this account' : 'Showing this account’s messages · offline')
+                : `Showing all profile messages · ${onlineSenders}/${availableSenders.length} online`}
+            </span>
           </div>
         </div>
 
-          <div className="pa-chat-filters flex items-center gap-2.5 shrink-0">
-          {/* Segmented Filter Control */}
-          <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 text-xs font-bold shadow-2xs">
-            <button
-              onClick={() => setFilter('all')}
-              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'all' ? 'is-active' : ''} ${
-                filter === 'all'
-                  ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setFilter('chat')}
-              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'chat' ? 'is-active' : ''} ${
-                filter === 'chat'
-                  ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Players
-            </button>
-            <button
-              onClick={() => setFilter('system')}
-              className={`pa-chat-filter px-3 py-1 rounded-lg transition cursor-pointer ${filter === 'system' ? 'is-active' : ''} ${
-                filter === 'system'
-                  ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80 font-black'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              System
-            </button>
-          </div>
-
+        <div className="flex items-center gap-2 shrink-0">
           {!autoScroll && (
             <button
               onClick={() => {
@@ -181,13 +167,6 @@ export const Terminal: React.FC<TerminalProps> = ({
             </button>
           )}
 
-          <button
-            onClick={onClear}
-            title="Clear Chat Log"
-            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition cursor-pointer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -201,7 +180,7 @@ export const Terminal: React.FC<TerminalProps> = ({
             <button
               key={cmd}
               onClick={() => sendQuickCommand(cmd)}
-              disabled={disabled}
+              disabled={composerDisabled}
               className={`pa-chat-command px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold shadow-2xs transition whitespace-nowrap cursor-pointer shrink-0 disabled:opacity-40 active:scale-95 ${color || 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-600 hover:text-white'}`}
             >
               {cmd}
@@ -226,24 +205,42 @@ export const Terminal: React.FC<TerminalProps> = ({
         onScroll={handleScroll}
         className="pa-chat-stream flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 border-b border-slate-200 flex flex-col space-y-1"
       >
-        {filteredMessages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3 select-none py-16">
             <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-300">
               <MessageSquare className="h-6 w-6 stroke-[1.5]" />
             </div>
             <div className="text-center space-y-1">
-              <p className="font-mono text-xs font-semibold text-slate-700">No chat messages received yet.</p>
-              <p className="text-[11px] text-slate-400">In-game chat and system logs will stream here in real-time.</p>
+              <p className="font-mono text-xs font-semibold text-slate-700">No messages for this account yet.</p>
+              <p className="text-[11px] text-slate-400">Player chat and server events will appear here.</p>
             </div>
-            {disabled && (
+            {composerDisabled && (
               <span className="text-amber-700 bg-amber-50 border border-amber-200 font-mono text-xs font-bold px-3 py-1 rounded-full">
                 Bot is currently disconnected
               </span>
             )}
           </div>
         ) : (
-          filteredMessages.map((msg, idx) => (
-            <MinecraftChatMessage key={msg.id || idx} message={msg} darkMode />
+          messages.map((msg, idx) => (
+            <div className="pa-chat-message-row" key={msg.id || idx}>
+              <img
+                src={`https://minotar.net/helm/${encodeURIComponent(playerNameForMessage(msg))}/32.png`}
+                alt=""
+                className="pa-chat-message-skin"
+                loading="lazy"
+                onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/32.png'; }}
+              />
+              <div className="pa-chat-message-body">
+                <MinecraftChatMessage message={msg} showTimestamp={false} compact darkMode />
+              </div>
+              <time
+                className="pa-chat-relative-time"
+                dateTime={new Date(msg.timestamp || now).toISOString()}
+                title={new Date(msg.timestamp || now).toLocaleString()}
+              >
+                {relativeTime(msg.timestamp || now)}
+              </time>
+            </div>
           ))
         )}
         <div ref={messagesEndRef} />
@@ -257,23 +254,22 @@ export const Terminal: React.FC<TerminalProps> = ({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
-            disabled
-              ? 'Bot offline (connect bot to send chat messages)...'
+            composerDisabled
+              ? (selectedSenderAccount ? `${selectedSenderAccount.ign || selectedSenderAccount.name} is offline...` : 'No online accounts available to send chat...')
               : 'Type message or command (e.g. /spawn, /lifesteal, hello)...'
           }
-          disabled={disabled}
+          disabled={composerDisabled}
           className="pa-chat-input flex-1 min-w-0 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
         />
 
         {/* Sender Account Picker (Matches VistaAFK) */}
         {availableSenders && availableSenders.length > 0 && (
           <div className="pa-chat-sender relative shrink-0" ref={senderDropdownRef}>
-            <span className="pa-chat-sender-label">Send as</span>
+            <span className="pa-chat-sender-label">ACCOUNT</span>
             <button
               type="button"
               onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
-              disabled={disabled}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer shadow-2xs"
               title="Select which account sends this message"
             >
               {selectedSenderAccount ? (
@@ -303,7 +299,7 @@ export const Terminal: React.FC<TerminalProps> = ({
             {isSenderDropdownOpen && (
               <div className="absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
                 <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Send message as
+                  Choose chat account
                 </div>
                 <button
                   type="button"
@@ -323,7 +319,7 @@ export const Terminal: React.FC<TerminalProps> = ({
                     </div>
                     <span className="flex flex-col text-left">
                       <span>All accounts</span>
-                      <span className="pa-chat-option-hint">Send through every account in this profile</span>
+                  <span className="pa-chat-option-hint">View all messages · send through every account</span>
                     </span>
                   </div>
                   {(!selectedSenderId || selectedSenderId === 'all') && (
@@ -376,7 +372,7 @@ export const Terminal: React.FC<TerminalProps> = ({
 
         <button
           type="submit"
-          disabled={disabled || !input.trim()}
+          disabled={composerDisabled || !input.trim()}
           className="pa-chat-send px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl transition flex items-center gap-2 shadow-xs font-bold text-xs font-mono cursor-pointer active:scale-95 shrink-0"
         >
           <Send className="w-3.5 h-3.5" />

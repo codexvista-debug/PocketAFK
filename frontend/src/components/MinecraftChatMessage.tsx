@@ -191,8 +191,12 @@ export const MinecraftChatMessage: React.FC<MinecraftChatMessageProps> = ({
         <div className={`px-2.5 py-0.5 rounded-full bg-white border border-slate-300 shadow-2xs ${compact ? 'text-[9px]' : 'text-[10px] sm:text-[11px]'} font-mono font-bold text-slate-700 flex items-center gap-1.5 shrink-0`}>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>Session Event</span>
-          <span className="text-slate-400 font-normal">•</span>
-          <span className="text-emerald-700 font-semibold">{timeFull || timeShort}</span>
+          {showTimestamp && (
+            <>
+              <span className="text-slate-400 font-normal">•</span>
+              <span className="text-emerald-700 font-semibold">{timeFull || timeShort}</span>
+            </>
+          )}
         </div>
         <div className="flex-1 h-[1.5px] bg-gradient-to-r from-slate-400 via-slate-300 to-transparent" />
       </div>

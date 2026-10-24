@@ -252,3 +252,29 @@ body {
   .pa-dashboard-shell .pa-chat-send{order:3;padding:0 14px}
 }
 
+/* One account selector controls both the chat feed and sender. */
+.pa-dashboard-shell .pa-chat-console-head{min-height:68px}
+.pa-dashboard-shell .pa-chat-account-icon{overflow:hidden;border-radius:5px!important}
+.pa-dashboard-shell .pa-chat-account-kicker{display:block;color:#bcb3a4;font-size:8px;font-weight:900;letter-spacing:.8px;line-height:1.3}
+.pa-dashboard-shell .pa-chat-account-name{color:#f4eddf!important;font-size:13px}
+.pa-dashboard-shell .pa-chat-account-caption{display:block;max-width:min(70vw,480px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#bcb3a4;font-size:9px;margin-top:2px}
+.pa-dashboard-shell .pa-chat-online-indicator{width:7px;height:7px;flex:none;border-radius:50%;background:#787468}
+.pa-dashboard-shell .pa-chat-online-indicator.is-online{background:#8dde63;box-shadow:0 0 8px #8dde6380}
+.pa-dashboard-shell .pa-chat-online-indicator.is-offline{background:#d86a5f}
+.pa-dashboard-shell .pa-chat-sender-label{letter-spacing:.7px;font-size:8px}
+.pa-dashboard-shell .pa-chat-sender>div.absolute{width:min(280px,calc(100vw - 28px))}
+.pa-dashboard-shell .pa-chat-sender>div.absolute>button{min-height:48px}
+.pa-dashboard-shell .pa-chat-message-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;padding:7px 6px;border-bottom:1px solid #39372f}
+.pa-dashboard-shell .pa-chat-message-skin{width:32px;height:32px;object-fit:cover;image-rendering:pixelated;background:#302e29;border:1px solid #5c564a;border-radius:4px}
+.pa-dashboard-shell .pa-chat-message-body{min-width:0;overflow-wrap:anywhere}
+.pa-dashboard-shell .pa-chat-message-body .group{min-width:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important}
+.pa-dashboard-shell .pa-chat-message-body .group:hover{background:transparent!important}
+.pa-dashboard-shell .pa-chat-relative-time{align-self:start;padding-top:2px;color:#a79f90;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pa-dashboard-shell .pa-chat-option-hint{display:block;color:#bcb3a4;font-size:9px;font-weight:500;line-height:1.35}
+@media(max-width:639px){
+  .pa-dashboard-shell .pa-chat-account-caption{max-width:calc(100vw - 124px)}
+  .pa-dashboard-shell .pa-chat-message-row{grid-template-columns:28px minmax(0,1fr) auto;gap:7px;padding:7px 2px}
+  .pa-dashboard-shell .pa-chat-message-skin{width:26px;height:26px}
+  .pa-dashboard-shell .pa-chat-relative-time{font-size:8px}
+}
+
