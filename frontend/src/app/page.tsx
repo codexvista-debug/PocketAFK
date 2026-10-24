@@ -2051,7 +2051,7 @@ export default function Dashboard() {
     botState === 'SPAWNED' || botState === 'LOGGED_IN' || botState === 'CONNECTING';
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] bg-grid-slate text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20">
+    <div className={`${currentUser ? 'pa-dashboard-shell' : ''} min-h-screen bg-[#f1f5f9] bg-grid-slate text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20`}>
       {/* Toast Notification Container */}
       <ModernToast toast={toast} onDismiss={handleDismissToast} />
 
@@ -2224,8 +2224,8 @@ export default function Dashboard() {
                 className="flex items-center gap-2 text-left group cursor-pointer"
                 title="Go to PocketAFK Dashboard"
               >
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-xs shadow-xs ring-2 ring-emerald-500/20">
-                  ⛏
+                <div className="pa-dashboard-logo pa-dashboard-logo-mobile">
+                  <img src="/pocketafk-emblem.png" alt="" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -2292,8 +2292,8 @@ export default function Dashboard() {
                 className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
                 title="Go to PocketAFK Dashboard"
               >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
-                  ⛏
+                <div className="pa-dashboard-logo group-hover:scale-105 transition-transform">
+                  <img src="/pocketafk-emblem.png" alt="" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
