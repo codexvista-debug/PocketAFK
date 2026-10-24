@@ -1272,12 +1272,16 @@ export default function Dashboard() {
             return;
           }
 
-          const [remoteServers, remoteAccounts, remoteNotes, remoteWebhooks] = await Promise.all([
+          const [remoteServers, remoteNotes, remoteWebhooks] = await Promise.all([
             loadServersFromSupabase(currentUser),
-            loadAccountsFromSupabase(currentUser, localAccs),
             loadNotesFromSupabase(currentUser),
             loadWebhookConfigFromSupabase(currentUser),
           ]);
+          const referencedAccountIds = (remoteServers || []).flatMap((server) => [
+            ...(server.assignedAccountIds || []),
+            ...(server.accountId ? [server.accountId] : []),
+          ]);
+          const remoteAccounts = await loadAccountsFromSupabase(currentUser, localAccs, referencedAccountIds);
 
           // Handle Universal Servers:
           let finalServers: ServerProfile[] = [];
@@ -1374,10 +1378,12 @@ export default function Dashboard() {
           if (saved) preferredAccounts = sanitizeAccounts(JSON.parse(saved));
         } catch {}
 
-        const [remoteServers, remoteAccounts] = await Promise.all([
-          loadServersFromSupabase(currentUser),
-          loadAccountsFromSupabase(currentUser, preferredAccounts),
+        const remoteServers = await loadServersFromSupabase(currentUser);
+        const referencedAccountIds = (remoteServers || []).flatMap((server) => [
+          ...(server.assignedAccountIds || []),
+          ...(server.accountId ? [server.accountId] : []),
         ]);
+        const remoteAccounts = await loadAccountsFromSupabase(currentUser, preferredAccounts, referencedAccountIds);
         if (cancelled) return;
 
         if (remoteServers) {

@@ -78,7 +78,11 @@ export async function loadServersFromSupabase(currentUser: string): Promise<Serv
  * Universal Minecraft Accounts Loader:
  * Fetches all verified Minecraft accounts stored in Supabase for this user.
  */
-export async function loadAccountsFromSupabase(currentUser: string, preferredAccounts: MinecraftAccount[] = []): Promise<MinecraftAccount[] | null> {
+export async function loadAccountsFromSupabase(
+  currentUser: string,
+  preferredAccounts: MinecraftAccount[] = [],
+  referencedAccountIds: string[] = []
+): Promise<MinecraftAccount[] | null> {
   if (!supabase || !currentUser) return null;
   try {
     const cleanUser = currentUser.trim();
@@ -106,10 +110,13 @@ export async function loadAccountsFromSupabase(currentUser: string, preferredAcc
       const key = botName.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
+        const databaseId = `acc_${row.id}`;
+        const preferredId = preferredIds.get(key);
+        const stableId = row.settings?.pocketafk_account_id;
         accounts.push({
-          // Keep IDs created by the first browser that linked this account. Server profiles
-          // store these IDs, so replacing them with the database UUID orphaned assignments.
-          id: row.settings?.pocketafk_account_id || preferredIds.get(key) || `acc_${row.id}`,
+          // Prefer a durable ID, then the ID already referenced by a profile. This repairs
+          // older profiles whose IDs differ between local storage and the database UUID.
+          id: stableId || (referencedAccountIds.includes(databaseId) ? databaseId : preferredId || databaseId),
           username: botName,
           ign: botName,
           auth_type: 'microsoft',
