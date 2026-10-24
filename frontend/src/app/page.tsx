@@ -2650,15 +2650,13 @@ export default function Dashboard() {
                             : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100/70'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 truncate">
+                        <div className="flex min-w-0 items-center gap-2.5">
                           <ServerLogo host={srv.serverHost} name={srv.name} size="w-5 h-5" />
                           <span className="pa-server-profile-name truncate">{srv.name}</span>
+                          <ServerPlayerCount host={`${srv.serverHost}${srv.serverPort && Number(srv.serverPort) !== 25565 ? `:${srv.serverPort}` : ''}`} />
                         </div>
-                        <div className="flex items-center gap-1.5 text-[11px] font-mono shrink-0">
-                          <Radio className={`w-3 h-3 ${isRunning ? 'text-emerald-600 animate-pulse' : 'text-slate-400'}`} />
-                          <span className={`px-1.5 py-0.2 rounded-md ${isRunning ? 'bg-emerald-100 text-emerald-800 font-bold' : 'text-slate-500'}`}>
-                            {onlineCount}/{totalSlots}
-                          </span>
+                        <div className="shrink-0" title={isRunning ? 'Bot active on this server' : 'No bot active on this server'}>
+                          <Radio aria-label={isRunning ? 'Bot active' : 'Bot inactive'} className={`h-3 w-3 ${isRunning ? 'animate-pulse text-emerald-600' : 'text-slate-400'}`} />
                         </div>
                       </button>
 
@@ -2678,7 +2676,10 @@ export default function Dashboard() {
                         >
                           <span className="pa-item-icon pa-icon-connect pa-item-icon-small" aria-hidden="true" />
                           Connect
-                          <ServerPlayerCount host={`${srv.serverHost}${srv.serverPort && Number(srv.serverPort) !== 25565 ? `:${srv.serverPort}` : ''}`} />
+                          <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200/60 bg-emerald-50/80 px-1.5 py-0.5 text-[10px] font-mono font-bold tabular-nums text-emerald-800" title="Connected accounts / accounts assigned to this server">
+                            <Users className="h-3 w-3" aria-hidden="true" />
+                            {onlineCount}/{totalSlots}
+                          </span>
                         </button>
 
                         <button
