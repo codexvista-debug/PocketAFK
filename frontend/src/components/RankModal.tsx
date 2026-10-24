@@ -30,8 +30,8 @@ export const RankModal: React.FC<RankModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="pa-rank-modal fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="pa-rank-dialog bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-3">
@@ -78,7 +78,7 @@ export const RankModal: React.FC<RankModalProps> = ({
 
         {/* Content: 4 Rank Cards */}
         <div className="p-6 overflow-y-auto space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="pa-rank-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             {RANK_ORDER.map((rId) => {
               const cfg = RANKS[rId];
               const isCurrent = currentRank === rId;
@@ -86,9 +86,9 @@ export const RankModal: React.FC<RankModalProps> = ({
               return (
                 <div
                   key={rId}
-                  className={`relative rounded-2xl p-5 border flex flex-col justify-between transition duration-200 shadow-2xs ${
+                  className={`pa-rank-card relative rounded-2xl p-5 border flex flex-col justify-between transition duration-200 shadow-2xs ${
                     isCurrent
-                      ? `${cfg.cardBorder} bg-gradient-to-b from-white to-slate-50/80 ring-2 ring-emerald-500 shadow-md`
+                      ? `pa-rank-current ${cfg.cardBorder} bg-gradient-to-b from-white to-slate-50/80 ring-2 ring-emerald-500 shadow-md`
                       : `bg-white ${cfg.cardBorder} hover:shadow-md`
                   }`}
                 >
@@ -158,7 +158,7 @@ export const RankModal: React.FC<RankModalProps> = ({
           </div>
 
           {/* Bottom info banner */}
-          <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="pa-rank-allocation p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                 <Users className="w-4 h-4" />
