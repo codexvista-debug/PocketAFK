@@ -4,6 +4,8 @@ export interface CachedTunnelRecord {
   url: string;
   token: string;
   updatedAt: number;
+  daemonStartedAt?: number;
+  lastDisconnectedAt?: number | null;
 }
 
 declare global {

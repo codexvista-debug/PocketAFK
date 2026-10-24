@@ -10,6 +10,12 @@ export interface DaemonConnectionSnapshot {
   currentConnectionId: string;
 }
 
+export interface DaemonRuntimeInfo {
+  startedAt: number;
+  uptimeSeconds: number;
+  receivedAt: number;
+}
+
 export interface MsAuthData {
   botId: string;
   userCode: string;
@@ -53,6 +59,7 @@ export function useDaemonSocket(
 
   const [status, setStatus] = useState<SocketStatus>('DISCONNECTED');
   const [daemonConnections, setDaemonConnections] = useState<DaemonConnectionSnapshot | null>(null);
+  const [daemonRuntimeInfo, setDaemonRuntimeInfo] = useState<DaemonRuntimeInfo | null>(null);
   
   // Per-bot dictionaries to support multiple running server instances simultaneously
   const [botStates, setBotStates] = useState<Record<string, BotLifecycleState>>({});
@@ -101,6 +108,7 @@ export function useDaemonSocket(
     failedConnectionAttemptsRef.current = 0;
     setStatus('DISCONNECTED');
     setDaemonConnections(null);
+    setDaemonRuntimeInfo(null);
     setBotStates({});
     setBotStateReasons({});
     setBotVersions({});
@@ -199,6 +207,13 @@ export function useDaemonSocket(
               if (data.payload.success) {
                 failedConnectionAttemptsRef.current = 0;
                 lastDaemonPongAtRef.current = Date.now();
+                if (Number.isFinite(data.payload.daemonStartedAt) && Number.isFinite(data.payload.daemonUptime)) {
+                  setDaemonRuntimeInfo({
+                    startedAt: data.payload.daemonStartedAt,
+                    uptimeSeconds: data.payload.daemonUptime,
+                    receivedAt: Date.now(),
+                  });
+                }
                 setStatus('AUTHENTICATED');
                 // Start keepalive PING every 10s to prevent Cloudflare tunnel & mobile carrier NAT timeout
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
@@ -553,6 +568,15 @@ export function useDaemonSocket(
         .slice(-250)
     : [];
 
+  const allMessages: ChatMessage[] = Object.values(messagesByBot)
+    .flat()
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-600);
+  const allActivityLogs: ActivityLog[] = Object.values(activityLogs)
+    .flat()
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-400);
+
   const currentActivityLogs: ActivityLog[] = currentBotId
     ? Object.entries(activityLogs)
         .filter(([bId]) => bId === currentBotId || bId.startsWith(`${currentBotId}__`))
@@ -573,6 +597,8 @@ export function useDaemonSocket(
     botStateReason: currentBotReason,
     telemetry: currentTelemetry,
     messages: currentMessages,
+    allMessages,
+    allActivityLogs,
     activityLogs,
     currentActivityLogs,
     containerWindow: currentWindow,
@@ -583,6 +609,7 @@ export function useDaemonSocket(
     messagesByBot,
     daemonUrl,
     daemonConnections,
+    daemonRuntimeInfo,
     authToken,
     saveSettings,
     reconnect: connect,

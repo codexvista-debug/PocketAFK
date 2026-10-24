@@ -149,7 +149,12 @@ wss.on('connection', (ws: WebSocket, req) => {
         registerAuthenticatedClient(ws);
         ws.send(JSON.stringify({
           type: 'AUTH_RESULT',
-          payload: { success: true, message: 'Authentication successful' }
+          payload: {
+            success: true,
+            message: 'Authentication successful',
+            daemonUptime: Math.floor(process.uptime()),
+            daemonStartedAt: Date.now() - Math.floor(process.uptime() * 1000),
+          }
         }));
         console.log(chalk.green(`[Auth] Client authenticated successfully for @${clientUser || DAEMON_OWNER || 'guest'}`));
         

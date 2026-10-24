@@ -97,6 +97,7 @@ import {
 import { DashboardOverview } from '../components/DashboardOverview';
 import { AuthLanding } from '../components/AuthLanding';
 import { AccountSettingsView } from '../components/AccountSettingsView';
+import { TermuxStreamView } from '../components/TermuxStreamView';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
   physics: true,
@@ -112,7 +113,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'dashboard' | 'webhook' | 'profile' | 'servers' | 'accounts' | 'account';
+type MainView = 'dashboard' | 'termux' | 'webhook' | 'profile' | 'servers' | 'accounts' | 'account';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function safeMinecraftText(val: any): string {
@@ -219,7 +220,7 @@ export default function Dashboard() {
       const tab = params.get('tab') || params.get('view');
       if (tab === 'dashboard') {
         setActiveMainView('dashboard');
-      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile' || tab === 'account') {
+      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile' || tab === 'account' || tab === 'termux') {
         setActiveMainView(tab as MainView);
       }
     } catch (e) {}
@@ -257,6 +258,11 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
   const [servers, setServers] = useState<ServerProfile[]>([]);
   const [activeServerId, setActiveServerId] = useState<string>('');
+  const [daemonStatusHistory, setDaemonStatusHistory] = useState<{
+    daemonStartedAt: number | null;
+    lastDisconnectedAt: number | null;
+    statusStorageAvailable: boolean;
+  }>({ daemonStartedAt: null, lastDisconnectedAt: null, statusStorageAvailable: false });
 
   // Connect table state
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -550,6 +556,9 @@ export default function Dashboard() {
     telemetry,
     telemetries,
     messages,
+    allMessages,
+    allActivityLogs,
+    daemonRuntimeInfo,
     activityLogs,
     currentActivityLogs,
     containerWindow,
@@ -997,6 +1006,19 @@ export default function Dashboard() {
         }
         if (res.ok && isMounted) {
           const data = await res.json();
+          const asTimestamp = (value: unknown): number | null => {
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+            if (typeof value === 'string') {
+              const parsed = Date.parse(value);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+            return null;
+          };
+          setDaemonStatusHistory({
+            daemonStartedAt: asTimestamp(data?.daemonStartedAt),
+            lastDisconnectedAt: asTimestamp(data?.lastDisconnectedAt),
+            statusStorageAvailable: Boolean(data?.statusStorageAvailable),
+          });
           const targetUrl = (data?.url || data?.tunnel_url || '').trim();
           const targetToken = (data?.token || secretCode || authToken || '').trim();
           if (targetUrl && targetUrl.startsWith('wss://')) {
@@ -2217,7 +2239,7 @@ export default function Dashboard() {
                     <span className="px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 uppercase text-[10px] font-black shrink-0">{activeSubTab}</span>
                   </>
                 ) : (
-                  <span className="truncate text-slate-800 uppercase tracking-wide">{activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView}</span>
+                  <span className="truncate text-slate-800 uppercase tracking-wide">{activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView === 'termux' ? 'Termux Stream' : activeMainView}</span>
                 )}
               </div>
             </div>
@@ -2304,6 +2326,22 @@ export default function Dashboard() {
               >
                 <span className="pa-item-icon pa-icon-dashboard" aria-hidden="true" />
                 <span>Dashboard</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveMainView('termux');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeMainView === 'termux'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                }`}
+              >
+                <span className="pa-item-icon pa-icon-daemon-lamp" aria-hidden="true" />
+                <span>Termux Stream</span>
+                <span className={`ml-auto h-2 w-2 rounded-full ${socketStatus === 'AUTHENTICATED' ? 'bg-emerald-500' : 'bg-slate-300'}`} aria-label={socketStatus === 'AUTHENTICATED' ? 'Daemon online' : 'Daemon offline'} />
               </button>
 
               <button
@@ -2640,7 +2678,7 @@ export default function Dashboard() {
                       ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
                       : 'bg-slate-100 text-slate-800 border-slate-200'
                   }`}>
-                    {activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView}
+                    {activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView === 'termux' ? 'Termux Stream' : activeMainView}
                   </span>
                 )}
               </div>
@@ -2700,6 +2738,18 @@ export default function Dashboard() {
                     setEditingServer(null);
                     setIsServerModalOpen(true);
                   }}
+                />
+              )}
+
+              {activeMainView === 'termux' && (
+                <TermuxStreamView
+                  socketStatus={socketStatus}
+                  daemonStartedAt={daemonRuntimeInfo?.startedAt ?? daemonStatusHistory.daemonStartedAt}
+                  lastDisconnectedAt={daemonStatusHistory.lastDisconnectedAt}
+                  statusStorageAvailable={daemonStatusHistory.statusStorageAvailable}
+                  messages={allMessages}
+                  activityLogs={allActivityLogs}
+                  servers={servers}
                 />
               )}
 

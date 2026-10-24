@@ -40,53 +40,95 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 1. Check in-memory cache first
   const cached = userTunnels.get(username);
-  if (cached && cached.url && Date.now() - cached.updatedAt < TUNNEL_TIMEOUT_MS) {
-    return NextResponse.json({
-      ...cached,
-      tunnel_url: cached.url,
-      isLive: true,
-    });
-  }
+  let storedTunnel: any = null;
+  let storedDaemonStatus: any = null;
+  let statusStorageAvailable = false;
 
-  // 2. Fallback to Supabase if connected
   if (supabase) {
     try {
-      const { data } = await supabase
+      const { data: tunnelData } = await supabase
         .from('tunnels')
         .select('*')
         .ilike('username', username)
         .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-
-      if (data && data.daemon_url) {
-        const updatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-        if (Date.now() - updatedAt < TUNNEL_TIMEOUT_MS) {
-          const tunnelObj = {
-            url: data.daemon_url,
-            tunnel_url: data.daemon_url,
-            token: data.daemon_token || '',
-            updatedAt,
-            isLive: true,
-          };
-          userTunnels.set(username, tunnelObj);
-          return NextResponse.json(tunnelObj);
-        }
+      storedTunnel = tunnelData;
+      const daemonToken = storedTunnel?.daemon_token || cached?.token || '';
+      if (daemonToken) {
+        const { data, error } = await supabase.rpc('read_daemon_status', {
+          p_username: username,
+          p_daemon_token: daemonToken,
+        });
+        statusStorageAvailable = !error;
+        storedDaemonStatus = Array.isArray(data) ? data[0] : data;
       }
-    } catch (e) {
-      // ignore
+    } catch {
+      // Continue with the in-memory heartbeat cache if Supabase is unavailable.
     }
   }
 
-  // Expired or offline
+  const now = Date.now();
+  const cachedIsLive = Boolean(cached?.url && now - cached.updatedAt < TUNNEL_TIMEOUT_MS);
+  const storedUpdatedAt = storedTunnel?.updated_at ? new Date(storedTunnel.updated_at).getTime() : 0;
+  const storedIsLive = Boolean(storedTunnel?.daemon_url && storedUpdatedAt && now - storedUpdatedAt < TUNNEL_TIMEOUT_MS);
+  const isLive = cachedIsLive || storedIsLive;
+
+  let lastDisconnectedAt = storedDaemonStatus?.last_disconnected_at
+    ? new Date(storedDaemonStatus.last_disconnected_at).getTime()
+    : cached?.lastDisconnectedAt || null;
+  let daemonStartedAt = storedDaemonStatus?.daemon_started_at
+    ? new Date(storedDaemonStatus.daemon_started_at).getTime()
+    : cached?.daemonStartedAt || null;
+
+  if (storedDaemonStatus?.is_online && !isLive) {
+    const lastHeartbeatAt = storedDaemonStatus.last_heartbeat_at
+      ? new Date(storedDaemonStatus.last_heartbeat_at).getTime()
+      : storedUpdatedAt || now;
+    lastDisconnectedAt = lastHeartbeatAt;
+    const daemonToken = storedTunnel?.daemon_token || cached?.token || '';
+    if (daemonToken) {
+      try {
+        await supabase?.rpc('write_daemon_status', {
+          p_username: username,
+          p_daemon_token: daemonToken,
+          p_is_online: false,
+          p_last_disconnected_at: new Date(lastHeartbeatAt).toISOString(),
+        });
+      } catch {
+        // Uptime display still has the current request's inferred disconnect time.
+      }
+    }
+  }
+
+  const url = cachedIsLive ? cached!.url : storedIsLive ? storedTunnel.daemon_url : '';
+  const token = cachedIsLive ? cached!.token : storedIsLive ? storedTunnel.daemon_token || '' : '';
+  const updatedAt = cachedIsLive ? cached!.updatedAt : storedUpdatedAt || cached?.updatedAt || 0;
+  if (cachedIsLive && !daemonStartedAt) daemonStartedAt = cached?.daemonStartedAt || null;
+
+  if (isLive && url) {
+    return NextResponse.json({
+      url,
+      tunnel_url: url,
+      token,
+      updatedAt,
+      isLive: true,
+      daemonStartedAt,
+      lastDisconnectedAt,
+      statusStorageAvailable,
+    });
+  }
+
   return NextResponse.json({
     url: '',
     tunnel_url: '',
     token: '',
-    updatedAt: cached?.updatedAt || 0,
+    updatedAt,
     isLive: false,
+    daemonStartedAt,
+    lastDisconnectedAt,
+    statusStorageAvailable,
   });
 }
 
@@ -133,11 +175,32 @@ export async function POST(req: NextRequest) {
 
     // 1. Handle Explicit Disconnect / Shutdown
     if (action === 'disconnect' || !url || (typeof url === 'string' && url.trim() === '')) {
-      userTunnels.delete(cleanUsername);
+      const disconnectedAt = Date.now();
+      const cleanToken = typeof token === 'string' ? token.trim() : '';
+      userTunnels.set(cleanUsername, {
+        url: '',
+        token: cleanToken,
+        updatedAt: disconnectedAt,
+        daemonStartedAt: userTunnels.get(cleanUsername)?.daemonStartedAt,
+        lastDisconnectedAt: disconnectedAt,
+      });
 
       if (supabase) {
         try {
-          await supabase.from('tunnels').delete().ilike('username', cleanUsername);
+          // Keep an offline tunnel record so the daemon token can authorize
+          // reads of the persistent, RLS-protected daemon status row.
+          await supabase.from('tunnels').upsert({
+            username: cleanUsername,
+            daemon_url: '',
+            daemon_token: cleanToken,
+            updated_at: new Date(disconnectedAt).toISOString(),
+          });
+          await supabase.rpc('write_daemon_status', {
+            p_username: cleanUsername,
+            p_daemon_token: cleanToken,
+            p_is_online: false,
+            p_last_disconnected_at: new Date(disconnectedAt).toISOString(),
+          });
 
           // Automatically mark all connected bot accounts for this user as disconnected
           const { data: userAccs } = await supabase
@@ -169,6 +232,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: `Phone daemon tunnel disconnected and accounts marked offline for @${cleanUsername}`,
+        lastDisconnectedAt: disconnectedAt,
       });
     }
 
@@ -207,10 +271,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const previousRecord = userTunnels.get(cleanUsername);
+    const registeredAt = Date.now();
     const record = {
       url: cleanUrl,
       token: typeof token === 'string' ? token.trim() : '',
-      updatedAt: Date.now(),
+      updatedAt: registeredAt,
+      daemonStartedAt: action === 'heartbeat' ? previousRecord?.daemonStartedAt : registeredAt,
+      lastDisconnectedAt: previousRecord?.lastDisconnectedAt || null,
     };
 
     userTunnels.set(cleanUsername, record);
@@ -234,6 +302,14 @@ export async function POST(req: NextRequest) {
             updated_at: new Date().toISOString(),
           });
         }
+
+        await supabase.rpc('write_daemon_status', {
+          p_username: cleanUsername,
+          p_daemon_token: record.token,
+          p_is_online: true,
+          p_daemon_started_at: action === 'heartbeat' ? null : new Date(record.updatedAt).toISOString(),
+          p_last_heartbeat_at: new Date(record.updatedAt).toISOString(),
+        });
       } catch (e) {
         console.warn('Supabase tunnel registration error:', e);
       }
