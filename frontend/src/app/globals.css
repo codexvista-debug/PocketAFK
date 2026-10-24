@@ -261,9 +261,9 @@ body {
 .pa-dashboard-shell .pa-chat-console-head .bg-emerald-50{background:#2c4934!important;color:#b9e998!important}
 .pa-dashboard-shell .pa-chat-filters{background:#201f1c!important;border-color:#4d493f!important}
 .pa-dashboard-shell .pa-chat-stream .bg-white{background:#302e29!important;color:#eee8dc!important}
-@media(max-width:767px){.pa-dashboard-shell .pa-chat-workspace{height:calc(100dvh - 168px);min-height:400px;width:calc(100% + 16px);margin-left:-8px}}
+@media(max-width:767px){.pa-dashboard-shell .pa-chat-workspace{height:calc(100dvh - 168px);min-height:0;width:calc(100% + 16px);margin-left:-8px}}
 @media(max-width:639px){
-  .pa-dashboard-shell .pa-chat-workspace{height:calc(100dvh - 168px);min-height:400px;width:calc(100% + 16px);margin-left:-8px}
+  .pa-dashboard-shell .pa-chat-workspace{height:calc(100dvh - 168px);min-height:0;width:calc(100% + 16px);margin-left:-8px}
   .pa-dashboard-shell .pa-chat-viewer{width:100%;align-items:stretch}
   .pa-dashboard-shell .pa-chat-viewer-trigger{width:100%;min-width:0}
   .pa-dashboard-shell .pa-chat-console-head{padding:9px 10px;align-items:flex-start;flex-wrap:wrap}

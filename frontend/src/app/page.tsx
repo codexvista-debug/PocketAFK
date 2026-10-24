@@ -204,6 +204,7 @@ export default function Dashboard() {
     const userKey = (localStorage.getItem('pocketafk_user') || 'guest').trim().toLowerCase();
     return localStorage.getItem(`pocketafk_chat_auto_scroll_${userKey}`) !== 'false';
   });
+  const chatWorkspaceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const userKey = (currentUser || 'guest').trim().toLowerCase();
@@ -254,6 +255,27 @@ export default function Dashboard() {
   // Views & Tabs (MinecraftAFK Architecture)
   const [activeMainView, setActiveMainView] = useState<MainView>('profile');
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('connect');
+  useEffect(() => {
+    if (activeSubTab !== 'chat' || window.innerWidth >= 768) return;
+    const workspace = chatWorkspaceRef.current;
+    const viewport = window.visualViewport;
+    if (!workspace) return;
+    const resizeToAvailableHeight = () => {
+      const visibleBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+      const top = workspace.getBoundingClientRect().top;
+      workspace.style.height = `${Math.max(320, Math.floor(visibleBottom - top - 8))}px`;
+    };
+    resizeToAvailableHeight();
+    window.addEventListener('resize', resizeToAvailableHeight);
+    viewport?.addEventListener('resize', resizeToAvailableHeight);
+    viewport?.addEventListener('scroll', resizeToAvailableHeight);
+    return () => {
+      window.removeEventListener('resize', resizeToAvailableHeight);
+      viewport?.removeEventListener('resize', resizeToAvailableHeight);
+      viewport?.removeEventListener('scroll', resizeToAvailableHeight);
+      workspace.style.height = '';
+    };
+  }, [activeSubTab]);
 
   // Accounts & Servers state
   const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
@@ -2702,7 +2724,6 @@ export default function Dashboard() {
                         <div className="flex min-w-0 items-center gap-2.5">
                           <ServerLogo host={srv.serverHost} name={srv.name} size="w-5 h-5" />
                           <span className="pa-server-profile-name truncate">{srv.name}</span>
-                          <ServerPlayerCount host={`${srv.serverHost}${srv.serverPort && Number(srv.serverPort) !== 25565 ? `:${srv.serverPort}` : ''}`} />
                         </div>
                         <div className="shrink-0" title={isRunning ? 'Bot active on this server' : 'No bot active on this server'}>
                           <Radio aria-label={isRunning ? 'Bot active' : 'Bot inactive'} className={`h-3 w-3 ${isRunning ? 'animate-pulse text-emerald-600' : 'text-slate-400'}`} />
@@ -2907,7 +2928,7 @@ export default function Dashboard() {
             </header>
 
             {/* TAB CONTENT PANELS */}
-            <div className="p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto pb-8 md:pb-6">
+            <div className={`p-4 sm:p-6 flex-1 max-w-7xl w-full mx-auto ${activeSubTab === 'chat' ? 'pb-0 md:pb-6' : 'pb-8 md:pb-6'}`}>
               {activeMainView === 'account' && currentUser && (
                 <AccountSettingsView
                   username={currentUser}
@@ -3055,7 +3076,7 @@ export default function Dashboard() {
                           <th className="p-3.5">
                             <div className="flex items-center gap-1">
                               <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                              <span>Online</span>
+                              <span>Players</span>
                             </div>
                           </th>
                           <th className="p-3.5">
@@ -3122,47 +3143,6 @@ export default function Dashboard() {
                             })
                             .map((srv) => {
                               const isPinned = pinnedServerIds.includes(srv.id);
-                              const assignedIds = (
-                                Array.isArray(srv.assignedAccountIds)
-                                  ? srv.assignedAccountIds
-                                  : srv.accountId ? [srv.accountId] : []
-                              ).filter((id) => accounts.some((a) => a.id === id || a.ign === id));
-                              const totalAssigned = assignedIds.length;
-
-                              const isDaemonConnected = socketStatus === 'AUTHENTICATED';
-
-                              const activePrefixBots = isDaemonConnected ? Object.entries(botStates).filter(
-                                ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && (st === 'SPAWNED' || st === 'LOGGED_IN')
-                              ).length : 0;
-
-                              const assignedOnlineCount = isDaemonConnected ? assignedIds.filter((accId) => {
-                                const acc = accounts.find((a) => a.id === accId || a.ign === accId);
-                                const st =
-                                  botStates[`${srv.id}__${accId}`] ||
-                                  (acc ? botStates[`${srv.id}__${acc.id}`] : undefined) ||
-                                  (acc ? botStates[`${srv.id}__${acc.ign}`] : undefined) ||
-                                  botStates[srv.id];
-                                return st === 'SPAWNED' || st === 'LOGGED_IN';
-                              }).length : 0;
-
-                              const onlineCount = isDaemonConnected ? Math.max(activePrefixBots, assignedOnlineCount) : 0;
-
-                              const hasConnecting = isDaemonConnected && (
-                                Object.entries(botStates).some(
-                                  ([k, st]) => (k === srv.id || k.startsWith(`${srv.id}__`)) && st === 'CONNECTING'
-                                ) ||
-                                assignedIds.some((accId) => {
-                                  const acc = accounts.find((a) => a.id === accId || a.ign === accId);
-                                  const st =
-                                    botStates[`${srv.id}__${accId}`] ||
-                                    (acc ? botStates[`${srv.id}__${acc.id}`] : undefined) ||
-                                    (acc ? botStates[`${srv.id}__${acc.ign}`] : undefined) ||
-                                    botStates[srv.id];
-                                  return st === 'CONNECTING';
-                                })
-                              );
-
-                              const isRunning = onlineCount > 0 || hasConnecting;
                               const connections = serverConnections[srv.id] || srv.connectionsCount || 0;
                               const dateAddedStr = formatServerDate(srv.createdAt);
 
@@ -3193,14 +3173,9 @@ export default function Dashboard() {
                                     </div>
                                   </td>
 
-                                  {/* Online */}
+                                  {/* Public server player count */}
                                   <td className="p-3.5">
-                                    <div className="flex items-center gap-2 font-mono text-xs">
-                                      <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                                      <span className={isRunning ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
-                                        {onlineCount}/{totalAssigned}
-                                      </span>
-                                    </div>
+                                    <ServerPlayerCount host={`${srv.serverHost}${srv.serverPort && Number(srv.serverPort) !== 25565 ? `:${srv.serverPort}` : ''}`} />
                                   </td>
 
                                   {/* Connections */}
@@ -4049,7 +4024,7 @@ export default function Dashboard() {
 
                   {/* SUB-TAB 2: CHAT */}
                   {activeSubTab === 'chat' && (
-                    <div className="pa-chat-workspace flex flex-col h-[calc(100vh-140px)] min-h-[580px] space-y-3">
+                    <div ref={chatWorkspaceRef} className="pa-chat-workspace flex flex-col h-[calc(100vh-140px)] min-h-0 space-y-3">
 
 
                       {/* In-Game Minecraft Styled Console */}

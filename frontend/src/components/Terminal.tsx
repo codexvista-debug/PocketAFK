@@ -54,6 +54,7 @@ export const Terminal: React.FC<TerminalProps> = ({
   const [input, setInput] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const [isSenderDropdownOpen, setIsSenderDropdownOpen] = useState(false);
+  const [openRecipientTooltip, setOpenRecipientTooltip] = useState<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const senderDropdownRef = useRef<HTMLDivElement>(null);
@@ -72,6 +73,9 @@ export const Terminal: React.FC<TerminalProps> = ({
     (s) => s.id === selectedSenderId || s.ign === selectedSenderId
   );
   const onlineSenders = availableSenders.filter((sender) => sender.isOnline).length;
+  const receivingSenders = selectedSenderId === 'all' || !selectedSenderId
+    ? availableSenders.filter((sender) => sender.isOnline)
+    : [];
   const composerDisabled = disabled || availableSenders.length === 0 || (selectedSenderAccount ? !selectedSenderAccount.isOnline : onlineSenders === 0);
 
   useEffect(() => {
@@ -189,6 +193,45 @@ export const Terminal: React.FC<TerminalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {receivingSenders.length > 0 && (
+            <div className="pa-chat-recipients relative flex items-center pl-1" aria-label={`${receivingSenders.length} online account${receivingSenders.length === 1 ? '' : 's'} will receive this message`}>
+              <span className="sr-only">Receiving accounts:</span>
+              {receivingSenders.map((account, index) => {
+                const username = account.ign || account.name;
+                const isTooltipOpen = openRecipientTooltip === account.id;
+                return (
+                  <div key={account.id} className="relative" style={{ zIndex: receivingSenders.length - index }}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenRecipientTooltip(isTooltipOpen ? null : account.id)}
+                      className={`pa-chat-recipient-head -ml-1.5 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-[#292824] bg-[#39372f] shadow-sm transition hover:z-20 hover:scale-110 focus-visible:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 ${index === 0 ? '!ml-0' : ''}`}
+                      aria-label={`Receiving account ${username}`}
+                      aria-expanded={isTooltipOpen}
+                      title={username}
+                    >
+                      <img
+                        src={`https://minotar.net/helm/${encodeURIComponent(username)}/24.png`}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          if (event.currentTarget.src.includes('minotar.net')) {
+                            event.currentTarget.src = `https://mc-heads.net/avatar/${encodeURIComponent(username)}/24`;
+                          } else {
+                            event.currentTarget.style.visibility = 'hidden';
+                          }
+                        }}
+                      />
+                    </button>
+                    {isTooltipOpen && (
+                      <span role="tooltip" className="absolute right-0 top-full z-50 mt-2 whitespace-nowrap rounded-md border border-[#625d50] bg-[#1f1e1b] px-2 py-1 text-[10px] font-bold text-[#f2ecdf] shadow-lg">
+                        {username}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
