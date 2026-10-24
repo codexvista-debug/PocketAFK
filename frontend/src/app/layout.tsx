@@ -4,6 +4,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'PocketAFK - Minecraft AFK Dashboard',
   description: 'Pure Java Mineflayer Stack running 24/7 on Android Termux',
+  icons: {
+    icon: '/pocketafk-emblem.png',
+    shortcut: '/pocketafk-emblem.png',
+    apple: '/pocketafk-emblem.png',
+  },
 };
 
 export default function RootLayout({
