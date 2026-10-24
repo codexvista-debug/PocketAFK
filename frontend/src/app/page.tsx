@@ -3805,6 +3805,8 @@ export default function Dashboard() {
                           availableSenders={availableChatSenders}
                           selectedSenderId={chatSenderAccountId}
                           onSelectSender={(senderId) => setChatSenderAccountId(senderId)}
+                          serverName={activeServer.name}
+                          serverHost={activeServer.serverHost}
                           quickCommands={activeServer.quickCommands}
                           onEditQuickCommands={() => setIsQuickCommandsModalOpen(true)}
                         />

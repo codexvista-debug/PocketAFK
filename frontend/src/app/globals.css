@@ -244,12 +244,10 @@ body {
   .pa-dashboard-shell .pa-chat-filter{padding:5px 8px;font-size:11px}
   .pa-dashboard-shell .pa-chat-commands{padding-bottom:2px}
   .pa-dashboard-shell .pa-chat-stream{padding:8px}
-  .pa-dashboard-shell .pa-chat-composer{display:flex;flex-wrap:wrap;padding:9px;gap:7px}
-  .pa-dashboard-shell .pa-chat-input{order:1;flex:1 1 calc(100% - 28px);width:calc(100% - 28px)}
-  .pa-dashboard-shell .pa-chat-prompt{order:0}
-  .pa-dashboard-shell .pa-chat-sender{order:2;flex:1 1 auto;min-width:0}
-  .pa-dashboard-shell .pa-chat-sender>button{width:100%;justify-content:space-between}
-  .pa-dashboard-shell .pa-chat-send{order:3;padding:0 14px}
+  .pa-dashboard-shell .pa-chat-composer{display:flex;flex-wrap:nowrap;padding:8px;gap:6px}
+  .pa-dashboard-shell .pa-chat-input{flex:1 1 0;width:auto;padding:9px 10px;font-size:11px}
+  .pa-dashboard-shell .pa-chat-prompt{padding:0 2px}
+  .pa-dashboard-shell .pa-chat-send{width:36px;height:36px;min-height:36px}
 }
 
 /* One account selector controls both the chat feed and sender. */
@@ -264,6 +262,8 @@ body {
 .pa-dashboard-shell .pa-chat-sender-label{letter-spacing:.7px;font-size:8px}
 .pa-dashboard-shell .pa-chat-sender>div.absolute{width:min(280px,calc(100vw - 28px))}
 .pa-dashboard-shell .pa-chat-sender>div.absolute>button{min-height:48px}
+.pa-dashboard-shell .pa-chat-sender-menu{max-height:min(70vh,360px);overflow-y:auto}
+.pa-dashboard-shell .pa-chat-sender-header>button{min-height:40px;max-width:min(220px,40vw)}
 .pa-dashboard-shell .pa-chat-message-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;padding:7px 6px;border-bottom:1px solid #39372f}
 .pa-dashboard-shell .pa-chat-message-skin{width:32px;height:32px;object-fit:cover;image-rendering:pixelated;background:#302e29;border:1px solid #5c564a;border-radius:4px}
 .pa-dashboard-shell .pa-chat-system-avatar{display:grid;width:32px;height:32px;place-items:center;background:linear-gradient(145deg,#2e4936,#222c26);border:1px solid #557254;border-radius:5px}
@@ -276,6 +276,11 @@ body {
 .pa-dashboard-shell .pa-chat-send svg{width:17px;height:17px}
 .pa-dashboard-shell .pa-chat-option-hint{display:block;color:#bcb3a4;font-size:9px;font-weight:500;line-height:1.35}
 @media(max-width:639px){
+  .pa-dashboard-shell .pa-chat-console-head{gap:8px;padding:8px 9px;align-items:center;flex-wrap:nowrap}
+  .pa-dashboard-shell .pa-chat-account-icon{width:32px;height:32px}
+  .pa-dashboard-shell .pa-chat-account-caption{max-width:calc(100vw - 210px);font-size:8px}
+  .pa-dashboard-shell .pa-chat-sender-header>button{max-width:130px;padding:6px 8px}
+  .pa-dashboard-shell .pa-chat-sender-header>button>span{max-width:76px}
   .pa-dashboard-shell .pa-chat-account-caption{max-width:calc(100vw - 124px)}
   .pa-dashboard-shell .pa-chat-message-row{grid-template-columns:28px minmax(0,1fr) auto;gap:7px;padding:7px 2px}
   .pa-dashboard-shell .pa-chat-message-skin{width:26px;height:26px}

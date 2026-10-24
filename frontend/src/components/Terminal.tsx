@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage, QuickCommandItem } from '../types';
 import { Send, ArrowDown, MessageSquare, Users, ChevronDown, Check, Pencil } from 'lucide-react';
 import { MinecraftChatMessage, stripMinecraftFormatting } from './MinecraftChatMessage';
+import { ServerLogo } from './ServerLogo';
 
 export interface ChatAccountItem {
   id: string;
@@ -21,6 +22,8 @@ interface TerminalProps {
   onSelectSender?: (senderId: string) => void;
   quickCommands?: QuickCommandItem[];
   onEditQuickCommands?: () => void;
+  serverName?: string;
+  serverHost?: string;
 }
 
 const DEFAULT_QUICK_COMMANDS: QuickCommandItem[] = [
@@ -43,6 +46,8 @@ export const Terminal: React.FC<TerminalProps> = ({
   onSelectSender,
   quickCommands,
   onEditQuickCommands,
+  serverName = 'Minecraft Server',
+  serverHost = '',
 }) => {
   const [input, setInput] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
@@ -130,34 +135,56 @@ export const Terminal: React.FC<TerminalProps> = ({
       <div className="pa-chat-console-head bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3 min-w-0">
           <div className="pa-chat-account-icon w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/90 flex items-center justify-center shrink-0 shadow-2xs">
-            {selectedSenderAccount ? (
-              <img
-                src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/36.png`}
-                alt=""
-                className="w-full h-full object-cover [image-rendering:pixelated]"
-                onError={(e) => { e.currentTarget.src = 'https://minotar.net/helm/MHF_Steve/36.png'; }}
-              />
-            ) : (
-              <Users className="w-4 h-4" />
-            )}
+            <ServerLogo host={serverHost} name={serverName} size="w-full h-full" />
           </div>
           <div className="min-w-0">
-            <span className="pa-chat-account-kicker">CHAT ACCOUNT</span>
             <div className="flex items-center gap-2 min-w-0">
-              <span className="pa-chat-account-name font-extrabold text-slate-900 tracking-tight truncate text-xs">
-                {selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}
-              </span>
-              <span className={`pa-chat-online-indicator ${selectedSenderAccount ? (selectedSenderAccount.isOnline ? 'is-online' : 'is-offline') : (onlineSenders ? 'is-online' : 'is-offline')}`} />
+              <span className="pa-chat-account-name font-extrabold text-slate-900 tracking-tight truncate text-xs">{serverName}</span>
+              <span className={`pa-chat-online-indicator ${onlineSenders ? 'is-online' : 'is-offline'}`} />
             </div>
             <span className="pa-chat-account-caption">
-              {selectedSenderAccount
-                ? (selectedSenderAccount.isOnline ? 'Showing and sending as this account' : 'Showing this account’s messages · offline')
-                : `Showing all profile messages · ${onlineSenders}/${availableSenders.length} online`}
+              {onlineSenders}/{availableSenders.length} accounts connected{serverHost ? ` · ${serverHost}` : ''}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {availableSenders.length > 0 && (
+            <div className="pa-chat-sender pa-chat-sender-header relative shrink-0" ref={senderDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer shadow-2xs"
+                title="Choose which account's chat to view and send from"
+                aria-label={`Chat account: ${selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}`}
+              >
+                {selectedSenderAccount ? (
+                  <img src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/20.png`} alt="" className="w-5 h-5 rounded border border-slate-200 shrink-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : <Users className="w-4 h-4 text-slate-500" />}
+                <span className="truncate max-w-[120px]">{selectedSenderAccount?.ign || selectedSenderAccount?.name || 'All accounts'}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+              {isSenderDropdownOpen && (
+                <div className="pa-chat-sender-menu absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
+                  <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">Choose chat account</div>
+                  <button type="button" onClick={() => { onSelectSender?.('all'); setIsSenderDropdownOpen(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${!selectedSenderId || selectedSenderId === 'all' ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                    <span className="flex items-center gap-2"><Users className="w-4 h-4" /> All accounts</span>
+                    {(!selectedSenderId || selectedSenderId === 'all') && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                  </button>
+                  <div className="border-t border-slate-100 my-1" />
+                  <div className="max-h-48 overflow-y-auto">
+                    {availableSenders.map((acc) => {
+                      const isSelected = selectedSenderId === acc.id || selectedSenderId === acc.ign;
+                      return <button key={acc.id} type="button" onClick={() => { onSelectSender?.(acc.id); setIsSenderDropdownOpen(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${isSelected ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        <span className="flex items-center gap-2 min-w-0"><img src={`https://minotar.net/helm/${encodeURIComponent(acc.ign || acc.name)}/20.png`} alt="" className="w-5 h-5 rounded border border-slate-200 shrink-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} /><span className="truncate">{acc.ign || acc.name}</span>{acc.isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {!autoScroll && (
             <button
               onClick={() => {
@@ -275,114 +302,6 @@ export const Terminal: React.FC<TerminalProps> = ({
           disabled={composerDisabled}
           className="pa-chat-input flex-1 min-w-0 bg-slate-50/80 border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none rounded-xl px-4 py-2.5 text-xs text-slate-900 font-mono placeholder-slate-400 disabled:opacity-50 shadow-2xs transition"
         />
-
-        {/* Sender Account Picker (Matches VistaAFK) */}
-        {availableSenders && availableSenders.length > 0 && (
-          <div className="pa-chat-sender relative shrink-0" ref={senderDropdownRef}>
-            <span className="pa-chat-sender-label">ACCOUNT</span>
-            <button
-              type="button"
-              onClick={() => setIsSenderDropdownOpen((prev) => !prev)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300/90 text-xs font-bold text-slate-800 transition cursor-pointer shadow-2xs"
-              title="Select which account sends this message"
-            >
-              {selectedSenderAccount ? (
-                <>
-                  <img
-                    src={`https://minotar.net/helm/${encodeURIComponent(selectedSenderAccount.ign || selectedSenderAccount.name)}/18.png`}
-                    alt={selectedSenderAccount.name}
-                    className="w-4 h-4 rounded shadow-2xs border border-slate-200 shrink-0"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                  <span className="truncate max-w-[100px] font-mono text-emerald-700">
-                    {selectedSenderAccount.ign || selectedSenderAccount.name}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Users className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="text-slate-700 whitespace-nowrap">All accounts</span>
-                </>
-              )}
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {/* Dropdown Menu */}
-            {isSenderDropdownOpen && (
-              <div className="absolute right-0 bottom-full mb-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
-                <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Choose chat account
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectSender?.('all');
-                    setIsSenderDropdownOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${
-                    !selectedSenderId || selectedSenderId === 'all'
-                      ? 'bg-emerald-50 text-emerald-800'
-                      : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
-                      <Users className="w-3 h-3" />
-                    </div>
-                    <span className="flex flex-col text-left">
-                      <span>All accounts</span>
-                  <span className="pa-chat-option-hint">View all messages · send through every account</span>
-                    </span>
-                  </div>
-                  {(!selectedSenderId || selectedSenderId === 'all') && (
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  )}
-                </button>
-
-                <div className="border-t border-slate-100 my-1" />
-
-                <div className="max-h-48 overflow-y-auto">
-                  {availableSenders.map((acc) => {
-                    const isSelected = selectedSenderId === acc.id || selectedSenderId === acc.ign;
-                    return (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectSender?.(acc.id);
-                          setIsSenderDropdownOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-50 text-emerald-800'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <img
-                            src={`https://minotar.net/helm/${encodeURIComponent(acc.ign || acc.name)}/20.png`}
-                            alt={acc.name}
-                            className="w-5 h-5 rounded shadow-2xs border border-slate-200 shrink-0"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                          <span className="truncate font-mono">{acc.ign || acc.name}</span>
-                          {acc.isOnline && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                          )}
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         <button
           type="submit"
