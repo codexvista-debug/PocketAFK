@@ -10,6 +10,7 @@ create table if not exists public.daemon_status (
   updated_at timestamptz not null default timezone('utc'::text, now())
 );
 alter table public.daemon_status enable row level security;
+revoke all on table public.daemon_status from public, anon, authenticated;
 
 create or replace function public.write_daemon_status(
   p_username text,
