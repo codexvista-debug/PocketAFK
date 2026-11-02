@@ -92,14 +92,14 @@ if [ -n "$USER_SUMMARY" ]; then
     }
   " "$USER_SUMMARY" 2>/dev/null)
 
-  if [ -n "$PARSED_DATA" ]; then
-    ACC_COUNT=$(echo "$PARSED_DATA" | awk -F';;' '{print $1}')
-    ACC_LIST=$(echo "$PARSED_DATA" | awk -F';;' '{print $2}')
-    USER_RANK=$(echo "$PARSED_DATA" | awk -F';;' '{print $3}')
-    RANK_ICON=$(echo "$PARSED_DATA" | awk -F';;' '{print $4}')
-    ACC_MAX=$(echo "$PARSED_DATA" | awk -F';;' '{print $5}')
-    MAX_SRVS=$(echo "$PARSED_DATA" | awk -F';;' '{print $6}')
-  fi
+    ACC_MAX="10"
+    MAX_SRVS="10"
+    USER_RANK="UNIVERSAL"
+    RANK_ICON="⚡"
+    if [ -n "$PARSED_DATA" ]; then
+      ACC_COUNT=$(echo "$PARSED_DATA" | awk -F';;' '{print $1}')
+      ACC_LIST=$(echo "$PARSED_DATA" | awk -F';;' '{print $2}')
+    fi
 fi
 
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"

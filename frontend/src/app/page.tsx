@@ -2840,18 +2840,13 @@ export default function Dashboard() {
                 </button>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRankModalOpen(true);
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition cursor-pointer flex items-center gap-1 shrink-0 ${currentRankConfig.badgeBg} ${currentRankConfig.badgeText} ${currentRankConfig.badgeBorder} hover:brightness-95 active:scale-95 shadow-2xs`}
-                  title="Click to view or upgrade Rank"
+                <span
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition flex items-center gap-1 shrink-0 bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs"
+                  title="Universal 10-Account Capacity"
                 >
                   <span className="pa-item-icon pa-icon-rank pa-rank-gem" aria-hidden="true" />
-                  <span>{currentRankConfig.name}</span>
-                </button>
+                  <span>10 BOTS MAX</span>
+                </span>
                 <button
                   type="button"
                   onClick={handleLogout}

@@ -256,17 +256,12 @@ export async function GET(req: NextRequest) {
     });
 
     // 7. Aggregate stats
-    const rankBreakdown = {
-      iron: 0,
-      gold: 0,
-      diamond: 0,
-      emerald: 0,
+    const rankBreakdown: Record<string, number> = {
+      standard: 0,
     };
 
     userList.forEach((u) => {
-      if (rankBreakdown[u.rank] !== undefined) {
-        rankBreakdown[u.rank]++;
-      }
+      rankBreakdown[u.rank] = (rankBreakdown[u.rank] || 0) + 1;
     });
 
     const activeTunnelsCount = tunnelList.filter((t) => t.isRecent).length;

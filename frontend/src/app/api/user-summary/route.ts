@@ -53,20 +53,13 @@ export async function GET(req: NextRequest) {
       } catch (e) {}
     }
 
-    const rankConfig = {
-      iron: { name: 'Iron', maxAccounts: 1, maxServers: 1, gemIcon: '🪙' },
-      gold: { name: 'Gold', maxAccounts: 3, maxServers: 3, gemIcon: '⭐' },
-      diamond: { name: 'Diamond', maxAccounts: 6, maxServers: 6, gemIcon: '💎' },
-      emerald: { name: 'Emerald', maxAccounts: 10, maxServers: 10, gemIcon: '🌿' },
-    }[userRank] || { name: 'Iron', maxAccounts: 1, maxServers: 1, gemIcon: '🪙' };
-
     return NextResponse.json({
       username,
-      rank: userRank,
-      rankName: rankConfig.name,
-      gemIcon: rankConfig.gemIcon,
-      maxAccounts: rankConfig.maxAccounts,
-      maxServers: rankConfig.maxServers,
+      rank: 'standard',
+      rankName: 'Universal',
+      gemIcon: '⚡',
+      maxAccounts: 10,
+      maxServers: 10,
       accounts,
       totalAccounts: accounts.length,
     });
