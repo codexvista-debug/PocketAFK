@@ -183,7 +183,7 @@ export function useDaemonSocket(
 
     // A saved but stopped Termux tunnel should settle to the true offline state
     // instead of glowing indefinitely while background retries continue.
-    setStatus('CONNECTING');
+    setStatus(failedConnectionAttemptsRef.current < 2 ? 'CONNECTING' : 'DISCONNECTED');
     setDaemonConnections(null);
     try {
       const ws = new WebSocket(daemonUrl);
@@ -484,31 +484,6 @@ export function useDaemonSocket(
       }
     };
   }, [connect, daemonUrl, enabled]);
-
-  // Window Focus & Visibility Change: Auto-reconnect immediately when user returns from AFK / switches back tab
-  useEffect(() => {
-    if (typeof window === 'undefined' || !enabled || !daemonUrl || daemonUrl.includes('localhost')) return;
-
-    const handleWakeup = () => {
-      if (document.visibilityState === 'visible') {
-        const isSocketDead = !socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING;
-        if (isSocketDead || status === 'DISCONNECTED') {
-          failedConnectionAttemptsRef.current = 0;
-          connect();
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleWakeup);
-    window.addEventListener('focus', handleWakeup);
-    window.addEventListener('online', handleWakeup);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleWakeup);
-      window.removeEventListener('focus', handleWakeup);
-      window.removeEventListener('online', handleWakeup);
-    };
-  }, [connect, enabled, daemonUrl, status]);
 
   const sendJson = useCallback((msg: any) => {
     if (!enabled || !daemonUrl || status !== 'AUTHENTICATED') return false;

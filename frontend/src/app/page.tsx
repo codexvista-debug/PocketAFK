@@ -13,7 +13,6 @@ import { AuthModal } from '../components/AuthModal';
 import { MicrosoftAuthModal } from '../components/MicrosoftAuthModal';
 import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
-import { DaemonReconnectBanner } from '../components/DaemonReconnectBanner';
 import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
 import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickCommandsModal';
@@ -618,7 +617,6 @@ export default function Dashboard() {
     updateWebhookConfig,
     msAuthData,
     clearMsAuth,
-    reconnect: reconnectDaemon,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser, () => sessionRevokedHandlerRef.current());
 
   const refreshDaemonSessions = useCallback(async () => {
@@ -2294,16 +2292,6 @@ export default function Dashboard() {
     <div className={`${currentUser ? 'pa-dashboard-shell' : ''} min-h-screen bg-[#f1f5f9] bg-grid-slate text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20`}>
       {/* Toast Notification Container */}
       <ModernToast toast={toast} onDismiss={handleDismissToast} />
-
-      {/* Floating Reconnect Indicator for Termux Daemon */}
-      <DaemonReconnectBanner
-        socketStatus={socketStatus}
-        hasConfiguredDaemon={Boolean(daemonUrl && !daemonUrl.includes('localhost'))}
-        onReconnectNow={() => {
-          showToast('Attempting to reconnect to Termux daemon...', 'info');
-          reconnectDaemon();
-        }}
-      />
 
       {/* Microsoft In-App Device Auth Modal */}
       {((isPollingMs && msAuthData) || apiMsAuthData) && (
