@@ -52,8 +52,16 @@ fi
 
 UPPER_USER=$(echo "$APP_USER" | tr '[:lower:]' '[:upper:]')
 
+# Auto-detect target dashboard (Prod vs Dev)
+DASHBOARD_BASE="${POCKETAFK_DASHBOARD_URL:-https://pocketafk.vercel.app}"
+if git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q "dev" || [ "$PWD" = *"-dev"* ]; then
+  if [ -z "$POCKETAFK_DASHBOARD_URL" ]; then
+    DASHBOARD_BASE="https://dev-pocketafk.vercel.app"
+  fi
+fi
+
 # Fetch real-time accounts from dashboard API
-USER_SUMMARY=$(curl -s --connect-timeout 5 --max-time 10 "https://pocketafk.vercel.app/api/user-summary?username=$APP_USER" 2>/dev/null)
+USER_SUMMARY=$(curl -s --connect-timeout 5 --max-time 10 "${DASHBOARD_BASE}/api/user-summary?username=$APP_USER" 2>/dev/null)
 ACCOUNTS_CACHE_FILE="$HOME/.pocketafk_accounts.json"
 
 if [ -n "$USER_SUMMARY" ] && echo "$USER_SUMMARY" | grep -q "accounts"; then
@@ -187,8 +195,8 @@ if [ -z "$TUNNEL_URL" ]; then
 fi
 
 WSS_URL=$(echo "$TUNNEL_URL" | sed 's/https:/wss:/')
-DASHBOARD_SYNC_URL="https://pocketafk.vercel.app/api/tunnel"
-AUTO_OPEN_URL="https://pocketafk.vercel.app/?tunnel=${WSS_URL}&user=${APP_USER}"
+DASHBOARD_SYNC_URL="${DASHBOARD_BASE}/api/tunnel"
+AUTO_OPEN_URL="${DASHBOARD_BASE}/?tunnel=${WSS_URL}&user=${APP_USER}"
 
 # 4. Auto-sync to Vercel Website
 echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
@@ -212,7 +220,7 @@ fi
 echo -ne "      ${YELLOW}⌛ Verifying web dashboard is locked to @${APP_USER}...${NC}"
 VERIFIED=false
 for i in {1..5}; do
-  CHECK_RESP=$(curl -s --connect-timeout 4 --max-time 6 "https://pocketafk.vercel.app/api/tunnel?username=${APP_USER}" 2>/dev/null)
+  CHECK_RESP=$(curl -s --connect-timeout 4 --max-time 6 "${DASHBOARD_BASE}/api/tunnel?username=${APP_USER}" 2>/dev/null)
   VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"tunnel_url":"[^"]*"' | cut -d'"' -f4)
   if [ -z "$VERIFIED_URL" ]; then
     VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"url":"[^"]*"' | cut -d'"' -f4)
@@ -278,10 +286,10 @@ echo -e "${GREEN}╚════════════════════
 echo -e "  ${WHITE}👤 User Account     :${NC} ${BOLD}${YELLOW}@${UPPER_USER}${NC} (${RANK_ICON} ${USER_RANK} Tier)"
 echo -e "  ${WHITE}🎮 Linked Java      :${NC} ${GREEN}${ACC_COUNT}/${ACC_MAX} active${NC} (${CYAN}${ACC_LIST}${NC})"
 echo -e "  ${WHITE}🌐 WebSocket Tunnel :${NC} ${CYAN}${WSS_URL}${NC}"
-echo -e "  ${WHITE}📱 Web Dashboard    :${NC} ${GREEN}https://pocketafk.vercel.app${NC}"
+echo -e "  ${WHITE}📱 Web Dashboard    :${NC} ${GREEN}${DASHBOARD_BASE}${NC}"
 echo -e "  ${WHITE}⚡ Instant Link     :${NC} ${YELLOW}${AUTO_OPEN_URL}${NC}"
 echo -e "${GREEN}─────────────────────────────────────────────────────────────────────────────${NC}"
-echo -e "  ${BOLD}💡 Note:${NC} You can simply open ${GREEN}https://pocketafk.vercel.app${NC} on ANY device."
+echo -e "  ${BOLD}💡 Note:${NC} You can simply open ${GREEN}${DASHBOARD_BASE}${NC} on ANY device."
 echo -e "  The website will ${BOLD}automatically detect${NC} this phone's tunnel!"
 echo -e "  ${GRAY}(To stop PocketAFK, press Ctrl+C anytime)${NC}\n"
 

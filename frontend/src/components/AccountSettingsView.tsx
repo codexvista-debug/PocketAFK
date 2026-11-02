@@ -73,7 +73,8 @@ export function AccountSettingsView({ username, socketStatus, daemonUrl, daemonC
       if (!response.ok || data.error) throw new Error(data.error || 'Could not update your password.');
       if (typeof data.secretCode === 'string') {
         onPasswordChanged(data.secretCode);
-        setUpdatedInstallerCommand(`curl -sL https://pocketafk.vercel.app/install | bash -s -- ${username} ${data.secretCode}`);
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://pocketafk.vercel.app';
+        setUpdatedInstallerCommand(`curl -sL ${currentOrigin}/install | bash -s -- ${username} ${data.secretCode}`);
         setCommandCopied(false);
       }
       setCurrentPassword('');

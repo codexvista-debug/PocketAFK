@@ -1062,9 +1062,10 @@ export default function Dashboard() {
   }, [botState, botStates]);
 
   const effectiveUser = currentUser || 'default';
+  const siteOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://pocketafk.vercel.app';
   const termuxCommand = secretCode
-    ? `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser} ${secretCode}`
-    : `curl -sL https://pocketafk.vercel.app/install | bash -s -- ${effectiveUser}`;
+    ? `curl -sL ${siteOrigin}/install | bash -s -- ${effectiveUser} ${secretCode}`
+    : `curl -sL ${siteOrigin}/install | bash -s -- ${effectiveUser}`;
 
   // Auto-sync tunnel from API or URL
   useEffect(() => {

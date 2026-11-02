@@ -2,10 +2,16 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const host = request.headers.get('host') || 'pocketafk.vercel.app';
+  const proto = request.headers.get('x-forwarded-proto') || 'https';
+  const siteUrl = `${proto}://${host}`;
+  const isDev = host.includes('dev-pocketafk') || host.includes('localhost') || host.includes('preview');
+  const targetBranch = isDev ? 'dev' : 'main';
+
   const script = `#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-#            PocketAFK - 1-Click Universal Termux Installer
+#            PocketAFK - 1-Click Universal Termux Installer (${targetBranch.toUpperCase()})
 # ==============================================================================
 set -e
 
@@ -13,7 +19,7 @@ set -e
 clear
 echo -e "\\033[1;36m"
 echo "  ╔═══════════════════════════════════════════════════╗"
-echo "  ║        🚀 PocketAFK 1-Click Termux Setup          ║"
+echo "  ║     🚀 PocketAFK 1-Click Setup [${targetBranch.toUpperCase()}]          ║"
 echo "  ╚═══════════════════════════════════════════════════╝"
 echo -e "\\033[0m"
 
@@ -36,18 +42,24 @@ else
 fi
 
 # 2. Clone or update repository
-echo -e "\\n\\033[1;34m[2/3]\\033[0m 📥 Syncing PocketAFK engine..."
+echo -e "\\n\\033[1;34m[2/3]\\033[0m 📥 Syncing PocketAFK engine [branch: ${targetBranch}]..."
 cd "$HOME"
-if [ -d "PocketAFK/.git" ]; then
-  cd PocketAFK
-  git reset --hard HEAD >/dev/null 2>&1
-  git pull --force >/dev/null 2>&1 || true
-  echo -e "      \\033[1;32m✓ Updated to latest version.\\033[0m"
+TARGET_DIR="PocketAFK"
+if [ "${targetBranch}" = "dev" ]; then
+  TARGET_DIR="PocketAFK-dev"
+fi
+
+if [ -d "$TARGET_DIR/.git" ]; then
+  cd "$TARGET_DIR"
+  git fetch origin "${targetBranch}" >/dev/null 2>&1 || true
+  git checkout "${targetBranch}" >/dev/null 2>&1 || true
+  git reset --hard "origin/${targetBranch}" >/dev/null 2>&1 || true
+  echo -e "      \\033[1;32m✓ Updated to latest ${targetBranch} version.\\033[0m"
 else
-  rm -rf PocketAFK 2>/dev/null || true
-  git clone https://github.com/codexvista-debug/PocketAFK.git >/dev/null 2>&1
-  cd PocketAFK
-  echo -e "      \\033[1;32m✓ Cloned successfully.\\033[0m"
+  rm -rf "$TARGET_DIR" 2>/dev/null || true
+  git clone -b "${targetBranch}" https://github.com/codexvista-debug/PocketAFK.git "$TARGET_DIR" >/dev/null 2>&1
+  cd "$TARGET_DIR"
+  echo -e "      \\033[1;32m✓ Cloned branch ${targetBranch} successfully.\\033[0m"
 fi
 
 # 3. Install packages if needed
@@ -73,6 +85,7 @@ rm -f "$HOME/.pocketafk_accounts.json" 2>/dev/null || true
 sleep 1
 
 # 5. Launch daemon & tunnel
+export POCKETAFK_DASHBOARD_URL="${siteUrl}"
 chmod +x start.sh 2>/dev/null || true
 bash start.sh "$1" "$2"
 `;
