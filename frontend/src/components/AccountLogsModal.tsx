@@ -41,6 +41,15 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
   const [filterQuery, setFilterQuery] = useState('');
   const [copied, setCopied] = useState(false);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const cleanPlayerName = account?.ign || account?.expectedIgn || account?.username || 'Unknown';
   const avatarKey = (account?.uuid || account?.ign || account?.username || 'Steve').split('@')[0];
 
@@ -205,8 +214,14 @@ export const AccountLogsModal: React.FC<AccountLogsModalProps> = ({
   };
 
   return (
-    <div className="pa-account-logs-modal fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="pa-logs-dialog bg-white border border-slate-200 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+    <div
+      onClick={onClose}
+      className="pa-account-logs-modal fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="pa-logs-dialog bg-white border border-slate-200 rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]"
+      >
         {/* Modal Header */}
         <div className="pa-logs-header px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/90">
           <div className="flex items-center gap-3">

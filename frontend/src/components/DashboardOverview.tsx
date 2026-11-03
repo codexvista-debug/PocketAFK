@@ -42,6 +42,24 @@ const durationLabel = (from: string | number, to: string | number | null) => {
 
 const dateLabel = (date: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
 
+const relativeTime = (dateStr: string) => {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  if (isNaN(diffMs)) return '';
+  if (diffMs < 0) return 'just now';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 45) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(months / 12);
+  return `${years}y ago`;
+};
+
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sessions, loading, daemonOnline, accounts, servers, onRefresh }) => {
   const [selected, setSelected] = useState<DaemonSession | null>(null);
   const [, tick] = useState(0);
@@ -66,6 +84,20 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sessions, 
     const name = (account.ign || account.expectedIgn || '').replace(/^@/, '').trim();
     return name && name.toLowerCase() === bot.accountName.replace(/^@/, '').trim().toLowerCase();
   });
+
+  const getSessionServers = (session: DaemonSession) => {
+    const map = new Map<string, { host: string; name: string }>();
+    (session.bots || []).forEach((bot) => {
+      const srv = getServerForBot(bot);
+      const host = srv?.serverHost || bot.serverHost;
+      const name = srv?.name || host;
+      const key = (srv?.id || host || '').trim().toLowerCase();
+      if (key && !map.has(key)) {
+        map.set(key, { host, name });
+      }
+    });
+    return Array.from(map.values());
+  };
 
   return (
     <div className="mx-auto max-w-5xl animate-in fade-in duration-200 pb-10 text-[#eee9dc]">
@@ -100,21 +132,57 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ sessions, 
             <div className="space-y-3">
               {sessions.slice(0, 5).map((session, index) => {
                 const active = !session.endedAt;
+                const sessionServers = getSessionServers(session);
                 return (
-                  <button key={session.id} onClick={() => setSelected(session)} className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-[#4c493f] bg-[#2b2925] px-4 py-4 text-left transition hover:border-emerald-700/80 hover:bg-[#302f29] sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-5">
+                  <button key={session.id} onClick={() => setSelected(session)} className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-xl border border-[#4c493f] bg-[#2b2925] px-4 py-4 text-left transition hover:border-emerald-700/80 hover:bg-[#302f29] sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_auto_auto] sm:px-5">
                     <span className="flex min-w-0 items-center gap-3">
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#575246] bg-[#353229] text-[#d7c99d]"><Server className="h-4 w-4" /></span>
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-2 font-bold text-[#eee9dc]">Session {index + 1}<span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${active ? 'bg-emerald-900/70 text-emerald-300' : 'bg-[#403d35] text-[#c8c0b0]'}`}>{active ? 'RUNNING' : 'ENDED'}</span></span>
-                        <span className="mt-1 block truncate text-xs text-[#bcb5a6]">Started {dateLabel(session.startedAt)}</span>
+                        <span className="mt-1 block truncate text-xs text-[#bcb5a6]">Started {relativeTime(session.startedAt)} · {dateLabel(session.startedAt)}</span>
                       </span>
                     </span>
+                    <div className="hidden sm:flex flex-wrap items-center gap-1.5 min-w-0">
+                      {sessionServers.length > 0 ? (
+                        sessionServers.slice(0, 3).map((srv) => (
+                          <span
+                            key={srv.host}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#524e43] bg-[#21201d] px-2.5 py-1 text-xs font-semibold text-[#ded8c9] shadow-2xs shrink-0 max-w-[190px]"
+                            title={`${srv.name} (${srv.host})`}
+                          >
+                            <ServerLogo host={srv.host} name={srv.name} size="h-4 w-4" />
+                            <span className="truncate">{srv.name}</span>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-[11px] text-[#787366] italic">No servers connected</span>
+                      )}
+                      {sessionServers.length > 3 && (
+                        <span className="text-[10px] font-bold text-[#a8a18f] px-1.5 py-0.5 rounded bg-[#353229] border border-[#514d43]">
+                          +{sessionServers.length - 3} more
+                        </span>
+                      )}
+                    </div>
                     <span className="text-right sm:min-w-28 sm:text-left">
                       <span className="block text-[10px] font-bold uppercase tracking-wider text-[#928c7e]">Uptime</span>
                       <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-extrabold text-emerald-200"><Clock3 className="h-3.5 w-3.5" />{durationLabel(session.startedAt, session.endedAt)}</span>
                     </span>
                     <span className="hidden items-center gap-1.5 text-xs text-[#aaa393] sm:inline-flex"><Users className="h-3.5 w-3.5" />{session.bots.length} bot{session.bots.length === 1 ? '' : 's'}<ChevronRight className="ml-1 h-4 w-4 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" /></span>
-                    <span className="col-span-2 flex items-center justify-between border-t border-[#454239] pt-2 text-[11px] text-[#aaa393] sm:hidden"><span>{session.bots.length} bot{session.bots.length === 1 ? '' : 's'}</span><span>Tap for details <ChevronRight className="inline h-3.5 w-3.5" /></span></span>
+                    <span className="col-span-2 flex flex-wrap items-center justify-between border-t border-[#454239] pt-2 text-[11px] text-[#aaa393] sm:hidden gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {sessionServers.length > 0 ? (
+                          sessionServers.slice(0, 2).map((srv) => (
+                            <span key={srv.host} className="inline-flex items-center gap-1 rounded bg-[#201f1c] px-1.5 py-0.5 text-[10px] text-[#ded8c9] border border-[#4c493f]">
+                              <ServerLogo host={srv.host} name={srv.name} size="h-3 w-3" />
+                              <span className="truncate max-w-[110px]">{srv.name}</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span>{session.bots.length} bot{session.bots.length === 1 ? '' : 's'}</span>
+                        )}
+                      </div>
+                      <span>Tap for details <ChevronRight className="inline h-3.5 w-3.5" /></span>
+                    </span>
                   </button>
                 );
               })}
