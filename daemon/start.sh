@@ -204,17 +204,6 @@ SYNC_RESP=$(curl -s -X POST "$DASHBOARD_SYNC_URL" \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"register\"}" 2>/dev/null)
 
-# Direct Supabase sync fallback (bypasses any Vercel deployment protection blocks)
-SUPABASE_REST_URL="https://suqxsvzbuastumefbebp.supabase.co/rest/v1/tunnels"
-SUPABASE_ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1cXhzdnpidWFzdHVtZWZiZWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTkyODUsImV4cCI6MjEwOTE3NTI4NX0.FZt5FYMtOBJvQFZzMaq1HkuYQLfW3SZcZl97PY1PkY4"
-ISO_NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-curl -s -X POST "$SUPABASE_REST_URL" \
-  -H "apikey: $SUPABASE_ANON" \
-  -H "Content-Type: application/json" \
-  -H "Prefer: resolution=merge-duplicates" \
-  -d "{\"username\":\"$APP_USER\",\"daemon_url\":\"$WSS_URL\",\"daemon_token\":\"$APP_SECRET\",\"updated_at\":\"$ISO_NOW\"}" >/dev/null 2>&1 || true
-
 if echo "$SYNC_RESP" | grep -q "Unauthorized"; then
   echo -e "      ${RED}✗ AUTHENTICATION FAILED: Secret key does not match user @${APP_USER}.${NC}"
   echo -e "      ${YELLOW}Please run the exact 1-click command shown in your PocketAFK dashboard.${NC}"
@@ -279,11 +268,6 @@ run_heartbeat_loop() {
         RESP=$(curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
           -H "Content-Type: application/json" \
           -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" 2>/dev/null)
-        curl -s -X POST "https://suqxsvzbuastumefbebp.supabase.co/rest/v1/tunnels" \
-          -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1cXhzdnpidWFzdHVtZWZiZWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTkyODUsImV4cCI6MjEwOTE3NTI4NX0.FZt5FYMtOBJvQFZzMaq1HkuYQLfW3SZcZl97PY1PkY4" \
-          -H "Content-Type: application/json" \
-          -H "Prefer: resolution=merge-duplicates" \
-          -d "{\"username\":\"$APP_USER\",\"daemon_url\":\"$WSS_URL\",\"daemon_token\":\"$APP_SECRET\",\"updated_at\":\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" >/dev/null 2>&1 || true
         if echo "$RESP" | grep -q "\"stale\":true"; then
           exit 0
         fi
@@ -326,11 +310,6 @@ cleanup() {
   curl -s --connect-timeout 3 --max-time 5 -X POST "$DASHBOARD_SYNC_URL" \
     -H "Content-Type: application/json" \
     -d "{\"username\":\"$APP_USER\",\"url\":\"\",\"token\":\"$APP_SECRET\",\"action\":\"disconnect\"}" >/dev/null 2>&1 || true
-  curl -s -X POST "https://suqxsvzbuastumefbebp.supabase.co/rest/v1/tunnels" \
-    -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1cXhzdnpidWFzdHVtZWZiZWJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1OTkyODUsImV4cCI6MjEwOTE3NTI4NX0.FZt5FYMtOBJvQFZzMaq1HkuYQLfW3SZcZl97PY1PkY4" \
-    -H "Content-Type: application/json" \
-    -H "Prefer: resolution=merge-duplicates" \
-    -d "{\"username\":\"$APP_USER\",\"daemon_url\":\"\",\"daemon_token\":\"$APP_SECRET\",\"updated_at\":\"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"}" >/dev/null 2>&1 || true
 
   if command -v termux-wake-unlock &> /dev/null; then
     termux-wake-unlock
