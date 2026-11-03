@@ -289,6 +289,11 @@ export default function Dashboard() {
     statusStorageAvailable: boolean;
   }>({ daemonStartedAt: null, lastDisconnectedAt: null, statusStorageAvailable: false });
   const [daemonSessions, setDaemonSessions] = useState<DaemonSession[]>([]);
+  const [serverSneakStates, setServerSneakStates] = useState<Record<string, boolean>>({});
+  const microsoftSignInWindowRef = useRef<Window | null>(null);
+  const pendingMicrosoftSignInUrlRef = useRef<string | null>(null);
+  const microsoftSignOutReadyRef = useRef(false);
+  const microsoftSignOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [daemonSessionsLoading, setDaemonSessionsLoading] = useState(false);
   const daemonHistoryEventIdsRef = useRef(new Set<string>());
 
@@ -618,6 +623,7 @@ export default function Dashboard() {
     verifyAccount,
     importAccountTokens,
     updateWebhookConfig,
+    setControl,
     msAuthData,
     clearMsAuth,
   } = useDaemonSocket(activeServerId, handleAccountVerified, Boolean(currentUser), currentUser, () => sessionRevokedHandlerRef.current());
@@ -1581,6 +1587,34 @@ export default function Dashboard() {
     };
   }, [currentUser]);
 
+  // Auto-redirect and copy code for Microsoft Sign-In matching PebbleAFK
+  useEffect(() => {
+    const authData = (isPollingMs && msAuthData) || apiMsAuthData;
+    const signInWindow = microsoftSignInWindowRef.current;
+    if (authData?.url && signInWindow && !signInWindow.closed) {
+      if (authData.userCode) {
+        try {
+          navigator.clipboard.writeText(authData.userCode);
+          showToast(`Copied code ${authData.userCode} to clipboard! Redirecting to Microsoft...`, 'success');
+        } catch {}
+      }
+      pendingMicrosoftSignInUrlRef.current = authData.url;
+      if (microsoftSignOutReadyRef.current) {
+        signInWindow.location.href = authData.url;
+        signInWindow.focus();
+        pendingMicrosoftSignInUrlRef.current = null;
+      }
+    } else if (!authData && signInWindow && !signInWindow.closed) {
+      signInWindow.close();
+      microsoftSignInWindowRef.current = null;
+      pendingMicrosoftSignInUrlRef.current = null;
+      if (microsoftSignOutTimerRef.current) {
+        clearTimeout(microsoftSignOutTimerRef.current);
+        microsoftSignOutTimerRef.current = null;
+      }
+    }
+  }, [msAuthData, apiMsAuthData, isPollingMs, showToast]);
+
   // Microsoft OAuth Device Code Sign-In with Target Identity Verification Guard
   const handleStartMicrosoftLogin = async (target?: MinecraftAccount | string) => {
     if (!currentUser) {
@@ -1601,6 +1635,34 @@ export default function Dashboard() {
 
     setIsAccountsOpen(false);
     setMsAuthError(null);
+
+    const shouldSignOutFirst = !target;
+    if (shouldSignOutFirst) {
+      try {
+        microsoftSignInWindowRef.current?.close();
+        if (microsoftSignOutTimerRef.current) clearTimeout(microsoftSignOutTimerRef.current);
+        pendingMicrosoftSignInUrlRef.current = null;
+        microsoftSignOutReadyRef.current = false;
+        const authWindow = window.open('about:blank', '_blank');
+        microsoftSignInWindowRef.current = authWindow;
+        if (authWindow) {
+          authWindow.document.title = 'Signing out of Microsoft';
+          authWindow.document.body.innerHTML = '<main style="font:16px system-ui;padding:2rem;color:#334155;background:#f8fafc;min-height:100vh"><h2>Signing out of Microsoft…</h2><p>This signs out Microsoft web pages in this browser before the new account sign-in opens.</p></main>';
+          authWindow.location.href = 'https://login.live.com/logout.srf';
+          microsoftSignOutTimerRef.current = setTimeout(() => {
+            microsoftSignOutReadyRef.current = true;
+            const signInUrl = pendingMicrosoftSignInUrlRef.current;
+            if (signInUrl && !authWindow.closed) {
+              authWindow.location.href = signInUrl;
+              authWindow.focus();
+              pendingMicrosoftSignInUrlRef.current = null;
+            }
+          }, 3000);
+        }
+      } catch {
+        microsoftSignInWindowRef.current = null;
+      }
+    }
 
     // If Termux daemon is online and authenticated, use daemon-native verification!
     // This stores tokens directly on the phone so the user NEVER has to log in twice!
@@ -2321,6 +2383,13 @@ export default function Dashboard() {
         <MicrosoftAuthModal
           authData={(isPollingMs && msAuthData) || apiMsAuthData}
           onClose={() => {
+            microsoftSignInWindowRef.current?.close();
+            microsoftSignInWindowRef.current = null;
+            pendingMicrosoftSignInUrlRef.current = null;
+            if (microsoftSignOutTimerRef.current) {
+              clearTimeout(microsoftSignOutTimerRef.current);
+              microsoftSignOutTimerRef.current = null;
+            }
             clearMsAuth();
             setApiMsAuthData(null);
             setIsPollingMs(false);
@@ -4114,68 +4183,94 @@ export default function Dashboard() {
                   )}
 
                   {/* SUB-TAB 3: MOVEMENT */}
-                  {activeSubTab === 'movement' && (
-                    <div className="max-w-2xl space-y-4">
-                      <div>
-                        <h2 className="text-lg font-black text-slate-900">Movement & Controls</h2>
-                        <p className="text-xs text-slate-500">Control your bot movements and trigger in-game macros.</p>
-                      </div>
+                  {activeSubTab === 'movement' && (() => {
+                    const isSneaking = Boolean(activeServer ? serverSneakStates[activeServer.id] : false);
+                    const handleToggleSneak = () => {
+                      if (!activeServer) return;
+                      const nextState = !isSneaking;
+                      setServerSneakStates((prev) => ({ ...prev, [activeServer.id]: nextState }));
+                      setControl(activeServer.id, 'sneak', nextState);
+                      showToast(nextState ? '🧎 Sneak enabled (bot is crouching)' : '🧍 Sneak disabled (standing upright)', 'info');
+                    };
+                    const handleManualJump = () => {
+                      if (!activeServer) return;
+                      setControl(activeServer.id, 'jump', true);
+                      showToast('🦘 Jump triggered', 'info');
+                    };
 
-                      <div className="p-6 rounded-2xl bg-white border border-slate-200 space-y-6 shadow-xs">
-                        {/* Directional Pad */}
-                        <div className="flex flex-col items-center gap-2">
-                          <button
-                            onClick={() => sendChat(activeServer.id, '/jump')}
-                            className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
-                          >
-                            ▲ W
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => sendChat(activeServer.id, '/left')}
-                              className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
-                            >
-                              ◀ A
-                            </button>
-                            <button
-                              onClick={() => sendChat(activeServer.id, '/jump')}
-                              className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-700 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
-                            >
-                              JUMP
-                            </button>
-                            <button
-                              onClick={() => sendChat(activeServer.id, '/right')}
-                              className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
-                            >
-                              ▶ D
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => sendChat(activeServer.id, '/back')}
-                            className="w-14 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 font-bold text-xs flex items-center justify-center transition cursor-pointer shadow-2xs"
-                          >
-                            ▼ S
-                          </button>
+                    return (
+                      <div className="max-w-2xl space-y-4 animate-in fade-in duration-150">
+                        <div>
+                          <h2 className="text-lg font-black text-[#eee9dc]">Movement & Posture</h2>
+                          <p className="text-xs text-[#b5af9f]">Configure crouching, obstacle defense, and AFK posture controls.</p>
                         </div>
 
-                        {/* Quick Command Macros */}
-                        <div className="pt-4 border-t border-slate-100">
-                          <span className="text-xs font-bold text-slate-600 block mb-2">In-Game Command Macros</span>
-                          <div className="flex flex-wrap gap-2">
-                            {['/afk', '/lifesteal', '/afkrewards', '/home', '/spawn'].map((cmd) => (
-                              <button
-                                key={cmd}
-                                onClick={() => sendChat(activeServer.id, cmd)}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-mono text-xs font-bold transition cursor-pointer shadow-2xs"
-                              >
-                                {cmd}
-                              </button>
-                            ))}
+                        <div className="p-6 rounded-2xl bg-[#252421] border border-[#4c493f] space-y-5 shadow-xl">
+                          {/* Sneak (Crouch) Card */}
+                          <div className="flex items-center justify-between p-4 rounded-xl bg-[#1d1c19] border border-[#3e3b33] gap-4">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-[#eee9dc]">Sneak Mode (Crouch)</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide border ${
+                                  isSneaking 
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
+                                    : 'bg-[#302e29] text-[#8e8777] border-[#4c493f]'
+                                }`}>
+                                  {isSneaking ? 'Active (Sneaking)' : 'Off (Standing)'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#9d9685] leading-relaxed max-w-md">
+                                Locks your bot in a continuous crouch. Keeps the bot anchored on ledges and blocks, shields against mob knockback in farms, and hides player nameplates.
+                              </p>
+                            </div>
+
+                            {/* Toggle Switch */}
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={isSneaking}
+                              onClick={handleToggleSneak}
+                              className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                isSneaking ? 'bg-emerald-600' : 'bg-[#3e3b33]'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                                  isSneaking ? 'translate-x-6' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+
+                          {/* Quick Vertical Step (Jump) Action */}
+                          <div className="flex items-center justify-between p-4 rounded-xl bg-[#1d1c19] border border-[#3e3b33] gap-4">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold text-[#eee9dc] block">Manual Jump</span>
+                              <span className="text-[11px] text-[#9d9685]">Trigger a single jump pulse to unstick the bot from blocks or water streams.</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleManualJump}
+                              disabled={!isActiveServerRunning}
+                              className="px-4 py-2 rounded-xl bg-[#302e29] hover:bg-[#383630] border border-[#4c493f] text-[#eee9dc] font-bold text-xs transition cursor-pointer shadow-sm active:scale-95 disabled:opacity-40"
+                            >
+                              Jump 🦘
+                            </button>
+                          </div>
+
+                          {/* Status Note */}
+                          <div className="text-[11px] text-[#8e8777] flex items-center gap-2 pt-1 border-t border-[#3e3b33]">
+                            <span className={`w-2 h-2 rounded-full ${isActiveServerRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                            <span>
+                              {isActiveServerRunning
+                                ? `Bot is currently ${isSneaking ? 'crouched (sneaking)' : 'standing upright'} on ${activeServer.name}.`
+                                : 'Sneak state is saved and will automatically apply once the bot joins the server.'}
+                            </span>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* SUB-TAB 4: INVENTORY */}
                   {activeSubTab === 'inventory' && (

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
+import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2, LogOut, ShieldAlert } from 'lucide-react';
 
 interface MicrosoftAuthModalProps {
   authData: {
@@ -142,34 +142,49 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
             </button>
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-1">
-            <button type="button" onClick={handleOpenMicrosoftSignIn} disabled={openingSignIn} className="pa-ms-auth-primary w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition disabled:opacity-75">
-              <ExternalLink className="w-4 h-4" />
-              {openingSignIn ? 'Microsoft sign-in opened' : 'Open Microsoft Minecraft Sign-In'}
-            </button>
-            {popupBlocked && <p className="text-[11px] text-amber-200">Allow pop-ups for PocketAFK to open Microsoft sign-in in a new tab.</p>}
-
-            <div className="grid grid-cols-1 gap-2">
-              <button
-                onClick={handleCopyLink}
-                className="py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition border border-slate-200 cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {copiedLink ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedLink ? 'Copied!' : 'Copy Private Link'}
-              </button>
+          {/* Sign-out Notice matching PebbleAFK */}
+          <div className="pa-ms-auth-note p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-left space-y-1">
+            <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+              <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Microsoft Session Signed Out First</span>
             </div>
+            <p className="text-[11px] text-[#b5af9f] leading-relaxed">
+              Add Account automatically signs out previous Microsoft web sessions before redirecting you, allowing you to log into a different Minecraft account without conflicts.
+            </p>
           </div>
 
-          {/* Multi-Account Advice Box */}
-          <div className="pa-ms-auth-note p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-left space-y-1.5">
-            <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
-              <KeyRound className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Private Multi-Account Authentication</span>
+          {/* Action Buttons */}
+          <div className="space-y-2 pt-1">
+            <a
+              href={forceAccountUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pa-ms-auth-primary w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-98"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Open Microsoft Sign-In</span>
+            </a>
+
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href="https://login.live.com/logout.srf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-3 rounded-lg bg-[#302e29] hover:bg-[#383630] text-[#eee9dc] font-bold text-xs transition border border-[#4c493f] cursor-pointer flex items-center justify-center gap-1.5"
+                title="Sign out of existing Microsoft account in this browser"
+              >
+                <LogOut className="w-3.5 h-3.5 text-amber-400" />
+                <span>Sign Out First</span>
+              </a>
+
+              <button
+                onClick={handleCopyLink}
+                className="py-2 px-3 rounded-lg bg-[#302e29] hover:bg-[#383630] text-[#eee9dc] font-bold text-xs transition border border-[#4c493f] cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {copiedLink ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
+              </button>
             </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Every sign-in requests a fresh Microsoft login (<code>prompt=login</code>), skipping the separate logout and MSN pages. Microsoft still requires you to review and approve access yourself. Sign in with the <b>different Microsoft email</b> that owns your next Minecraft account.
-            </p>
           </div>
         </div>
 

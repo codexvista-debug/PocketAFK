@@ -563,6 +563,10 @@ export function useDaemonSocket(
     return sendJson({ type: 'UPDATE_WEBHOOK_CONFIG', payload: config });
   }, [sendJson]);
 
+  const setControl = useCallback((botId: string, control: 'sneak' | 'jump', state: boolean) => {
+    return sendJson({ type: 'SET_CONTROL', payload: { botId, control, state } });
+  }, [sendJson]);
+
   const clearMessages = useCallback((botId?: string) => {
     if (botId) {
       setMessagesByBot((prev) => {
@@ -668,6 +672,7 @@ export function useDaemonSocket(
     verifyAccount,
     importAccountTokens,
     updateWebhookConfig,
+    setControl,
     clearMessages,
     msAuthData,
     clearMsAuth: () => setMsAuthData(null),

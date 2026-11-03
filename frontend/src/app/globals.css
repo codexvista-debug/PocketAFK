@@ -384,7 +384,9 @@ body {
 .pa-dashboard-shell .pa-chat-command.text-sky-800{color:#a9dfef!important}
 .pa-dashboard-shell .pa-chat-command.text-indigo-800{color:#d3c5fa!important}
 .pa-dashboard-shell .pa-chat-command:hover:not(:disabled){background:#4b483e!important;border-color:#a19477!important;color:#fff!important}
-.pa-dashboard-shell .pa-chat-stream{background:linear-gradient(180deg,#211f1c,#25231f)!important;border-color:#4e493f!important;padding:12px 14px}
+.pa-dashboard-shell .pa-chat-stream{background:linear-gradient(180deg,rgba(24,23,20,0.82) 0%,rgba(20,19,16,0.88) 100%),url('/pocketafk-nostalgic-bg.jpg') center/cover fixed!important;border-color:#4e493f!important;padding:12px 14px;backdrop-filter:blur(4px)}
+.pa-dashboard-shell .pa-chat-message-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;padding:8px 10px;border-radius:8px;border:1px solid rgba(80,74,62,0.45);background:rgba(36,34,30,0.72)!important;backdrop-filter:blur(6px);margin-bottom:4px;transition:background 0.15s ease,border-color 0.15s ease}
+.pa-dashboard-shell .pa-chat-message-row:hover{background:rgba(46,44,38,0.85)!important;border-color:rgba(110,102,85,0.65)}
 .pa-dashboard-shell .pa-chat-stream .group{border-radius:4px;padding-top:5px;padding-bottom:5px;border-bottom:1px solid #3a3831}
 .pa-dashboard-shell .pa-chat-stream .group:hover{background:#302e29!important}
 .pa-dashboard-shell .pa-chat-stream .text-slate-900,.pa-dashboard-shell .pa-chat-stream .text-slate-800{color:#eee8dc!important}
@@ -461,7 +463,7 @@ body {
 .pa-dashboard-shell .pa-chat-sender>div.absolute>button{min-height:48px}
 .pa-dashboard-shell .pa-chat-sender-menu{max-height:min(70vh,360px);overflow-y:auto}
 .pa-dashboard-shell .pa-chat-sender-header>button{min-height:40px;max-width:min(220px,40vw)}
-.pa-dashboard-shell .pa-chat-message-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0;padding:7px 6px;border-bottom:1px solid #39372f}
+.pa-dashboard-shell .pa-chat-message-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0}
 .pa-dashboard-shell .pa-chat-message-skin{width:32px;height:32px;object-fit:cover;image-rendering:pixelated;background:#302e29;border:1px solid #5c564a;border-radius:4px}
 .pa-dashboard-shell .pa-chat-system-avatar{display:grid;width:32px;height:32px;place-items:center;background:linear-gradient(145deg,#2e4936,#222c26);border:1px solid #557254;border-radius:5px}
 .pa-dashboard-shell .pa-chat-system-avatar .pa-item-icon{width:20px;height:20px}

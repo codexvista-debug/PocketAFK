@@ -15,6 +15,7 @@ export class PocketBotInstance {
   public config: BotConfig;
   public bot: Bot | null = null;
   public state: BotLifecycleState = 'DISCONNECTED';
+  public isSneaking: boolean = false;
   
   private broadcast: MessageBroadcastFn;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -280,6 +281,9 @@ export class PocketBotInstance {
       this.startAntiAfk();
       this.startMobFarm();
       this.startTelemetry();
+      if (this.isSneaking) {
+        try { this.bot?.setControlState('sneak', true); } catch (e) {}
+      }
 
       // Listen to block updates for cobblestone farm activity
       this.bot?.on('blockUpdate', (oldBlock: any, newBlock: any) => {
@@ -599,10 +603,12 @@ export class PocketBotInstance {
         this.bot.swingArm('right');
 
         // Occasional sneak
-        if (Math.random() > 0.6) {
+        if (!this.isSneaking && Math.random() > 0.6) {
           this.bot.setControlState('sneak', true);
           setTimeout(() => {
-            this.bot?.setControlState('sneak', false);
+            if (!this.isSneaking) {
+              this.bot?.setControlState('sneak', false);
+            }
           }, 350);
         }
       } catch (e) {
@@ -1056,6 +1062,28 @@ export class PocketBotInstance {
   }
 
   // --- ACTIONS ---
+  public setSneak(enabled: boolean) {
+    this.isSneaking = enabled;
+    if (this.bot && this.state === 'SPAWNED') {
+      try {
+        this.bot.setControlState('sneak', enabled);
+        this.emitActivity('control', enabled ? '🧎 Sneak enabled (bot is crouching)' : '🧍 Sneak disabled (standing)');
+      } catch (e) {}
+    }
+  }
+
+  public jump() {
+    if (this.bot && this.state === 'SPAWNED') {
+      try {
+        this.bot.setControlState('jump', true);
+        setTimeout(() => {
+          this.bot?.setControlState('jump', false);
+        }, 350);
+        this.emitActivity('control', '🦘 Bot performed manual jump');
+      } catch (e) {}
+    }
+  }
+
   public chat(message: string) {
     if (!this.bot) return;
     this.bot.chat(message);

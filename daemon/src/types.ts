@@ -234,6 +234,7 @@ export type ClientMessage =
   | { type: 'UPDATE_WEBHOOK_CONFIG'; payload: WebhookConfig }
   | { type: 'TEST_WEBHOOK'; payload: { target: 'daemon' | 'bot'; url: string } }
   | { type: 'REQUEST_SYNC'; payload?: { botId?: string } }
+  | { type: 'SET_CONTROL'; payload: { botId: string; control: 'sneak' | 'jump'; state: boolean } }
   | { type: 'PING' };
 
 export interface ActivityLog {

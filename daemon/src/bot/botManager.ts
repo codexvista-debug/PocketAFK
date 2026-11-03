@@ -264,6 +264,33 @@ export class BotManager {
         break;
       }
 
+      case 'SET_CONTROL': {
+        const { botId, control, state } = msg.payload;
+        if (botId) {
+          const targetBots: PocketBotInstance[] = [];
+          if (botId === 'all') {
+            targetBots.push(...Array.from(this.bots.values()));
+          } else if (this.bots.has(botId)) {
+            const direct = this.bots.get(botId);
+            if (direct) targetBots.push(direct);
+          } else {
+            for (const [id, b] of this.bots.entries()) {
+              if (id.startsWith(botId + '__') || b.config.serverId === botId) {
+                targetBots.push(b);
+              }
+            }
+          }
+          for (const b of targetBots) {
+            if (control === 'sneak') {
+              b.setSneak(Boolean(state));
+            } else if (control === 'jump') {
+              b.jump();
+            }
+          }
+        }
+        break;
+      }
+
       case 'SEND_CHAT': {
         const { botId, message, targetAccount } = msg.payload;
         // 1. If botId matches a direct bot instance:
