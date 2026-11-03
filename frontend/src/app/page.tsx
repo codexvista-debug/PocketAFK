@@ -602,6 +602,7 @@ export default function Dashboard() {
     daemonConnections,
     authToken,
     saveSettings,
+    reconnect,
     startBot,
     stopBot,
     restartBot,
@@ -1127,6 +1128,8 @@ export default function Dashboard() {
               console.log(`[PocketAFK] Auto-syncing discovered daemon tunnel for @${currentUser}:`, targetUrl);
               saveSettings(targetUrl, targetToken);
               setAutoSynced(true);
+            } else if (socketStatus === 'DISCONNECTED') {
+              reconnect();
             }
           }
         }
@@ -1139,7 +1142,7 @@ export default function Dashboard() {
 
     // Fast dynamic polling: poll every 2s when connecting/disconnected so 1-click Termux links immediately, and every 6s when authenticated so phone restarts are picked up smoothly
     if (currentUser) {
-      const pollMs = socketStatus === 'AUTHENTICATED' ? 6000 : 2000;
+      const pollMs = socketStatus === 'AUTHENTICATED' ? 6000 : 1500;
       pollInterval = setInterval(syncTunnel, pollMs);
     }
 
@@ -1147,7 +1150,7 @@ export default function Dashboard() {
       isMounted = false;
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings]);
+  }, [currentUser, authToken, secretCode, daemonUrl, socketStatus, saveSettings, reconnect]);
 
   // Whenever user opens the Termux Daemon Bridge modal, fetch fresh tunnel from API immediately
   useEffect(() => {
@@ -1157,8 +1160,12 @@ export default function Dashboard() {
         .then((data) => {
           const targetUrl = (data?.url || data?.tunnel_url || '').trim();
           const targetToken = (data?.token || secretCode || authToken || '').trim();
-          if (targetUrl && targetUrl.startsWith('wss://') && targetUrl !== daemonUrl) {
-            saveSettings(targetUrl, targetToken);
+          if (targetUrl && targetUrl.startsWith('wss://')) {
+            if (targetUrl !== daemonUrl || (targetToken && targetToken !== authToken)) {
+              saveSettings(targetUrl, targetToken);
+            } else if (socketStatus === 'DISCONNECTED') {
+              reconnect();
+            }
           }
         })
         .catch(() => {});

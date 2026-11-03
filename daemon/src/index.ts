@@ -116,6 +116,13 @@ wss.on('connection', (ws: WebSocket, req) => {
     try {
       const parsed: ClientMessage = JSON.parse(data.toString());
 
+      // 1. Keepalive PING / PONG to prevent Cloudflare tunnel / mobile NAT idle dropouts
+      // Always respond immediately without requiring prior authentication
+      if (parsed.type === 'PING') {
+        ws.send(JSON.stringify({ type: 'PONG', payload: { timestamp: Date.now() } }));
+        return;
+      }
+
       // Handle Authentication
       if (parsed.type === 'AUTH') {
         const clientUser = (parsed.payload.username || '').trim().toLowerCase();
@@ -172,11 +179,6 @@ wss.on('connection', (ws: WebSocket, req) => {
         return;
       }
 
-      // Keepalive PING / PONG to prevent Cloudflare tunnel / mobile NAT idle dropouts
-      if (parsed.type === 'PING') {
-        ws.send(JSON.stringify({ type: 'PONG', payload: { timestamp: Date.now() } }));
-        return;
-      }
 
       if (parsed.type === 'REVOKE_CONNECTION') {
         const targetId = typeof parsed.payload?.connectionId === 'string' ? parsed.payload.connectionId : '';

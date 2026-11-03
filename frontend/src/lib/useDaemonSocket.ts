@@ -231,7 +231,7 @@ export function useDaemonSocket(
                 if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
                 pingIntervalRef.current = setInterval(() => {
                   if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                    if (Date.now() - lastDaemonPongAtRef.current > 25000) {
+                    if (Date.now() - lastDaemonPongAtRef.current > 35000) {
                       setStatus('DISCONNECTED');
                       try { socketRef.current.close(); } catch {}
                       return;

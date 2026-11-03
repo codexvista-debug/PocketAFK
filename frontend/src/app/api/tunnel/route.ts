@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // The daemon wrapper checks the local process every 3 seconds and sends a
 // cloud heartbeat every 15 seconds. Leave room for transient network delays,
 // while bounding how long a forcibly stopped Termux process stays online.
-const TUNNEL_TIMEOUT_MS = 45000;
+const TUNNEL_TIMEOUT_MS = 90000;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -48,14 +48,13 @@ export async function GET(req: NextRequest) {
 
   if (supabase) {
     try {
-      const { data: tunnelData } = await supabase
+      const { data: tunnelRows } = await supabase
         .from('tunnels')
         .select('*')
         .ilike('username', username)
         .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      storedTunnel = tunnelData;
+        .limit(1);
+      storedTunnel = Array.isArray(tunnelRows) && tunnelRows.length > 0 ? tunnelRows[0] : null;
       const daemonToken = storedTunnel?.daemon_token || cached?.token || '';
       if (daemonToken) {
         const { data, error } = await supabase.rpc('read_daemon_status', {
@@ -108,12 +107,42 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const url = cachedIsLive ? cached!.url : storedIsLive ? storedTunnel.daemon_url : '';
-  const token = cachedIsLive ? cached!.token : storedIsLive ? storedTunnel.daemon_token || '' : '';
-  const updatedAt = cachedIsLive ? cached!.updatedAt : storedUpdatedAt || cached?.updatedAt || 0;
+  // Resolve active tunnel by prioritizing the most recently updated source
+  let url = '';
+  let token = '';
+  let updatedAt = 0;
+
+  if (storedIsLive && cachedIsLive) {
+    if (storedUpdatedAt >= cached!.updatedAt) {
+      url = storedTunnel.daemon_url;
+      token = storedTunnel.daemon_token || '';
+      updatedAt = storedUpdatedAt;
+    } else {
+      url = cached!.url;
+      token = cached!.token || '';
+      updatedAt = cached!.updatedAt;
+    }
+  } else if (storedIsLive) {
+    url = storedTunnel.daemon_url;
+    token = storedTunnel.daemon_token || '';
+    updatedAt = storedUpdatedAt;
+  } else if (cachedIsLive) {
+    url = cached!.url;
+    token = cached!.token || '';
+    updatedAt = cached!.updatedAt;
+  }
+
   if (cachedIsLive && !daemonStartedAt) daemonStartedAt = cached?.daemonStartedAt || null;
 
   if (isLive && url) {
+    userTunnels.set(username, {
+      url,
+      token,
+      updatedAt,
+      daemonStartedAt: storedDaemonStatus?.daemon_started_at ? new Date(storedDaemonStatus.daemon_started_at).getTime() : cached?.daemonStartedAt || (daemonStartedAt ?? undefined),
+      lastDisconnectedAt,
+    });
+
     return NextResponse.json({
       url,
       tunnel_url: url,
@@ -253,34 +282,7 @@ export async function POST(req: NextRequest) {
       cleanUrl = cleanUrl.replace('https://', 'wss://');
     }
 
-    // Protection against zombie heartbeats:
-    // A heartbeat MUST NOT overwrite a different active tunnel URL!
-    if (action === 'heartbeat') {
-      let activeUrl = userTunnels.get(cleanUsername)?.url;
-      if (!activeUrl && supabase) {
-        try {
-          const { data } = await supabase
-            .from('tunnels')
-            .select('daemon_url')
-            .ilike('username', cleanUsername)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (data?.daemon_url) {
-            activeUrl = data.daemon_url;
-          }
-        } catch (e) {}
-      }
-
-      if (activeUrl && activeUrl !== cleanUrl) {
-        // Stale zombie heartbeat trying to overwrite a different active tunnel!
-        return NextResponse.json({
-          success: false,
-          stale: true,
-          message: `Stale heartbeat ignored: user @${cleanUsername} is active on ${activeUrl}`,
-        }, { status: 409 });
-      }
-    }
+// Verified user heartbeat automatically keeps active tunnel alive
 
     const previousRecord = userTunnels.get(cleanUsername);
     const registeredAt = Date.now();
@@ -296,23 +298,14 @@ export async function POST(req: NextRequest) {
 
     if (supabase) {
       try {
-        if (action !== 'heartbeat') {
-          // Clean wipe any older records for this user so only the newly launched tunnel is active & locked
-          await supabase.from('tunnels').delete().ilike('username', cleanUsername);
-          await supabase.from('tunnels').insert({
-            username: cleanUsername,
-            daemon_url: cleanUrl,
-            daemon_token: record.token,
-            updated_at: new Date().toISOString(),
-          });
-        } else {
-          await supabase.from('tunnels').upsert({
-            username: cleanUsername,
-            daemon_url: cleanUrl,
-            daemon_token: record.token,
-            updated_at: new Date().toISOString(),
-          });
-        }
+        // Clean wipe any older records (including case variants) so only clean lowercase username is active
+        await supabase.from('tunnels').delete().ilike('username', cleanUsername);
+        await supabase.from('tunnels').insert({
+          username: cleanUsername,
+          daemon_url: cleanUrl,
+          daemon_token: record.token,
+          updated_at: new Date().toISOString(),
+        });
 
         await supabase.rpc('write_daemon_status', {
           p_username: cleanUsername,

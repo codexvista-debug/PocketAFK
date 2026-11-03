@@ -51,6 +51,7 @@ if [ -z "$APP_USER" ]; then
 fi
 
 UPPER_USER=$(echo "$APP_USER" | tr '[:lower:]' '[:upper:]')
+CLEAN_USER=$(echo "$APP_USER" | tr '[:upper:]' '[:lower:]')
 
 # Auto-detect target dashboard (Prod vs Dev)
 DASHBOARD_BASE="${POCKETAFK_DASHBOARD_URL:-https://pocketafk.vercel.app}"
@@ -61,7 +62,7 @@ if git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q "dev" || [ "$PWD" = *"-
 fi
 
 # Fetch real-time accounts from dashboard API
-USER_SUMMARY=$(curl -s --connect-timeout 5 --max-time 10 "${DASHBOARD_BASE}/api/user-summary?username=$APP_USER" 2>/dev/null)
+USER_SUMMARY=$(curl -s --connect-timeout 5 --max-time 10 "${DASHBOARD_BASE}/api/user-summary?username=$CLEAN_USER" 2>/dev/null)
 ACCOUNTS_CACHE_FILE="$HOME/.pocketafk_accounts.json"
 
 if [ -n "$USER_SUMMARY" ] && echo "$USER_SUMMARY" | grep -q "accounts"; then
@@ -202,7 +203,7 @@ AUTO_OPEN_URL="${DASHBOARD_BASE}/?tunnel=${WSS_URL}&user=${APP_USER}"
 echo -e "\n${CYAN}[4/4]${NC} 🚀 ${BOLD}Auto-syncing tunnel to user @${APP_USER}...${NC}"
 SYNC_RESP=$(curl -s -X POST "$DASHBOARD_SYNC_URL" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"register\"}" 2>/dev/null)
+  -d "{\"username\":\"$CLEAN_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"register\"}" 2>/dev/null)
 
 if echo "$SYNC_RESP" | grep -q "Unauthorized"; then
   echo -e "      ${RED}✗ AUTHENTICATION FAILED: Secret key does not match user @${APP_USER}.${NC}"
@@ -220,7 +221,7 @@ fi
 echo -ne "      ${YELLOW}⌛ Verifying web dashboard is locked to @${APP_USER}...${NC}"
 VERIFIED=false
 for i in {1..5}; do
-  CHECK_RESP=$(curl -s --connect-timeout 4 --max-time 6 "${DASHBOARD_BASE}/api/tunnel?username=${APP_USER}" 2>/dev/null)
+  CHECK_RESP=$(curl -s --connect-timeout 4 --max-time 6 "${DASHBOARD_BASE}/api/tunnel?username=${CLEAN_USER}" 2>/dev/null)
   VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"tunnel_url":"[^"]*"' | cut -d'"' -f4)
   if [ -z "$VERIFIED_URL" ]; then
     VERIFIED_URL=$(echo "$CHECK_RESP" | grep -o '"url":"[^"]*"' | cut -d'"' -f4)
@@ -240,40 +241,57 @@ else
   echo -e "      ${YELLOW}✓ Registered tunnel. Dashboard syncing in progress.${NC}"
 fi
 
-# 5. Keep the dashboard tunnel alive and notice when the daemon process exits.
-# The heartbeat helper can outlive the Java core, so verify the local daemon
-# before telling the website that this Termux session is still online.
+# 5. Supervise daemon & cloudflared processes with resilient keepalive.
+# Auto-restarts cloudflared if dropped over 7+ days, and continuously heartbeats to dashboard.
 run_heartbeat_loop() {
   exec -a pocketafk_heartbeat bash -c '
     APP_USER="$1"
     WSS_URL="$2"
     APP_SECRET="$3"
     DASHBOARD_SYNC_URL="$4"
-    HEALTH_URL="http://127.0.0.1:8080/"
+    DAEMON_PID="$5"
+    TUNNEL_PID="$6"
     LAST_HEARTBEAT=0
+
     while true; do
       sleep 3
-      if ! curl -fsS --connect-timeout 1 --max-time 2 "$HEALTH_URL" 2>/dev/null | grep -q "PocketAFK Daemon"; then
-        # Java core exited unexpectedly. Stop refreshing its tunnel and close
-        # the active session now instead of leaving it marked RUNNING.
-        curl -s --connect-timeout 3 --max-time 5 -X POST "$DASHBOARD_SYNC_URL" \
+
+      # 1. Verify Java Core Supervisor is still alive
+      if ! kill -0 "$DAEMON_PID" 2>/dev/null; then
+        curl -s --connect-timeout 4 --max-time 6 -X POST "$DASHBOARD_SYNC_URL" \
           -H "Content-Type: application/json" \
           -d "{\"username\":\"$APP_USER\",\"url\":\"\",\"token\":\"$APP_SECRET\",\"action\":\"disconnect\"}" >/dev/null 2>&1 || true
         exit 0
       fi
 
+      # 2. Verify Cloudflare Tunnel process is alive (auto-recover if edge dropped over 7+ days)
+      if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+        echo -e "[$(date +%T)] ⚠️ Cloudflare tunnel disconnected. Restarting tunnel..." >> tunnel.log
+        cloudflared tunnel --url http://127.0.0.1:8080 > tunnel.log 2>&1 &
+        TUNNEL_PID=$!
+        for i in {1..20}; do
+          sleep 1
+          NEW_URL=$(grep -o "https://[a-zA-Z0-9-]*\.trycloudflare\.com" tunnel.log | tail -n 1)
+          if [ -n "$NEW_URL" ]; then
+            WSS_URL=$(echo "$NEW_URL" | sed "s/https:/wss:/")
+            curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"register\"}" >/dev/null 2>&1 || true
+            break
+          fi
+        done
+      fi
+
+      # 3. Send cloud heartbeat every 15 seconds
       LAST_HEARTBEAT=$((LAST_HEARTBEAT + 3))
       if [ "$LAST_HEARTBEAT" -ge 15 ]; then
         LAST_HEARTBEAT=0
-        RESP=$(curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
+        curl -s --connect-timeout 4 --max-time 8 -X POST "$DASHBOARD_SYNC_URL" \
           -H "Content-Type: application/json" \
-          -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" 2>/dev/null)
-        if echo "$RESP" | grep -q "\"stale\":true"; then
-          exit 0
-        fi
+          -d "{\"username\":\"$APP_USER\",\"url\":\"$WSS_URL\",\"token\":\"$APP_SECRET\",\"action\":\"heartbeat\"}" >/dev/null 2>&1 || true
       fi
     done
-  ' _ "$APP_USER" "$WSS_URL" "$APP_SECRET" "$DASHBOARD_SYNC_URL"
+  ' _ "$CLEAN_USER" "$WSS_URL" "$APP_SECRET" "$DASHBOARD_SYNC_URL" "$DAEMON_PID" "$TUNNEL_PID"
 }
 run_heartbeat_loop &
 HEARTBEAT_PID=$!
