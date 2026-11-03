@@ -2403,11 +2403,17 @@ export default function Dashboard() {
         daemonStatus={socketStatus}
         daemonUrl={daemonUrl}
         onReconnectNow={() => {
-          setSignetReconnectAttempt((prev) => prev + 1);
           reconnectDaemon();
         }}
+        onShutdownDaemon={() => {
+          const sent = shutdownDaemon();
+          if (sent) {
+            showToast('Shutdown requested. Termux is stopping daemon and bots.', 'info');
+          } else {
+            showToast('Could not send shutdown signal. WebSocket is not connected.', 'error');
+          }
+        }}
         termuxCommand={termuxCommand}
-        reconnectAttempt={signetReconnectAttempt}
       />
 
       {/* Settings / Bridge Configuration Modal */}
