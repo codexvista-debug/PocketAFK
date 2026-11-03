@@ -1927,18 +1927,20 @@ export default function Dashboard() {
 
   const handleDeleteServer = async (profileId: string) => {
     if (!currentUser) return;
-    if (servers.length <= 1) {
-      showToast('You must keep at least 1 server profile.', 'error');
-      return;
-    }
     const srvKey = `pocketafk_servers_${currentUser}`;
     const updated = servers.filter((s) => s.id !== profileId);
     setServers(updated);
     if (activeServerId === profileId) {
-      setActiveServerId(updated[0]?.id || '');
+      if (updated.length > 0) {
+        setActiveServerId(updated[0].id);
+      } else {
+        setActiveServerId('');
+        setActiveMainView('dashboard');
+      }
     }
     localStorage.setItem(srvKey, JSON.stringify(updated));
     saveServersToSupabase(currentUser, updated).catch(() => {});
+    syncAllToSupabase(currentUser, accounts, updated);
     showToast('Server profile removed.', 'info');
   };
 
@@ -2738,6 +2740,22 @@ export default function Dashboard() {
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Empty state when 0 servers */}
+              {servers.length === 0 && (
+                <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 my-1">
+                  <p className="text-[11px] text-slate-500 font-medium">No server profiles</p>
+                  <button
+                    onClick={() => {
+                      setEditingServer(null);
+                      setIsServerModalOpen(true);
+                    }}
+                    className="mt-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                  >
+                    + Add Server
+                  </button>
+                </div>
+              )}
 
               {/* Profiles List */}
               {[...servers]
