@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Shield,
@@ -24,13 +24,10 @@ import {
   CheckCircle2,
   Power,
   Copy,
-  ArrowRight,
   ChevronDown,
   UserPlus,
   ShieldCheck,
   ShieldAlert,
-  Sliders,
-  Filter,
   Radio,
   Wifi,
   WifiOff,
@@ -38,18 +35,16 @@ import {
   Globe,
   BarChart3,
   LogOut,
-  UserCheck,
-  UserX,
   Pause,
   Play,
+  RotateCcw,
 } from 'lucide-react';
-import { RANKS, RANK_ORDER, UserRank } from '@/lib/ranks';
 import { MinecraftChatMessage } from '@/components/MinecraftChatMessage';
 
 interface UserItem {
   id: string;
   username: string;
-  rank: UserRank;
+  rank?: string;
   accountCount: number;
   connectedCount: number;
   secretCode?: string;
@@ -92,7 +87,6 @@ interface AdminStats {
   totalAccounts: number;
   totalConnected: number;
   totalTunnels?: number;
-  rankBreakdown: Record<string, number>;
 }
 
 export default function ChiefAdminPage() {
@@ -101,7 +95,6 @@ export default function ChiefAdminPage() {
     totalAccounts: 0,
     totalConnected: 0,
     totalTunnels: 0,
-    rankBreakdown: { iron: 0, gold: 0, diamond: 0, emerald: 0 },
   });
   const [users, setUsers] = useState<UserItem[]>([]);
   const [accounts, setAccounts] = useState<AccountItem[]>([]);
@@ -112,15 +105,43 @@ export default function ChiefAdminPage() {
 
   // Search & Filter States
   const [userSearch, setUserSearch] = useState<string>('');
-  const [userRankFilter, setUserRankFilter] = useState<string>('all');
   const [accountSearch, setAccountSearch] = useState<string>('');
-  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline' | 'legit' | 'suspicious'>('online');
+  const [accountStatusFilter, setAccountStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+
+  // Environment detection & prod security gate
+  const [isDevSite, setIsDevSite] = useState<boolean>(true);
+  const [isProdUnlocked, setIsProdUnlocked] = useState<boolean>(false);
+  const [prodUnlockInput, setProdUnlockInput] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      const isDev = hostname.includes('dev-pocketafk') || hostname.includes('localhost') || hostname.includes('127.0.0.1') || hostname.includes('preview');
+      setIsDevSite(isDev);
+      if (isDev) {
+        setIsProdUnlocked(true);
+      } else {
+        const storedAuth = localStorage.getItem('pocketafk_chief_admin_auth');
+        if (storedAuth === 'unlocked') {
+          setIsProdUnlocked(true);
+        }
+      }
+    }
+  }, []);
 
   // System Config States
   const [isRegistrationsPaused, setIsRegistrationsPaused] = useState<boolean>(false);
   const [isTogglingRegistrations, setIsTogglingRegistrations] = useState<boolean>(false);
 
-  // Modal States
+  // Emergency Action Modal State
+  const [emergencyModal, setEmergencyModal] = useState<{
+    type: 'force_refresh' | 'force_logout' | 'force_close_termux';
+    title: string;
+    description: string;
+  } | null>(null);
+  const [isExecutingEmergency, setIsExecutingEmergency] = useState<boolean>(false);
+
+  // User Management Modals
   const [resetPasswordUser, setResetPasswordUser] = useState<UserItem | null>(null);
   const [newPassword, setNewPassword] = useState<string>('');
   const [isResettingPassword, setIsResettingPassword] = useState<boolean>(false);
@@ -128,39 +149,66 @@ export default function ChiefAdminPage() {
   const [isCreateUserOpen, setIsCreateUserOpen] = useState<boolean>(false);
   const [createUsername, setCreateUsername] = useState<string>('');
   const [createPassword, setCreatePassword] = useState<string>('');
-  const [createRank, setCreateRank] = useState<UserRank>('iron');
   const [isCreatingUser, setIsCreatingUser] = useState<boolean>(false);
 
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'user' | 'account'; id: string; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // Toast / Banner feedback
+  // Toast feedback
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Live timer for uptimes
-  const [nowTick, setNowTick] = useState<number>(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Live Chat Map for Connected Bots: key -> array of up to 20 ChatMessage items
-  const [liveChats, setLiveChats] = useState<Record<string, Array<{ text: string; raw?: string; message?: string; formatted?: string; formattedText?: string; sender?: string; id?: string; type?: string; timestamp: number }>>>({});
+  // Live chat drawer for bots
+  const [activeChatBot, setActiveChatBot] = useState<AccountItem | null>(null);
+  const [liveChats, setLiveChats] = useState<Record<string, Array<{ text: string; timestamp: number }>>>({});
   const daemonSocketsRef = useRef<Map<string, WebSocket>>(new Map());
 
-  // Connect WebSockets to online tunnels to receive live server chat & manage real-time disconnects
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
-    // Collect active tunnels from connected accounts
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/admin', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch admin data');
+
+      setStats(data.stats || {
+        totalUsers: (data.users || []).length,
+        totalAccounts: (data.accounts || []).length,
+        totalConnected: (data.accounts || []).filter((a: any) => a.isConnected).length,
+        totalTunnels: (data.tunnels || []).filter((t: any) => t.isRecent).length,
+      });
+      setUsers(data.users || []);
+      setAccounts(data.accounts || []);
+      setTunnels(data.tunnels || []);
+      setIsRegistrationsPaused(Boolean(data.isRegistrationsPaused));
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isProdUnlocked) {
+      fetchData();
+      const interval = setInterval(() => fetchData(true), 10000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchData, isProdUnlocked]);
+
+  // Connect WebSockets to online tunnels to receive live server chat
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isProdUnlocked) return;
+
     const targetTunnels = new Map<string, { url: string; owner: string; secret?: string }>();
-    
-    // Build user -> secret map
     const userSecretMap = new Map<string, string>();
     users.forEach((u) => {
-      if (u.secretCode) {
-        userSecretMap.set(u.username.toLowerCase(), u.secretCode);
-      }
+      if (u.secretCode) userSecretMap.set(u.username.toLowerCase(), u.secretCode);
     });
 
     accounts.forEach((a) => {
@@ -168,16 +216,11 @@ export default function ChiefAdminPage() {
         const url = (a.daemonUrl || a.registeredTunnel || '').trim();
         const owner = (a.owner || '').trim().toLowerCase();
         if (url && url.startsWith('ws')) {
-          targetTunnels.set(url, {
-            url,
-            owner,
-            secret: userSecretMap.get(owner),
-          });
+          targetTunnels.set(url, { url, owner, secret: userSecretMap.get(owner) });
         }
       }
     });
 
-    // Close sockets no longer active
     daemonSocketsRef.current.forEach((ws, url) => {
       if (!targetTunnels.has(url)) {
         try { ws.close(); } catch {}
@@ -185,7 +228,6 @@ export default function ChiefAdminPage() {
       }
     });
 
-    // Connect to each target tunnel
     targetTunnels.forEach((info, url) => {
       const existing = daemonSocketsRef.current.get(url);
       if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
@@ -199,153 +241,91 @@ export default function ChiefAdminPage() {
         ws.onopen = () => {
           ws.send(JSON.stringify({
             type: 'AUTH',
-            payload: { username: info.owner, token: info.secret || '' }
+            payload: { token: info.secret || '', username: info.owner || 'chief' },
           }));
         };
 
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (data.type === 'AUTH_RESULT' && data.payload?.success) {
-              ws.send(JSON.stringify({ type: 'REQUEST_SYNC' }));
-            } else if (data.type === 'CHAT_MESSAGE') {
-              const msg = data.payload;
-              const ignKey = (msg.accountUsername || '').toLowerCase().trim();
-              const botKey = (msg.botId || '').toLowerCase().trim();
-              const entry = {
-                id: msg.id || `${Date.now()}-${Math.random()}`,
-                text: msg.raw || msg.text || msg.message || '',
-                raw: msg.raw || msg.text || msg.message || '',
-                message: msg.raw || msg.text || msg.message || '',
-                formatted: msg.formattedText || msg.formatted || msg.raw || '',
-                formattedText: msg.formattedText || msg.formatted || msg.raw || '',
-                sender: msg.sender || msg.accountUsername || '',
-                type: msg.type || 'chat',
-                timestamp: msg.timestamp || Date.now(),
-              };
+            if (data.type === 'CHAT_MESSAGE' && data.payload) {
+              const bId = data.payload.botId || 'default';
+              const rawText = data.payload.text || data.payload.raw || data.payload.message || '';
+              if (!rawText) return;
 
               setLiveChats((prev) => {
-                const next = { ...prev };
-                if (ignKey) {
-                  next[ignKey] = [...(next[ignKey] || []).slice(-20), entry];
-                }
-                if (botKey && botKey !== ignKey) {
-                  next[botKey] = [...(next[botKey] || []).slice(-20), entry];
-                }
-                return next;
+                const cur = prev[bId] || [];
+                return {
+                  ...prev,
+                  [bId]: [...cur.slice(-25), { text: rawText, timestamp: data.payload.timestamp || Date.now() }],
+                };
               });
             }
           } catch {}
         };
-
-        ws.onclose = () => {
-          daemonSocketsRef.current.delete(url);
-        };
-
-        ws.onerror = () => {
-          try { ws.close(); } catch {}
-          daemonSocketsRef.current.delete(url);
-        };
-      } catch (e) {}
+      } catch {}
     });
-  }, [accounts, users]);
 
-  useEffect(() => {
     return () => {
       daemonSocketsRef.current.forEach((ws) => {
         try { ws.close(); } catch {}
       });
       daemonSocketsRef.current.clear();
     };
-  }, []);
+  }, [accounts, users, isProdUnlocked]);
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 4000);
-  }, []);
-
-  // Fetch all admin data
-  const fetchData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    setRefreshing(true);
-    try {
-      const res = await fetch('/api/admin', { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error(`Failed to load admin data (${res.status})`);
-      }
-      const data = await res.json();
-      setStats(data.stats || {
-        totalUsers: 0,
-        totalAccounts: 0,
-        totalConnected: 0,
-        totalTunnels: 0,
-        rankBreakdown: { iron: 0, gold: 0, diamond: 0, emerald: 0 },
-      });
-      setUsers(data.users || []);
-      setAccounts(data.accounts || []);
-      setTunnels(data.tunnels || []);
-      if (data.isRegistrationsPaused !== undefined) {
-        setIsRegistrationsPaused(Boolean(data.isRegistrationsPaused));
-      }
-    } catch (err: any) {
-      showToast(err.message || 'Error fetching data', 'error');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // Handle Toggle Registrations (Pause / Resume)
+  // Handle Toggle Registrations
   const handleToggleRegistrations = async () => {
     setIsTogglingRegistrations(true);
     try {
-      const nextPaused = !isRegistrationsPaused;
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle_registrations', paused: nextPaused }),
+        body: JSON.stringify({ action: 'toggle_registrations', paused: !isRegistrationsPaused }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to toggle registrations');
+      if (!res.ok) throw new Error(data.error || 'Failed to update registrations');
 
-      setIsRegistrationsPaused(data.isRegistrationsPaused ?? nextPaused);
-      showToast(data.message || (nextPaused ? 'Registrations paused' : 'Registrations resumed'), nextPaused ? 'info' : 'success');
+      setIsRegistrationsPaused(data.isRegistrationsPaused);
+      showToast(data.message, 'success');
     } catch (err: any) {
-      showToast(err.message || 'Error toggling registrations', 'error');
+      showToast(err.message, 'error');
     } finally {
       setIsTogglingRegistrations(false);
     }
   };
 
-  // Handle Rank Change
-  const handleChangeRank = async (username: string, newRank: UserRank) => {
+  // Handle Emergency Action Execution
+  const handleExecuteEmergencyAction = async () => {
+    if (!emergencyModal) return;
+    setIsExecutingEmergency(true);
     try {
+      const actionName =
+        emergencyModal.type === 'force_refresh'
+          ? 'emergency_force_refresh'
+          : emergencyModal.type === 'force_logout'
+          ? 'emergency_force_logout'
+          : 'emergency_force_close_termux';
+
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'change_rank', username, rank: newRank }),
+        body: JSON.stringify({ action: actionName }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update rank');
+      if (!res.ok) throw new Error(data.error || 'Emergency action failed');
 
-      showToast(`Updated @${username}'s rank to ${RANKS[newRank]?.name || newRank}!`, 'success');
-      // Optimistic update
-      setUsers((prev) =>
-        prev.map((u) => (u.username.toLowerCase() === username.toLowerCase() ? { ...u, rank: newRank } : u))
-      );
+      showToast(data.message, 'success');
+      setEmergencyModal(null);
       fetchData(true);
     } catch (err: any) {
       showToast(err.message, 'error');
+    } finally {
+      setIsExecutingEmergency(false);
     }
   };
 
-  // Handle Reset Password
+  // Handle Reset Password Submit
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetPasswordUser || !newPassword) return;
@@ -354,11 +334,7 @@ export default function ChiefAdminPage() {
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reset_password',
-          username: resetPasswordUser.username,
-          newPassword,
-        }),
+        body: JSON.stringify({ action: 'reset_password', username: resetPasswordUser.username, newPassword }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to reset password');
@@ -374,7 +350,7 @@ export default function ChiefAdminPage() {
     }
   };
 
-  // Handle Create User
+  // Handle Create User Submit
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createUsername || !createPassword) return;
@@ -387,17 +363,16 @@ export default function ChiefAdminPage() {
           action: 'create_user',
           username: createUsername,
           password: createPassword,
-          rank: createRank,
+          rank: 'universal',
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
 
-      showToast(`User @${createUsername} registered with ${RANKS[createRank]?.name} rank!`, 'success');
+      showToast(`User @${createUsername} registered with 10 Bots Universal Capacity!`, 'success');
       setIsCreateUserOpen(false);
       setCreateUsername('');
       setCreatePassword('');
-      setCreateRank('iron');
       fetchData(true);
     } catch (err: any) {
       showToast(err.message, 'error');
@@ -441,36 +416,31 @@ export default function ChiefAdminPage() {
 
   // Handle Disconnect Account
   const handleDisconnectAccount = async (accountId: string, ign: string) => {
-    // 1. Immediately send STOP_BOT via any connected daemon WebSockets
     try {
       daemonSocketsRef.current.forEach((ws) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'STOP_BOT',
-            payload: { botId: ign, id: ign, username: ign }
-          }));
+          ws.send(JSON.stringify({ type: 'STOP_BOT', payload: { botId: ign, id: ign, username: ign } }));
         }
       });
     } catch {}
 
-    // 2. Call admin API to update Supabase and send backend STOP_BOT
     try {
       const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disconnect_account', accountId, ign }),
+        body: JSON.stringify({ action: 'disconnect_account', accountId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to disconnect account');
 
-      showToast(`Disconnected ${ign} from server.`, 'success');
+      showToast(`Disconnected bot ${ign}`, 'success');
       fetchData(true);
     } catch (err: any) {
       showToast(err.message, 'error');
     }
   };
 
-  // Handle Disconnect / Clear Tunnel
+  // Handle Disconnect User Tunnel
   const handleDisconnectTunnel = async (username: string) => {
     try {
       const res = await fetch('/api/admin', {
@@ -491,15 +461,16 @@ export default function ChiefAdminPage() {
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      const matchSearch =
-        u.username.toLowerCase().includes(userSearch.toLowerCase()) ||
-        (u.secretCode && u.secretCode.toLowerCase().includes(userSearch.toLowerCase()));
-      const matchRank = userRankFilter === 'all' || u.rank === userRankFilter;
-      return matchSearch && matchRank;
+      const q = userSearch.toLowerCase().trim();
+      return (
+        !q ||
+        u.username.toLowerCase().includes(q) ||
+        (u.secretCode && u.secretCode.toLowerCase().includes(q))
+      );
     });
-  }, [users, userSearch, userRankFilter]);
+  }, [users, userSearch]);
 
-  // Filtered Accounts (Connected bots first, then offline)
+  // Filtered Accounts
   const filteredAccounts = useMemo(() => {
     return accounts
       .filter((a) => {
@@ -509,46 +480,22 @@ export default function ChiefAdminPage() {
           a.ign.toLowerCase().includes(q) ||
           a.owner.toLowerCase().includes(q) ||
           a.serverHost.toLowerCase().includes(q) ||
-          (a.daemonUrl && a.daemonUrl.toLowerCase().includes(q)) ||
-          (a.registeredTunnel && a.registeredTunnel.toLowerCase().includes(q)) ||
-          (a.legitimacy?.badge && a.legitimacy.badge.toLowerCase().includes(q));
+          (a.daemonUrl && a.daemonUrl.toLowerCase().includes(q));
 
         let matchStatus = true;
-        if (accountStatusFilter === 'online') {
-          matchStatus = a.isConnected;
-        } else if (accountStatusFilter === 'offline') {
-          matchStatus = !a.isConnected;
-        } else if (accountStatusFilter === 'legit') {
-          matchStatus = a.isConnected && a.legitimacy?.status === 'legit';
-        } else if (accountStatusFilter === 'suspicious') {
-          matchStatus = a.isConnected && a.legitimacy?.status !== 'legit';
-        }
+        if (accountStatusFilter === 'online') matchStatus = a.isConnected;
+        if (accountStatusFilter === 'offline') matchStatus = !a.isConnected;
 
         return matchSearch && matchStatus;
       })
       .sort((a, b) => {
-        // Connected bots always appear first
         if (a.isConnected && !b.isConnected) return -1;
         if (!a.isConnected && b.isConnected) return 1;
-        // Secondary sort: most recently connected or created first
-        const aTime = a.connectedAt || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const bTime = b.connectedAt || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-        return bTime - aTime;
+        return (b.connectedAt || 0) - (a.connectedAt || 0);
       });
   }, [accounts, accountSearch, accountStatusFilter]);
 
-  // Format seconds into uptime
-  const formatUptime = (seconds: number): string => {
-    if (!seconds || seconds <= 0) return '0s';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
-    if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
-    return `${s}s`;
-  };
-
-  // Host distribution for Total Stats
+  // Server Host distribution
   const hostStats = useMemo(() => {
     const map = new Map<string, { total: number; online: number }>();
     accounts.forEach((acc) => {
@@ -561,1160 +508,940 @@ export default function ChiefAdminPage() {
     return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
   }, [accounts]);
 
+  // Production Security Barrier
+  if (!isDevSite && !isProdUnlocked) {
+    return (
+      <div className="min-h-screen bg-[#1a1916] text-[#eee9dc] flex items-center justify-center p-4">
+        <div className="max-w-md w-full rounded-2xl border border-[#4c493f] bg-[#252421] p-6 sm:p-8 shadow-2xl">
+          <div className="w-12 h-12 rounded-xl bg-amber-950/60 border border-amber-600/60 flex items-center justify-center text-amber-400 mb-4 mx-auto">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h1 className="text-xl font-black text-center text-[#f5f1e6]">Chief Admin Security Barrier</h1>
+          <p className="mt-2 text-xs text-center text-[#bcb5a6] leading-relaxed">
+            This production host (<span className="text-amber-300 font-mono">pocketafk.vercel.app</span>) is restricted. For enhanced security, manage production data via the isolated Developer Console.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            <a
+              href="https://dev-pocketafk.vercel.app/chief"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-bold text-xs shadow-md transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Open Secure Dev Admin Console</span>
+            </a>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#454239]" /></div>
+              <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-[#252421] px-2 text-[#8c8577]">Or Unlock Direct Access</span></div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (prodUnlockInput.trim().length >= 4) {
+                  localStorage.setItem('pocketafk_chief_admin_auth', 'unlocked');
+                  setIsProdUnlocked(true);
+                } else {
+                  showToast('Enter valid authorization secret', 'error');
+                }
+              }}
+              className="space-y-2.5"
+            >
+              <input
+                type="password"
+                placeholder="Chief Master Secret Key..."
+                value={prodUnlockInput}
+                onChange={(e) => setProdUnlockInput(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[#201f1c] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+              />
+              <button
+                type="submit"
+                className="w-full py-2 rounded-lg bg-[#302e29] border border-[#514d43] hover:border-emerald-600 text-xs font-bold text-[#ded8c9] transition"
+              >
+                Unlock Production Admin
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50/50 text-slate-900 font-sans flex flex-col md:flex-row">
-      {/* LEFT SIDEBAR (Matching Dashboard Style) */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-2xs z-20 md:sticky md:top-0 md:h-screen">
-        {/* Logo Bar - Clickable directly to Dashboard */}
-        <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between">
+    <div className="min-h-screen bg-[#1a1916] text-[#eee9dc] font-sans flex flex-col md:flex-row">
+      {/* Toast Feedback */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl border shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-200 ${
+          toast.type === 'success' ? 'bg-emerald-950/90 border-emerald-600 text-emerald-200' :
+          toast.type === 'error' ? 'bg-rose-950/90 border-rose-600 text-rose-200' :
+          'bg-[#302e29] border-[#514d43] text-[#ded8c9]'
+        }`}>
+          {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+          {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400" />}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* LEFT SIDEBAR (Dark Theme) */}
+      <aside className="w-full md:w-64 bg-[#21201d] border-r border-[#4c493f] flex flex-col shrink-0 shadow-2xl z-20 md:sticky md:top-0 md:h-screen">
+        {/* Logo Bar */}
+        <div className="p-4 border-b border-[#454239] bg-[#262420] flex items-center justify-between">
           <Link
             href="/?tab=dashboard"
             className="flex items-center gap-2.5 text-left group hover:opacity-90 transition cursor-pointer"
-            title="Return to PocketAFK Dashboard"
+            title="Return to Dashboard"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 border border-emerald-400 text-white flex items-center justify-center font-black text-sm shadow-xs ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-800 border border-emerald-500 text-white flex items-center justify-center font-black text-sm shadow-md ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
               ⛏
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-sm text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors">
+                <span className="font-black text-sm text-[#eee9dc] tracking-tight group-hover:text-emerald-300 transition-colors">
                   PocketAFK
                 </span>
-                <span className="w-2 h-2 rounded-full ring-2 bg-emerald-500 ring-emerald-500/30 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-emerald-700 font-mono font-bold uppercase tracking-wider">Chief Admin</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-[10px] text-slate-400 font-mono">v2.4 Core</span>
+                <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase tracking-wider">Chief Admin</span>
+                <span className="text-[#514d43]">•</span>
+                <span className="text-[10px] text-[#bcb5a6] font-mono">v2.4 Core</span>
               </div>
             </div>
           </Link>
         </div>
 
+        {/* Environment Security Badge */}
+        <div className="px-4 py-2.5 bg-[#1b1a17] border-b border-[#3d3a33] text-[10px] font-mono flex items-center gap-2 text-[#bcb5a6]">
+          <span className={`w-2 h-2 rounded-full ${isDevSite ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          <span>{isDevSite ? 'Dev Console • Prod DB Live' : 'Prod Host • Admin Unlocked'}</span>
+        </div>
+
         {/* Sidebar Navigation */}
         <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
-          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-1">
+          <div className="text-[10px] font-black uppercase tracking-wider text-[#847e71] px-3 py-1">
             Admin Sections
           </div>
 
-          {/* Tab 1: Total Stats */}
           <button
             onClick={() => setActiveTab('stats')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeTab === 'stats'
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 shadow-xs'
+                : 'text-[#bcb5a6] hover:text-[#eee9dc] hover:bg-[#2b2925]'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <div className={`p-1 rounded-lg ${activeTab === 'stats' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                <BarChart3 className="w-3.5 h-3.5" />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <BarChart3 className="w-4 h-4 text-emerald-400" />
               <span>Total Stats</span>
             </div>
-            {stats.totalConnected > 0 ? (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-600">
-                Overview
-              </span>
-            )}
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#302e29] border border-[#514d43] text-[#d8d1c2]">
+              Overview
+            </span>
           </button>
 
-          {/* Tab 2: Users & Ranks */}
           <button
             onClick={() => setActiveTab('users')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeTab === 'users'
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 shadow-xs'
+                : 'text-[#bcb5a6] hover:text-[#eee9dc] hover:bg-[#2b2925]'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <div className={`p-1 rounded-lg ${activeTab === 'users' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                <Users className="w-3.5 h-3.5" />
-              </div>
-              <span>Users & Ranks</span>
+            <div className="flex items-center gap-2.5">
+              <Users className="w-4 h-4 text-emerald-400" />
+              <span>Registered Users</span>
             </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-              activeTab === 'users' ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-100 text-slate-600'
-            }`}>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#302e29] border border-[#514d43] text-[#d8d1c2]">
               {users.length}
             </span>
           </button>
 
-          {/* Tab 3: MC Accounts & Connections */}
           <button
             onClick={() => setActiveTab('accounts')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
               activeTab === 'accounts'
-                ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 shadow-xs'
+                : 'text-[#bcb5a6] hover:text-[#eee9dc] hover:bg-[#2b2925]'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <div className={`p-1 rounded-lg ${activeTab === 'accounts' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                <Server className="w-3.5 h-3.5" />
-              </div>
+            <div className="flex items-center gap-2.5">
+              <Server className="w-4 h-4 text-emerald-400" />
               <span>MC Accounts</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              {stats.totalConnected > 0 && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title={`${stats.totalConnected} online`} />
-              )}
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'accounts' ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {accounts.length}
-              </span>
-            </div>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#302e29] border border-[#514d43] text-[#d8d1c2]">
+              {accounts.length}
+            </span>
           </button>
 
-          {/* Live Orchestration Quick Panel */}
-          <div className="pt-4 mt-4 border-t border-slate-100 px-1 space-y-2">
-            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2">
-              Live Overview
+          <div className="pt-4 text-[10px] font-black uppercase tracking-wider text-[#847e71] px-3 py-1">
+            Live Overview
+          </div>
+          <div className="px-3 py-2 space-y-1.5 text-xs text-[#bcb5a6]">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-emerald-400" /> Active Bots</span>
+              <span className="font-bold text-emerald-300">{stats.totalConnected}</span>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
-                  <Activity className="w-3 h-3 text-emerald-600" />
-                  Active Bots
-                </span>
-                <span className="font-mono font-bold text-emerald-600 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {stats.totalConnected}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
-                  <Radio className="w-3 h-3 text-purple-600" />
-                  Termux Daemons
-                </span>
-                <span className="font-mono font-bold text-purple-600">
-                  {tunnels.filter((t) => t.isRecent).length}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 flex items-center gap-1.5 font-medium">
-                  <ShieldCheck className="w-3 h-3 text-sky-600" />
-                  Supabase Sync
-                </span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded">
-                  Connected
-                </span>
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-purple-400" /> Termux Daemons</span>
+              <span className="font-bold text-purple-300">{stats.totalTunnels}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-sky-400" /> Supabase Sync</span>
+              <span className="font-bold text-emerald-400 text-[10px] uppercase">Connected</span>
             </div>
           </div>
         </div>
 
-        {/* Desktop Bottom User Pill (matching Dashboard) */}
-        <div className="flex p-3 border-t border-slate-200 bg-slate-50/50 items-center justify-between gap-1 mt-auto shrink-0">
-          <div className="flex items-center gap-2 truncate min-w-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-xs font-bold text-slate-800 font-mono truncate">
-              @Chief
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span
-              className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 shrink-0 bg-sky-50 text-sky-800 border-sky-200 shadow-2xs font-mono"
-              title="Chief Administrator"
-            >
-              <span>💎</span>
-              <span>DIAMOND</span>
-            </span>
-            <Link
-              href="/"
-              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-              title="Exit to Dashboard"
-            >
-              <LogOut className="w-4 h-4" />
-            </Link>
-          </div>
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-[#454239] bg-[#262420]">
+          <Link
+            href="/?tab=dashboard"
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#302e29] border border-[#514d43] hover:border-emerald-600 text-xs font-bold text-[#ded8c9] transition"
+          >
+            <span>Return to Dashboard</span>
+          </Link>
         </div>
       </aside>
 
-      {/* RIGHT MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 bg-transparent overflow-y-auto">
         {/* Header Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-10 shadow-2xs">
-          {/* Breadcrumb Left */}
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-              {activeTab === 'stats' ? (
-                <BarChart3 className="w-4 h-4" />
-              ) : activeTab === 'users' ? (
-                <Users className="w-4 h-4" />
-              ) : (
-                <Server className="w-4 h-4" />
-              )}
-            </div>
-            <span className="text-xs font-bold text-slate-500">Chief Admin</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-xs font-black text-emerald-800 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
-              {activeTab === 'stats'
-                ? 'Total Stats & Overview'
-                : activeTab === 'users'
-                ? 'Users & Ranks'
-                : 'Minecraft Accounts & Connections'}
+        <header className="h-14 border-b border-[#454239] bg-[#22211e]/95 backdrop-blur-md px-6 flex items-center justify-between shrink-0 shadow-sm">
+          <div className="flex items-center gap-2.5 text-xs font-bold">
+            <span className="text-[#a8a18f]">Chief Admin</span>
+            <span className="text-[#514d43]">/</span>
+            <span className="px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider bg-emerald-950/70 text-emerald-300 border border-emerald-700/60">
+              {activeTab === 'stats' ? 'Total Stats & Emergency Controls' : activeTab === 'users' ? 'Registered Users' : 'Minecraft Accounts & Connections'}
             </span>
           </div>
 
-          {/* Header Actions Right */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsCreateUserOpen(true)}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-sm hover:shadow-emerald-500/25 active:scale-95 flex items-center gap-2 cursor-pointer ring-2 ring-emerald-500/20"
+              onClick={() => fetchData(false)}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#514d43] bg-[#2b2925] text-xs font-bold text-[#d8d1c2] hover:border-emerald-600 hover:text-emerald-300 transition cursor-pointer"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Add User</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Sync</span>
             </button>
+
+            {activeTab === 'users' && (
+              <button
+                onClick={() => setIsCreateUserOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-bold text-xs shadow-md transition cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Add User</span>
+              </button>
+            )}
           </div>
         </header>
 
-        {/* Scrollable Main Content */}
-        <main className="flex-1 p-4 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
-          {/* Toast Alert */}
-          {toast && (
-            <div
-              className={`p-3.5 rounded-2xl border flex items-center justify-between text-xs font-semibold shadow-md animate-in fade-in slide-in-from-top-2 ${
-                toast.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                  : toast.type === 'error'
-                  ? 'bg-rose-50 text-rose-900 border-rose-200'
-                  : 'bg-sky-50 text-sky-900 border-sky-200'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-600" />}
-                {toast.type === 'info' && <Activity className="w-4 h-4 text-sky-600" />}
-                <span>{toast.message}</span>
-              </div>
-              <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100 cursor-pointer">
-                ✕
-              </button>
-            </div>
-          )}
-
-        {/* TAB 0: TOTAL STATS */}
-        {activeTab === 'stats' && (
-          <div className="space-y-6">
-            {/* 4 Overview Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Total Users */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Users</span>
-                  <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 text-sky-600 flex items-center justify-center">
-                    <Users className="w-4 h-4" />
+        {/* Content Body */}
+        <div className="p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+          {/* TAB 1: TOTAL STATS & EMERGENCY ACTIONS */}
+          {activeTab === 'stats' && (
+            <div className="space-y-6">
+              {/* Stat Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-5 rounded-2xl border border-[#4c493f] bg-[#252421]/95 shadow-md">
+                  <div className="flex items-center justify-between text-[#a8a18f] text-xs font-bold uppercase tracking-wider">
+                    <span>Registered Users</span>
+                    <Users className="w-4 h-4 text-emerald-400" />
                   </div>
+                  <div className="mt-2 text-2xl font-black text-[#f5f1e6]">{stats.totalUsers}</div>
+                  <p className="mt-1 text-[11px] text-[#bcb5a6]">Accounts in Supabase</p>
                 </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-slate-900">{stats.totalUsers}</span>
-                  <span className="text-xs text-slate-400 font-medium">accounts in Supabase</span>
-                </div>
-              </div>
 
-              {/* Minecraft Accounts */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Minecraft Accounts</span>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-                    <Server className="w-4 h-4" />
+                <div className="p-5 rounded-2xl border border-[#4c493f] bg-[#252421]/95 shadow-md">
+                  <div className="flex items-center justify-between text-[#a8a18f] text-xs font-bold uppercase tracking-wider">
+                    <span>Minecraft Accounts</span>
+                    <Server className="w-4 h-4 text-sky-400" />
                   </div>
+                  <div className="mt-2 text-2xl font-black text-[#f5f1e6]">{stats.totalAccounts}</div>
+                  <p className="mt-1 text-[11px] text-[#bcb5a6]">Linked across users</p>
                 </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-slate-900">{stats.totalAccounts}</span>
-                  <span className="text-xs text-slate-400 font-medium">linked across users</span>
+
+                <div className="p-5 rounded-2xl border border-[#4c493f] bg-[#252421]/95 shadow-md">
+                  <div className="flex items-center justify-between text-[#a8a18f] text-xs font-bold uppercase tracking-wider">
+                    <span>Active Connections</span>
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-emerald-300">{stats.totalConnected}</div>
+                  <p className="mt-1 text-[11px] text-[#bcb5a6]">Live online bots in-game</p>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-[#4c493f] bg-[#252421]/95 shadow-md">
+                  <div className="flex items-center justify-between text-[#a8a18f] text-xs font-bold uppercase tracking-wider">
+                    <span>Termux Bridges</span>
+                    <Radio className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="mt-2 text-2xl font-black text-purple-300">{stats.totalTunnels}</div>
+                  <p className="mt-1 text-[11px] text-[#bcb5a6]">Active phone tunnels</p>
                 </div>
               </div>
 
-              {/* Active Connections */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Connections</span>
-                  <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
-                    <Activity className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-emerald-600 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    {stats.totalConnected}
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">online bots</span>
-                </div>
-              </div>
-
-              {/* Rank Breakdown */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:shadow-sm transition">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Rank Breakdown</span>
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-700">
-                    Iron: {stats.rankBreakdown?.iron || 0}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-100 text-amber-800">
-                    Gold: {stats.rankBreakdown?.gold || 0}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-100 text-sky-800">
-                    Dia: {stats.rankBreakdown?.diamond || 0}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800">
-                    Emr: {stats.rankBreakdown?.emerald || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Rank Distribution & Server Distribution */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Detailed Rank Quotas & Distribution */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Rank Allocation</h3>
-                    <p className="text-[11px] text-slate-500">User limits & bot capacity tier breakdown</p>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 font-mono">
-                    {stats.totalUsers} TOTAL
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { key: 'iron', name: 'Iron Tier', maxBots: 1, color: 'bg-slate-400', count: stats.rankBreakdown?.iron || 0 },
-                    { key: 'gold', name: 'Gold Tier', maxBots: 3, color: 'bg-amber-400', count: stats.rankBreakdown?.gold || 0 },
-                    { key: 'diamond', name: 'Diamond Tier', maxBots: 6, color: 'bg-sky-400', count: stats.rankBreakdown?.diamond || 0 },
-                    { key: 'emerald', name: 'Emerald Tier', maxBots: 10, color: 'bg-emerald-500', count: stats.rankBreakdown?.emerald || 0 },
-                  ].map((tier) => {
-                    const pct = stats.totalUsers > 0 ? Math.round((tier.count / stats.totalUsers) * 100) : 0;
-                    return (
-                      <div key={tier.key} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full ${tier.color}`} />
-                            {tier.name}
-                            <span className="text-[10px] text-slate-400 font-normal">({tier.maxBots} bot limit)</span>
-                          </span>
-                          <span className="font-mono font-bold text-slate-900">
-                            {tier.count} <span className="text-slate-400 font-normal text-[11px]">({pct}%)</span>
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                          <div className={`h-full ${tier.color} transition-all duration-500`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Server Host Distribution */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Server Distribution</h3>
-                    <p className="text-[11px] text-slate-500">Configured Minecraft servers across accounts</p>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 font-mono">
-                    {stats.totalConnected} ONLINE
-                  </span>
-                </div>
-                <div className="space-y-2.5">
-                  {hostStats.length === 0 ? (
-                    <div className="text-center py-6 text-slate-400 text-xs italic">
-                      No server accounts configured yet.
+              {/* EMERGENCY ACTIONS PANEL (Requested Feature) */}
+              <div className="rounded-2xl border border-[#524e43] bg-[#252421]/95 overflow-hidden shadow-xl">
+                <header className="px-6 py-4 bg-gradient-to-r from-[#2f2723] via-[#2a2522] to-[#252421] border-b border-[#454239] flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-xl bg-amber-950/70 border border-amber-600/70 flex items-center justify-center text-amber-300">
+                      <AlertTriangle className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <h2 className="text-sm font-black text-[#f5f1e6]">Emergency Controls & Global Broadcasts</h2>
+                      <p className="text-xs text-[#bcb5a6]">One-click emergency actions affecting connected dashboards and live Termux sessions.</p>
                     </div>
-                  ) : (
-                    hostStats.slice(0, 5).map(([host, data]) => (
-                      <div key={host} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                        <div className="flex items-center gap-2 truncate min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0">
-                            🎮
-                          </div>
-                          <span className="text-xs font-mono font-bold text-slate-800 truncate" title={host}>
-                            {host}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white border border-slate-200 text-slate-600">
-                            {data.total} {data.total === 1 ? 'account' : 'accounts'}
-                          </span>
-                          {data.online > 0 && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              {data.online} live
-                            </span>
-                          )}
-                        </div>
+                  </div>
+
+                  <button
+                    onClick={handleToggleRegistrations}
+                    disabled={isTogglingRegistrations}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 ${
+                      isRegistrationsPaused
+                        ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60 hover:bg-emerald-900/70'
+                        : 'bg-amber-950/70 text-amber-300 border-amber-700/60 hover:bg-amber-900/70'
+                    }`}
+                  >
+                    {isRegistrationsPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                    <span>{isRegistrationsPaused ? 'Resume Registrations' : 'Pause Registrations'}</span>
+                  </button>
+                </header>
+
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Action 1: Force Refresh */}
+                  <div className="p-4 rounded-xl border border-[#4c493f] bg-[#2b2925] flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 font-bold text-sm text-[#eee9dc]">
+                        <RotateCcw className="w-4 h-4 text-sky-400" />
+                        <span>Force Refresh All</span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Termux Daemon Tunnels Overview */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center font-bold">
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Termux Bridges & Cloudflare Tunnels
-                    </h3>
-                    <p className="text-[11px] text-slate-500">Android daemon connections routing mineflayer instances</p>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 font-mono">
-                  {tunnels.filter((t) => t.isRecent).length} / {tunnels.length} Active
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {tunnels.length === 0 ? (
-                  <div className="col-span-full py-4 text-center text-slate-400 text-xs italic">
-                    No phone daemons registered yet.
-                  </div>
-                ) : (
-                  tunnels.map((tun) => {
-                    const isLive = Boolean(tun.isRecent && tun.url);
-                    const lastSyncSec = tun.updatedAt ? Math.max(0, Math.floor((nowTick - tun.updatedAt) / 1000)) : 0;
-                    return (
-                      <div
-                        key={tun.username}
-                        className={`p-3 rounded-xl border transition ${
-                          isLive
-                            ? 'bg-gradient-to-br from-emerald-50/50 to-teal-50/30 border-emerald-200 shadow-2xs'
-                            : 'bg-slate-50/80 border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-xs text-slate-900">@{tun.username}</span>
-                            {isLive ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Live Daemon
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-slate-200 text-slate-600">
-                                Inactive
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {tun.activeBots} {tun.activeBots === 1 ? 'bot' : 'bots'}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 flex items-center justify-between gap-1 text-[11px] font-mono bg-white/90 px-2 py-1 rounded-lg border border-slate-200/80">
-                          <span className="truncate text-slate-700 select-all" title={tun.url}>
-                            {tun.url || 'No active tunnel'}
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {tun.url && (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(tun.url);
-                                  showToast(`Copied tunnel for @${tun.username}`, 'info');
-                                }}
-                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer shrink-0"
-                                title="Copy tunnel URL"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            )}
-                            {tun.url && (
-                              <button
-                                onClick={() => handleDisconnectTunnel(tun.username)}
-                                className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition cursor-pointer"
-                                title="Disconnect / clear daemon tunnel"
-                              >
-                                Clear
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Smartphone className="w-3 h-3 text-slate-400" />
-                            Android Termux
-                          </span>
-                          <span>
-                            {isLive
-                              ? `Heartbeat ${formatUptime(lastSyncSec)} ago`
-                              : tun.updatedAt
-                              ? `Offline (${formatUptime(lastSyncSec)} ago)`
-                              : 'Offline'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 1: USERS & RANKS */}
-        {activeTab === 'users' && (
-          <div className="space-y-4">
-            {/* Filter Bar */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search user or secret code..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
-
-              {/* Pause / Resume Registrations Toggle Button */}
-              <button
-                type="button"
-                onClick={handleToggleRegistrations}
-                disabled={isTogglingRegistrations}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-2 border disabled:opacity-50 active:scale-95 ${
-                  isRegistrationsPaused
-                    ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100/90 shadow-amber-500/10'
-                    : 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100/90 shadow-emerald-500/10'
-                }`}
-                title={
-                  isRegistrationsPaused
-                    ? 'Public sign-ups are paused. Click to resume registrations.'
-                    : 'Public sign-ups are open. Click to pause registrations.'
-                }
-              >
-                {isRegistrationsPaused ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <UserX className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Registrations: Paused</span>
-                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
-                      Resume
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Registrations: Active</span>
-                    <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                      Pause
-                    </span>
-                  </>
-                )}
-              </button>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs text-slate-500 font-medium">Rank:</span>
-                <select
-                  value={userRankFilter}
-                  onChange={(e) => setUserRankFilter(e.target.value)}
-                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="all">All Ranks</option>
-                  <option value="iron">Iron (1 Bot)</option>
-                  <option value="gold">Gold (3 Bots)</option>
-                  <option value="diamond">Diamond (6 Bots)</option>
-                  <option value="emerald">Emerald (10 Bots)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Users Table */}
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase text-[10px] tracking-wider font-bold">
-                    <tr>
-                      <th className="p-3.5">User</th>
-                      <th className="p-3.5">Assigned Rank</th>
-                      <th className="p-3.5">Linked Accounts</th>
-                      <th className="p-3.5">Secret Code</th>
-                      <th className="p-3.5">Registered</th>
-                      <th className="p-3.5 text-right">Admin Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400">
-                          <RefreshCw className="w-5 h-5 animate-spin mx-auto text-emerald-600 mb-2" />
-                          <span>Loading users from Supabase...</span>
-                        </td>
-                      </tr>
-                    ) : filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400">
-                          No users found matching your search.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredUsers.map((u) => {
-                        const rankCfg = RANKS[u.rank] || RANKS.iron;
-
-                        return (
-                          <tr key={u.id} className="hover:bg-slate-50/80 transition">
-                            {/* User details */}
-                            <td className="p-3.5">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-800 text-xs">
-                                  {u.username.substring(0, 2).toUpperCase()}
-                                </div>
-                                <div>
-                                  <span className="font-bold text-slate-900 block">@{u.username}</span>
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                                    <span className="font-mono">ID: {u.id.substring(0, 8)}...</span>
-                                    <span>•</span>
-                                    {u.isTunnelActive ? (
-                                      <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold" title={u.tunnelUrl}>
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                        Daemon Live
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-400">No Daemon</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Rank Selector */}
-                            <td className="p-3.5">
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={u.rank}
-                                  onChange={(e) => handleChangeRank(u.username, e.target.value as UserRank)}
-                                  className={`px-2.5 py-1 rounded-xl text-xs font-black border transition cursor-pointer shadow-2xs ${rankCfg.badgeBg} ${rankCfg.badgeText} ${rankCfg.badgeBorder}`}
-                                >
-                                  {RANK_ORDER.map((r) => (
-                                    <option key={r} value={r}>
-                                      {RANKS[r].gemIcon} {RANKS[r].name} ({RANKS[r].maxAccounts} Max)
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </td>
-
-                            {/* Accounts & Active */}
-                            <td className="p-3.5">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900">
-                                  {u.accountCount} / {rankCfg.maxAccounts}
-                                </span>
-                                {u.connectedCount > 0 && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    {u.connectedCount} online
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Secret Code */}
-                            <td className="p-3.5">
-                              {u.secretCode ? (
-                                <div className="flex items-center gap-1 font-mono text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded-lg w-fit">
-                                  <span>{u.secretCode}</span>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(u.secretCode!);
-                                      showToast(`Copied secret code for @${u.username}`, 'info');
-                                    }}
-                                    className="text-slate-400 hover:text-slate-700 p-0.5"
-                                    title="Copy secret code"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-[11px] italic">No password hash</span>
-                              )}
-                            </td>
-
-                            {/* Date Registered */}
-                            <td className="p-3.5 text-slate-500 text-[11px]">
-                              {new Date(u.createdAt).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </td>
-
-                            {/* Actions */}
-                            <td className="p-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    setResetPasswordUser(u);
-                                    setNewPassword('');
-                                  }}
-                                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                                  title="Reset password for this user"
-                                >
-                                  <Key className="w-3 h-3 text-amber-600" />
-                                  <span>Password</span>
-                                </button>
-
-                                <button
-                                  onClick={() => setDeleteTarget({ type: 'user', id: u.id, name: u.username })}
-                                  className="p-1.5 rounded-xl border border-slate-200 hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer shadow-2xs"
-                                  title="Delete user"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: MINECRAFT ACCOUNTS & LIVE CONNECTIONS */}
-        {activeTab === 'accounts' && (
-          <div className="space-y-4">
-            {/* Filter Bar */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-              <div className="relative w-full sm:w-96">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search account, owner, server, or tunnel URL..."
-                  value={accountSearch}
-                  onChange={(e) => setAccountSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-xs text-slate-500 font-medium">Filter:</span>
-                <select
-                  value={accountStatusFilter}
-                  onChange={(e) => setAccountStatusFilter(e.target.value as any)}
-                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  <option value="all">All Accounts ({accounts.length})</option>
-                  <option value="online">Online Bots Only ({accounts.filter((a) => a.isConnected).length})</option>
-                  <option value="legit">Verified Legit Only ({accounts.filter((a) => a.isConnected && a.legitimacy?.status === 'legit').length})</option>
-                  <option value="suspicious">Security Warnings / Leaks ({accounts.filter((a) => a.isConnected && a.legitimacy?.status !== 'legit').length})</option>
-                  <option value="offline">Offline Only ({accounts.filter((a) => !a.isConnected).length})</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Accounts Portrait Cards Grid */}
-            {loading ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 shadow-xs">
-                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-600 mb-2" />
-                <span className="text-xs font-medium">Loading Minecraft accounts and analyzing security...</span>
-              </div>
-            ) : filteredAccounts.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-400 shadow-xs text-xs">
-                No Minecraft accounts found matching your filter.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {filteredAccounts.map((a) => {
-                  const uptimeSec =
-                    a.isConnected && a.connectedAt
-                      ? Math.max(0, Math.floor((nowTick - a.connectedAt) / 1000))
-                      : 0;
-
-                  const displayTunnel = a.daemonUrl || a.registeredTunnel || '';
-                  const botChats =
-                    liveChats[a.ign.toLowerCase()] ||
-                    liveChats[(a.settings?.last_bot_id || '').toLowerCase()] ||
-                    [];
-
-                  return (
-                    <div
-                      key={a.id}
-                      className="bg-white border border-slate-200 rounded-3xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                      <p className="mt-1.5 text-xs text-[#bcb5a6] leading-relaxed">
+                        Broadcasts an immediate reload signal to all active browsers on the website, synchronizing all users.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setEmergencyModal({
+                        type: 'force_refresh',
+                        title: 'Broadcast Force Refresh?',
+                        description: 'This will cause all user dashboards currently connected to automatically reload and fetch fresh state from Supabase.',
+                      })}
+                      className="mt-4 w-full py-2 rounded-lg bg-sky-950/60 border border-sky-700/60 text-sky-300 hover:bg-sky-900/60 font-bold text-xs transition cursor-pointer"
                     >
-                      {/* Top Header: Head, IGN, Owner, Status & Actions */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 shrink-0 shadow-xs">
-                            <img
-                              src={`https://crafthead.net/helm/${encodeURIComponent(a.ign.split('@')[0])}/64`}
-                              alt={a.ign}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="font-black text-sm text-slate-900 tracking-tight truncate" title={a.ign}>
-                              {a.ign}
-                            </h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold font-mono">
-                                @{a.owner}
+                      Trigger Global Refresh
+                    </button>
+                  </div>
+
+                  {/* Action 2: Force Logout */}
+                  <div className="p-4 rounded-xl border border-[#4c493f] bg-[#2b2925] flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 font-bold text-sm text-[#eee9dc]">
+                        <LogOut className="w-4 h-4 text-amber-400" />
+                        <span>Force Logout All</span>
+                      </div>
+                      <p className="mt-1.5 text-xs text-[#bcb5a6] leading-relaxed">
+                        Immediately terminates all active browser sessions across all devices, requiring everyone to re-authenticate.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setEmergencyModal({
+                        type: 'force_logout',
+                        title: 'Force Logout All Users?',
+                        description: 'All active sessions on both dev and production will be signed out immediately and sent back to the login screen.',
+                      })}
+                      className="mt-4 w-full py-2 rounded-lg bg-amber-950/60 border border-amber-700/60 text-amber-300 hover:bg-amber-900/60 font-bold text-xs transition cursor-pointer"
+                    >
+                      Sign Out All Sessions
+                    </button>
+                  </div>
+
+                  {/* Action 3: Force Close Termux */}
+                  <div className="p-4 rounded-xl border border-[#4c493f] bg-[#2b2925] flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 font-bold text-sm text-[#eee9dc]">
+                        <Power className="w-4 h-4 text-rose-400" />
+                        <span>Force Close All Termux</span>
+                      </div>
+                      <p className="mt-1.5 text-xs text-[#bcb5a6] leading-relaxed">
+                        Terminates all active Cloudflare phone tunnels in Supabase and instantly marks all Minecraft bots as disconnected.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setEmergencyModal({
+                        type: 'force_close_termux',
+                        title: 'Force Close All Termux Sessions?',
+                        description: 'This will sever all active phone daemon connections and shut down all bot activity system-wide.',
+                      })}
+                      className="mt-4 w-full py-2 rounded-lg bg-rose-950/60 border border-rose-700/60 text-rose-300 hover:bg-rose-900/60 font-bold text-xs transition cursor-pointer"
+                    >
+                      Halt All Termux Bridges
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Server Distribution & Active Tunnels */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Server Distribution */}
+                <div className="rounded-2xl border border-[#4c493f] bg-[#252421]/95 overflow-hidden shadow-md">
+                  <header className="px-5 py-4 border-b border-[#454239] bg-[#2b2925] flex items-center justify-between">
+                    <div className="font-bold text-sm text-[#eee9dc] flex items-center gap-2">
+                      <Server className="w-4 h-4 text-emerald-400" />
+                      <span>Server Distribution</span>
+                    </div>
+                    <span className="text-xs text-[#bcb5a6]">{hostStats.length} Unique Servers</span>
+                  </header>
+                  <div className="p-4 divide-y divide-[#3d3a33] max-h-72 overflow-y-auto">
+                    {hostStats.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-[#8c8577]">No servers configured yet.</div>
+                    ) : (
+                      hostStats.map(([host, data]) => (
+                        <div key={host} className="py-2.5 flex items-center justify-between text-xs">
+                          <span className="font-mono text-[#ded8c9]">{host}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[#a8a18f]">{data.total} account{data.total === 1 ? '' : 's'}</span>
+                            {data.online > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-700/60">
+                                {data.online} online
                               </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                #{a.id.substring(0, 6)}
-                              </span>
-                            </div>
+                            )}
                           </div>
                         </div>
+                      ))
+                    )}
+                  </div>
+                </div>
 
-                        {/* Status & Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {a.isConnected ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                              Connected
+                {/* Termux Bridges & Cloudflare Tunnels */}
+                <div className="rounded-2xl border border-[#4c493f] bg-[#252421]/95 overflow-hidden shadow-md">
+                  <header className="px-5 py-4 border-b border-[#454239] bg-[#2b2925] flex items-center justify-between">
+                    <div className="font-bold text-sm text-[#eee9dc] flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-purple-400" />
+                      <span>Termux Bridges & Cloudflare Tunnels</span>
+                    </div>
+                    <span className="text-xs text-[#bcb5a6]">{tunnels.length} Registered</span>
+                  </header>
+                  <div className="p-4 divide-y divide-[#3d3a33] max-h-72 overflow-y-auto">
+                    {tunnels.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-[#8c8577]">No phone daemons registered yet.</div>
+                    ) : (
+                      tunnels.map((t) => (
+                        <div key={t.username} className="py-2.5 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="font-bold text-[#eee9dc]">@{t.username}</span>
+                            <span className="block font-mono text-[10px] text-[#8c8577] truncate max-w-xs">{t.url}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              t.isRecent ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60' : 'bg-[#302e29] text-[#8c8577]'
+                            }`}>
+                              {t.isRecent ? 'Live' : 'Idle'}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                              Offline
-                            </span>
-                          )}
-
-                          {a.isConnected && (
                             <button
-                              onClick={() => handleDisconnectAccount(a.id, a.ign)}
-                              className="p-1.5 rounded-xl border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-500 hover:text-amber-700 transition cursor-pointer"
-                              title="Disconnect bot"
+                              onClick={() => handleDisconnectTunnel(t.username)}
+                              className="p-1 rounded text-[#8c8577] hover:text-rose-400 hover:bg-[#302e29]"
+                              title="Disconnect Tunnel"
                             >
                               <Power className="w-3.5 h-3.5" />
                             </button>
-                          )}
-
-                          <button
-                            onClick={() => setDeleteTarget({ type: 'account', id: a.id, name: a.ign })}
-                            className="p-1.5 rounded-xl border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                            title="Delete account"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </div>
                         </div>
-                      </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-                      {/* Middle Details Box */}
-                      <div className="space-y-2.5 text-xs bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80">
-                        {/* Server Destination */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5 shrink-0">
-                            <Server className="w-3.5 h-3.5 text-slate-400" />
-                            Server:
-                          </span>
-                          <span className="font-mono font-bold text-slate-800 truncate text-[11px] bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                            {a.serverHost}:{a.serverPort}
-                          </span>
-                        </div>
+          {/* TAB 2: REGISTERED USERS */}
+          {activeTab === 'users' && (
+            <div className="space-y-4">
+              {/* Filter Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="relative min-w-[260px] flex-1 max-w-md">
+                  <Search className="w-3.5 h-3.5 text-[#8c8577] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search by username or secret code..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#252421] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <div className="text-xs text-[#bcb5a6] font-bold">
+                  Showing {filteredUsers.length} of {users.length} users
+                </div>
+              </div>
 
-                        {/* Tunnel Daemon */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5 shrink-0">
-                            <Globe className="w-3.5 h-3.5 text-slate-400" />
-                            Tunnel:
-                          </span>
-                          {displayTunnel ? (
-                            <div className="flex items-center gap-1 max-w-[200px] truncate bg-white px-2 py-0.5 rounded-md border border-slate-200 font-mono text-[10.5px] text-slate-700">
-                              <span className="truncate" title={displayTunnel}>
-                                {displayTunnel}
+              {/* Users Table */}
+              <div className="rounded-2xl border border-[#4c493f] bg-[#252421]/95 overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#2c2a25] border-b border-[#454239] text-[#a8a18f] font-bold uppercase text-[10px] tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">User</th>
+                        <th className="py-3 px-4">Capacity</th>
+                        <th className="py-3 px-4">Accounts & Bots</th>
+                        <th className="py-3 px-4">Secret Launcher Code</th>
+                        <th className="py-3 px-4">Tunnel Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#3d3a33]">
+                      {filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-[#8c8577]">No users matched your search.</td>
+                        </tr>
+                      ) : (
+                        filteredUsers.map((u) => (
+                          <tr key={u.id} className="hover:bg-[#2b2925] transition">
+                            <td className="py-3.5 px-4 font-bold text-[#eee9dc]">
+                              @{u.username}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 shadow-2xs">
+                                ⚡ Universal (10 Bots)
                               </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="font-semibold text-[#ded8c9]">{u.accountCount}/10 linked</span>
+                              {u.connectedCount > 0 && (
+                                <span className="ml-2 text-emerald-400 font-bold">({u.connectedCount} online)</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {u.secretCode ? (
+                                <span
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(u.secretCode || '');
+                                    showToast(`Copied secret code for @${u.username}`, 'info');
+                                  }}
+                                  className="font-mono text-[11px] text-[#bcb5a6] bg-[#201f1c] px-2 py-1 rounded border border-[#4c493f] cursor-pointer hover:border-emerald-600 transition inline-flex items-center gap-1.5"
+                                  title="Click to copy"
+                                >
+                                  <span>{u.secretCode}</span>
+                                  <Copy className="w-3 h-3 text-[#8c8577]" />
+                                </span>
+                              ) : (
+                                <span className="text-[#8c8577] italic">None</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {u.tunnelUrl ? (
+                                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-purple-300">
+                                  <Radio className="w-3 h-3 text-purple-400" />
+                                  <span className="max-w-[150px] truncate">{u.tunnelUrl}</span>
+                                </span>
+                              ) : (
+                                <span className="text-[#8c8577] text-[11px]">No tunnel active</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right space-x-1">
                               <button
                                 onClick={() => {
-                                  navigator.clipboard.writeText(displayTunnel);
-                                  showToast('Copied tunnel URL', 'info');
+                                  setResetPasswordUser(u);
+                                  setNewPassword('');
                                 }}
-                                className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0 cursor-pointer"
-                                title="Copy tunnel URL"
+                                className="p-1.5 rounded-lg text-[#bcb5a6] hover:text-sky-300 hover:bg-[#302e29] transition"
+                                title="Reset Password"
                               >
-                                <Copy className="w-3 h-3" />
+                                <Key className="w-4 h-4" />
                               </button>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">No tunnel registered</span>
-                          )}
-                        </div>
-
-                        {/* Security / Legitimacy & Uptime */}
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/70">
-                          {a.legitimacy?.status === 'legit' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              Verified Legit
-                            </span>
-                          ) : a.legitimacy?.status === 'leak' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                              <ShieldAlert className="w-3 h-3 text-rose-600" />
-                              {a.legitimacy.badge}
-                            </span>
-                          ) : a.legitimacy?.status === 'unverified' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                              <AlertTriangle className="w-3 h-3 text-amber-600" />
-                              {a.legitimacy.badge}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              Standby
-                            </span>
-                          )}
-
-                          <div className="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-600">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            {a.isConnected ? (
-                              <span className="text-emerald-700">{formatUptime(uptimeSec)}</span>
-                            ) : (
-                              <span className="text-slate-400">Offline</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Live Server Chat (Matches Dashboard Console) */}
-                      {a.isConnected && (
-                        <div className="p-3.5 rounded-2xl bg-white border border-slate-200 text-xs shadow-2xs space-y-2">
-                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
-                            <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-700 uppercase tracking-wider">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              Live Server Chat
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-sans font-medium">
-                              last 5 msgs
-                            </span>
-                          </div>
-
-                          {botChats.length === 0 ? (
-                            <div className="text-slate-400 italic text-[11px] py-3 text-center bg-slate-50/50 rounded-xl border border-slate-200/60">
-                              Listening for server messages...
-                            </div>
-                          ) : (
-                            <div className="space-y-1 bg-slate-50/50 p-2 rounded-xl border border-slate-200/80 max-h-[170px] overflow-y-auto">
-                              {botChats.slice(-5).map((c, i) => (
-                                <MinecraftChatMessage
-                                  key={c.id || i}
-                                  message={c}
-                                  compact={true}
-                                  showTimestamp={true}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                              <button
+                                onClick={() => setDeleteTarget({ type: 'user', id: u.id, name: u.username })}
+                                className="p-1.5 rounded-lg text-[#bcb5a6] hover:text-rose-400 hover:bg-[#302e29] transition"
+                                title="Delete User"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
                       )}
-                    </div>
-                  );
-                })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+
+          {/* TAB 3: MINECRAFT ACCOUNTS & BOT CONNECTIONS */}
+          {activeTab === 'accounts' && (
+            <div className="space-y-4">
+              {/* Filter Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="relative min-w-[260px] flex-1 max-w-md">
+                  <Search className="w-3.5 h-3.5 text-[#8c8577] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search accounts, servers, IGNs..."
+                    value={accountSearch}
+                    onChange={(e) => setAccountSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#252421] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {(['all', 'online', 'offline'] as const).map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setAccountStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition cursor-pointer ${
+                        accountStatusFilter === st
+                          ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 shadow-xs'
+                          : 'bg-[#252421] text-[#bcb5a6] border border-[#4c493f] hover:text-[#eee9dc]'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Accounts Table */}
+              <div className="rounded-2xl border border-[#4c493f] bg-[#252421]/95 overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#2c2a25] border-b border-[#454239] text-[#a8a18f] font-bold uppercase text-[10px] tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Account IGN</th>
+                        <th className="py-3 px-4">Owner</th>
+                        <th className="py-3 px-4">Configured Server</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Daemon Tunnel</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#3d3a33]">
+                      {filteredAccounts.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-[#8c8577]">No Minecraft accounts matched your search.</td>
+                        </tr>
+                      ) : (
+                        filteredAccounts.map((a) => (
+                          <tr key={a.id} className="hover:bg-[#2b2925] transition">
+                            <td className="py-3.5 px-4 font-bold text-[#eee9dc] flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-md overflow-hidden bg-[#201f1c] border border-[#4c493f] shrink-0">
+                                <img
+                                  src={`https://crafthead.net/helm/${encodeURIComponent(a.ign)}/28`}
+                                  alt={a.ign}
+                                  className="w-full h-full object-cover [image-rendering:pixelated]"
+                                  onError={(e) => {
+                                    const img = e.target as HTMLImageElement;
+                                    img.src = `https://mc-heads.net/avatar/${encodeURIComponent(a.ign)}/28`;
+                                  }}
+                                />
+                              </div>
+                              <span>{a.ign}</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-[#bcb5a6]">
+                              @{a.owner}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-[11px] text-[#ded8c9]">
+                              {a.serverHost}{a.serverPort !== 25565 ? `:${a.serverPort}` : ''}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                a.isConnected
+                                  ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-[#302e29] text-[#8c8577]'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${a.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-[#756f62]'}`} />
+                                {a.isConnected ? 'Online' : 'Offline'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-[10px] text-[#8c8577] max-w-xs truncate">
+                              {a.daemonUrl || a.registeredTunnel || '—'}
+                            </td>
+                            <td className="py-3.5 px-4 text-right space-x-1">
+                              {a.isConnected && (
+                                <button
+                                  onClick={() => setActiveChatBot(a)}
+                                  className="p-1.5 rounded-lg text-emerald-400 hover:bg-[#302e29] transition"
+                                  title="View In-Game Chat Stream"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </button>
+                              )}
+                              {a.isConnected && (
+                                <button
+                                  onClick={() => handleDisconnectAccount(a.id, a.ign)}
+                                  className="p-1.5 rounded-lg text-amber-400 hover:bg-[#302e29] transition"
+                                  title="Disconnect Bot"
+                                >
+                                  <Power className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setDeleteTarget({ type: 'account', id: a.id, name: `${a.ign} (@${a.owner})` })}
+                                className="p-1.5 rounded-lg text-[#bcb5a6] hover:text-rose-400 hover:bg-[#302e29] transition"
+                                title="Delete Account"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
-      </div>
 
-      {/* MODAL: RESET PASSWORD */}
-      {resetPasswordUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
-                  <Key className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Reset Password</h3>
-                  <p className="text-xs text-slate-500">For user @{resetPasswordUser.username}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setResetPasswordUser(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">New Secure Password</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter new password (min 4 chars)"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setResetPasswordUser(null)}
-                  className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isResettingPassword || newPassword.length < 4}
-                  className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {isResettingPassword ? 'Saving...' : 'Set Password'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CREATE USER */}
-      {isCreateUserOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
-                  <UserPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Add New User</h3>
-                  <p className="text-xs text-slate-500">Register directly into Supabase</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsCreateUserOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUserSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Username <span className="text-slate-400 font-normal">(1-6 alphanumeric characters)</span>
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  required
-                  placeholder="e.g. Chief"
-                  value={createUsername}
-                  onChange={(e) => setCreateUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Password"
-                  value={createPassword}
-                  onChange={(e) => setCreatePassword(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Initial Rank Tier</label>
-                <select
-                  value={createRank}
-                  onChange={(e) => setCreateRank(e.target.value as UserRank)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500 bg-white"
-                >
-                  <option value="iron">Iron (1 Bot)</option>
-                  <option value="gold">Gold (3 Bots)</option>
-                  <option value="diamond">Diamond (6 Bots)</option>
-                  <option value="emerald">Emerald (10 Bots)</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateUserOpen(false)}
-                  className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingUser || !createUsername || !createPassword}
-                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {isCreatingUser ? 'Creating...' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CONFIRM DELETE */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+      {/* EMERGENCY ACTION CONFIRMATION MODAL */}
+      {emergencyModal && (
+        <div
+          onClick={() => !isExecutingEmergency && setEmergencyModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-[#524e43] bg-[#262420] p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-3 text-amber-400">
+              <span className="w-10 h-10 rounded-xl bg-amber-950/70 border border-amber-600/70 flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5" />
-              </div>
+              </span>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">
-                  Delete {deleteTarget.type === 'user' ? 'User' : 'Account'}?
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
-                </p>
+                <h3 className="font-black text-base text-[#f5f1e6]">{emergencyModal.title}</h3>
+                <p className="text-xs text-[#bcb5a6]">Confirm Emergency Admin Action</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              {deleteTarget.type === 'user'
-                ? 'This will delete the user account and all their linked Minecraft bots from Supabase.'
-                : 'This will remove this Minecraft bot record from Supabase.'}
+            <p className="text-xs text-[#bcb5a6] leading-relaxed bg-[#1d1c19] p-3.5 rounded-xl border border-[#454239]">
+              {emergencyModal.description}
             </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                onClick={() => setEmergencyModal(null)}
+                disabled={isExecutingEmergency}
+                className="px-4 py-2 rounded-xl bg-[#302e29] border border-[#514d43] text-xs font-bold text-[#ded8c9] hover:bg-[#38362f] transition"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                onClick={handleExecuteEmergencyAction}
+                disabled={isExecutingEmergency}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 text-white font-bold text-xs shadow-md hover:from-amber-500 hover:to-rose-500 transition flex items-center gap-2"
+              >
+                {isExecutingEmergency && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Confirm & Execute</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE USER MODAL */}
+      {isCreateUserOpen && (
+        <div
+          onClick={() => !isCreatingUser && setIsCreateUserOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-[#4c493f] bg-[#262420] p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-[#454239] pb-3">
+              <h3 className="font-black text-base text-[#f5f1e6]">Register New User</h3>
+              <button onClick={() => setIsCreateUserOpen(false)} className="text-[#8c8577] hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUserSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-[#a8a18f] mb-1">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={createUsername}
+                  onChange={(e) => setCreateUsername(e.target.value)}
+                  placeholder="e.g. steve"
+                  className="w-full px-3 py-2 rounded-xl bg-[#1d1c19] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#a8a18f] mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={createPassword}
+                  onChange={(e) => setCreatePassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  className="w-full px-3 py-2 rounded-xl bg-[#1d1c19] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#201f1c] border border-[#454239] text-xs text-emerald-300 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Automatically granted Universal 10-Account Capacity.</span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateUserOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#302e29] border border-[#514d43] text-xs font-bold text-[#ded8c9] hover:bg-[#38362f] transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingUser}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-bold text-xs shadow-md hover:from-emerald-500 hover:to-emerald-600 transition flex items-center gap-2"
+                >
+                  {isCreatingUser && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Create User</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESET PASSWORD MODAL */}
+      {resetPasswordUser && (
+        <div
+          onClick={() => !isResettingPassword && setResetPasswordUser(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-[#4c493f] bg-[#262420] p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-[#454239] pb-3">
+              <h3 className="font-black text-base text-[#f5f1e6]">Reset Password for @{resetPasswordUser.username}</h3>
+              <button onClick={() => setResetPasswordUser(null)} className="text-[#8c8577] hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-[#a8a18f] mb-1">New Password</label>
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#1d1c19] border border-[#4c493f] text-xs text-[#eee9dc] placeholder-[#756f62] focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordUser(null)}
+                  className="px-4 py-2 rounded-xl bg-[#302e29] border border-[#514d43] text-xs font-bold text-[#ded8c9] hover:bg-[#38362f] transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingPassword}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-sky-700 text-white font-bold text-xs shadow-md hover:from-sky-500 hover:to-sky-600 transition flex items-center gap-2"
+                >
+                  {isResettingPassword && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Password</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteTarget && (
+        <div
+          onClick={() => !isDeleting && setDeleteTarget(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-rose-900/60 bg-[#262420] p-6 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-3 text-rose-400">
+              <span className="w-10 h-10 rounded-xl bg-rose-950/70 border border-rose-600/70 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="font-black text-base text-[#f5f1e6]">Confirm Deletion</h3>
+                <p className="text-xs text-[#bcb5a6]">Delete {deleteTarget.type === 'user' ? 'User Account' : 'Minecraft Account'}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#bcb5a6] leading-relaxed bg-[#1d1c19] p-3.5 rounded-xl border border-[#454239]">
+              Are you sure you want to delete <span className="font-bold text-[#eee9dc]">{deleteTarget.name}</span>? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl bg-[#302e29] border border-[#514d43] text-xs font-bold text-[#ded8c9] hover:bg-[#38362f] transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold text-xs shadow-md hover:from-rose-500 hover:to-rose-600 transition flex items-center gap-2"
               >
-                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                {isDeleting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Delete Permanently</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE IN-GAME CHAT DRAWER */}
+      {activeChatBot && (
+        <div
+          onClick={() => setActiveChatBot(null)}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl rounded-2xl border border-[#4c493f] bg-[#22211e] overflow-hidden shadow-2xl flex flex-col max-h-[80vh]"
+          >
+            <div className="px-5 py-3.5 border-b border-[#454239] bg-[#2a2824] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <span className="font-black text-sm text-[#eee9dc]">Live Chat Stream: {activeChatBot.ign}</span>
+                <span className="text-[10px] text-[#bcb5a6]">({activeChatBot.serverHost})</span>
+              </div>
+              <button onClick={() => setActiveChatBot(null)} className="text-[#8c8577] hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 flex-1 font-mono text-xs bg-[#1a1916]">
+              {(!liveChats[activeChatBot.ign] || liveChats[activeChatBot.ign].length === 0) ? (
+                <div className="py-12 text-center text-xs text-[#756f62] italic">
+                  Awaiting chat messages from {activeChatBot.serverHost}...
+                </div>
+              ) : (
+                liveChats[activeChatBot.ign].map((msg, i) => (
+                  <div key={i} className="text-[#eee9dc] leading-relaxed">
+                    <span className="text-[#756f62] mr-2">[{new Date(msg.timestamp).toLocaleTimeString()}]</span>
+                    <MinecraftChatMessage message={msg} showTimestamp={false} compact darkMode />
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

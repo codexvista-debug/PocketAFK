@@ -373,6 +373,85 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Action: Force Refresh All Users
+    if (action === 'emergency_force_refresh') {
+      const epoch = Date.now();
+      await supabase.from('accounts').upsert({
+        username: '__meta_system__',
+        bot_name: '__meta_force_refresh__',
+        server_host: 'pocketafk.internal',
+        server_port: 25565,
+        settings: { epoch },
+        updated_at: new Date().toISOString(),
+      });
+      return NextResponse.json({
+        success: true,
+        message: 'Force refresh broadcasted. All user dashboards are updating.',
+        epoch,
+      });
+    }
+
+    // Action: Force Logout All Users
+    if (action === 'emergency_force_logout') {
+      const epoch = Date.now();
+      await supabase.from('accounts').upsert({
+        username: '__meta_system__',
+        bot_name: '__meta_force_logout__',
+        server_host: 'pocketafk.internal',
+        server_port: 25565,
+        settings: { epoch },
+        updated_at: new Date().toISOString(),
+      });
+      return NextResponse.json({
+        success: true,
+        message: 'Force logout broadcasted. All active user sessions will be signed out.',
+        epoch,
+      });
+    }
+
+    // Action: Force Close All Termux Sessions
+    if (action === 'emergency_force_close_termux') {
+      sharedUserTunnels.clear();
+      await supabase.from('tunnels').update({
+        daemon_url: '',
+        updated_at: new Date().toISOString(),
+      }).neq('username', '');
+
+      const { data: allAccs } = await supabase
+        .from('accounts')
+        .select('id, settings')
+        .not('username', 'like', '__meta_%');
+
+      if (allAccs && allAccs.length > 0) {
+        for (const acc of allAccs) {
+          const updatedSettings = {
+            ...(acc.settings || {}),
+            is_connected: false,
+            connected_at: null,
+          };
+          await supabase
+            .from('accounts')
+            .update({
+              settings: updatedSettings,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', acc.id);
+        }
+      }
+
+      try {
+        await supabase.from('daemon_status').update({
+          is_online: false,
+          last_disconnected_at: new Date().toISOString(),
+        }).neq('username', '');
+      } catch (e) {}
+
+      return NextResponse.json({
+        success: true,
+        message: 'All Termux bridges closed and all bots marked offline.',
+      });
+    }
+
     // Action 1: Change user rank
     if (action === 'change_rank') {
       const { username, rank } = body;

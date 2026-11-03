@@ -45,6 +45,8 @@ export async function GET(req: NextRequest) {
   let storedTunnel: any = null;
   let storedDaemonStatus: any = null;
   let statusStorageAvailable = false;
+  let forceLogout = false;
+  let forceRefreshEpoch = 0;
 
   if (supabase) {
     try {
@@ -63,6 +65,20 @@ export async function GET(req: NextRequest) {
         });
         statusStorageAvailable = !error;
         storedDaemonStatus = Array.isArray(data) ? data[0] : data;
+      }
+      const { data: metaRows } = await supabase
+        .from('accounts')
+        .select('bot_name, settings')
+        .eq('username', '__meta_system__');
+      if (metaRows) {
+        for (const row of metaRows) {
+          if (row.bot_name === '__meta_force_logout__' && row.settings?.epoch && Date.now() - row.settings.epoch < 30000) {
+            forceLogout = true;
+          }
+          if (row.bot_name === '__meta_force_refresh__' && row.settings?.epoch && Date.now() - row.settings.epoch < 30000) {
+            forceRefreshEpoch = row.settings.epoch;
+          }
+        }
       }
     } catch {
       // Continue with the in-memory heartbeat cache if Supabase is unavailable.
@@ -152,6 +168,8 @@ export async function GET(req: NextRequest) {
       daemonStartedAt,
       lastDisconnectedAt,
       statusStorageAvailable,
+      forceLogout,
+      forceRefreshEpoch,
     });
   }
 
@@ -164,6 +182,8 @@ export async function GET(req: NextRequest) {
     daemonStartedAt,
     lastDisconnectedAt,
     statusStorageAvailable,
+    forceLogout,
+    forceRefreshEpoch,
   });
 }
 

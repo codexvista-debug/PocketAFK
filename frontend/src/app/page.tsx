@@ -20,6 +20,7 @@ import { AccountLogsModal } from '../components/AccountLogsModal';
 import { XaerosMinimap } from '../components/XaerosMinimap';
 import { MinecraftChatMessage } from '../components/MinecraftChatMessage';
 import { WebhookView } from '../components/WebhookView';
+import { ChangelogView } from '../components/ChangelogView';
 import { RANKS, UserRank, getRankConfig } from '../lib/ranks';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -113,7 +114,7 @@ const DEFAULT_BOT_SETTINGS: BotSettings = {
   autoReconnectDelay: 5000,
 };
 
-type MainView = 'dashboard' | 'termux' | 'webhook' | 'profile' | 'servers' | 'accounts' | 'account';
+type MainView = 'dashboard' | 'changelog' | 'termux' | 'webhook' | 'profile' | 'servers' | 'accounts' | 'account';
 type SubTab = 'connect' | 'chat' | 'movement' | 'inventory' | 'pov' | 'settings';
 
 function safeMinecraftText(val: any): string {
@@ -199,6 +200,7 @@ export default function Dashboard() {
     return null;
   });
   const sessionRevokedHandlerRef = useRef<() => void>(() => {});
+  const lastForceRefreshRef = useRef<number>(0);
   const [chatAutoScrollEnabled, setChatAutoScrollEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     const userKey = (localStorage.getItem('pocketafk_user') || 'guest').trim().toLowerCase();
@@ -222,7 +224,7 @@ export default function Dashboard() {
       const tab = params.get('tab') || params.get('view');
       if (tab === 'dashboard') {
         setActiveMainView('dashboard');
-      } else if (tab === 'servers' || tab === 'accounts' || tab === 'profile' || tab === 'account' || tab === 'termux') {
+      } else if (tab === 'changelog' || tab === 'servers' || tab === 'accounts' || tab === 'profile' || tab === 'account' || tab === 'termux' || tab === 'webhook') {
         setActiveMainView(tab as MainView);
       }
     } catch (e) {}
@@ -1116,6 +1118,18 @@ export default function Dashboard() {
             }
             return null;
           };
+          if (data?.forceLogout) {
+            console.warn('[PocketAFK] Emergency force logout received from admin.');
+            handleLogout();
+            return;
+          }
+          if (data?.forceRefreshEpoch && (!lastForceRefreshRef.current || data.forceRefreshEpoch > lastForceRefreshRef.current)) {
+            lastForceRefreshRef.current = data.forceRefreshEpoch;
+            console.log('[PocketAFK] Emergency force refresh received from admin. Reloading...');
+            window.location.reload();
+            return;
+          }
+
           setDaemonStatusHistory({
             daemonStartedAt: asTimestamp(data?.daemonStartedAt),
             lastDisconnectedAt: asTimestamp(data?.lastDisconnectedAt),
@@ -2463,7 +2477,7 @@ export default function Dashboard() {
                     <span className="px-2 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 uppercase text-[10px] font-black shrink-0">{activeSubTab}</span>
                   </>
                 ) : (
-                  <span className="truncate text-slate-800 uppercase tracking-wide">{activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView === 'termux' ? 'Termux Stream' : activeMainView}</span>
+                  <span className="truncate text-slate-800 uppercase tracking-wide">{activeMainView === 'webhook' ? 'Discord Webhooks' : activeMainView === 'account' ? 'Your Account' : activeMainView === 'termux' ? 'Termux Stream' : activeMainView === 'changelog' ? 'Changelog & Updates' : activeMainView}</span>
                 )}
               </div>
             </div>
@@ -2553,6 +2567,24 @@ export default function Dashboard() {
               >
                 <span className="pa-item-icon pa-icon-dashboard" aria-hidden="true" />
                 <span>Dashboard</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveMainView('changelog');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeMainView === 'changelog'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                }`}
+              >
+                <span className="pa-item-icon pa-icon-chat" aria-hidden="true" />
+                <span>Changelog</span>
+                <span className="ml-auto px-1.5 py-0.5 rounded-md text-[10px] font-black bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
+                  v2.4
+                </span>
               </button>
 
               <button
@@ -2978,6 +3010,11 @@ export default function Dashboard() {
                   servers={servers}
                   onRefresh={refreshDaemonSessions}
                 />
+              )}
+
+              {/* VIEW: CHANGELOG */}
+              {activeMainView === 'changelog' && (
+                <ChangelogView />
               )}
 
               {activeMainView === 'termux' && (
