@@ -253,7 +253,7 @@ export default function Dashboard() {
   }, [currentUser]);
 
   // Views & Tabs (MinecraftAFK Architecture)
-  const [activeMainView, setActiveMainView] = useState<MainView>('profile');
+  const [activeMainView, setActiveMainView] = useState<MainView>('dashboard');
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('connect');
   useEffect(() => {
     if (activeSubTab !== 'chat' || window.innerWidth >= 768) return;
@@ -2471,7 +2471,7 @@ export default function Dashboard() {
                 aria-label="Open daemon connection settings"
                 className={`pa-daemon-button ${socketStatus === 'AUTHENTICATED' ? 'pa-daemon-online' : socketStatus === 'CONNECTING' || socketStatus === 'CONNECTED' ? 'pa-daemon-connecting' : 'pa-daemon-offline'}`}
               >
-                <span className="pa-item-icon pa-icon-connect pa-daemon-torch" aria-hidden="true" />
+                <span className="pa-daemon-allay" aria-hidden="true" />
                 <span className="pa-daemon-light" aria-hidden="true" />
               </button>
             </div>
@@ -2905,7 +2905,7 @@ export default function Dashboard() {
                   aria-label="Open daemon connection settings"
                   className={`pa-daemon-button ${socketStatus === 'AUTHENTICATED' ? 'pa-daemon-online' : socketStatus === 'CONNECTING' || socketStatus === 'CONNECTED' ? 'pa-daemon-connecting' : 'pa-daemon-offline'}`}
                 >
-                  <span className="pa-item-icon pa-icon-connect pa-daemon-torch" aria-hidden="true" />
+                  <span className="pa-daemon-allay" aria-hidden="true" />
                   <span className="pa-daemon-light" aria-hidden="true" />
                 </button>
               </div>
