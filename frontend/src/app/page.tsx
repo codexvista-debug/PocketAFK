@@ -15,6 +15,7 @@ import { ServerLogo } from '../components/ServerLogo';
 import { ModernToast, ToastMessage } from '../components/ModernToast';
 import { RankModal } from '../components/RankModal';
 import { DangerousSettingsModal } from '../components/DangerousSettingsModal';
+import { SignetReconnectModal } from '../components/SignetReconnectModal';
 import { QuickCommandsModal, DEFAULT_QUICK_COMMANDS } from '../components/QuickCommandsModal';
 import { AccountLogsModal } from '../components/AccountLogsModal';
 import { XaerosMinimap } from '../components/XaerosMinimap';
@@ -312,6 +313,8 @@ export default function Dashboard() {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerProfile | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSignetReconnectOpen, setIsSignetReconnectOpen] = useState(false);
+  const [signetReconnectAttempt, setSignetReconnectAttempt] = useState(1);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDangerousSettingsOpen, setIsDangerousSettingsOpen] = useState(false);
   const [isContainerOpen, setIsContainerOpen] = useState(false);
@@ -602,6 +605,7 @@ export default function Dashboard() {
     daemonConnections,
     authToken,
     saveSettings,
+    reconnect: reconnectDaemon,
     startBot,
     stopBot,
     restartBot,
@@ -642,6 +646,62 @@ export default function Dashboard() {
       setDaemonSessionsLoading(false);
     }
   }, [currentUser, secretCode, authToken, daemonSessions.length]);
+
+  const wasEverConnectedRef = useRef(false);
+  const sleepStartTimestampRef = useRef<number | null>(null);
+  const lastActiveTimestampRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    if (socketStatus === 'AUTHENTICATED') {
+      wasEverConnectedRef.current = true;
+      if (isSignetReconnectOpen) {
+        const timer = setTimeout(() => {
+          setIsSignetReconnectOpen(false);
+          setSignetReconnectAttempt(1);
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [socketStatus, isSignetReconnectOpen]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const wasAway = sleepStartTimestampRef.current && (Date.now() - sleepStartTimestampRef.current > 6000);
+        const isOffline = socketStatus !== 'AUTHENTICATED';
+        const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+        const hasTunnel = Boolean(daemonUrl || (typeof window !== 'undefined' && localStorage.getItem('pocketafk_daemon_url_' + u)));
+        if (isOffline && (wasAway || wasEverConnectedRef.current || hasTunnel)) {
+          setIsSignetReconnectOpen(true);
+          setSignetReconnectAttempt((prev) => prev + 1);
+          reconnectDaemon();
+        }
+        sleepStartTimestampRef.current = null;
+      } else {
+        sleepStartTimestampRef.current = Date.now();
+      }
+    };
+
+    const handleFocus = () => {
+      const isOffline = socketStatus !== 'AUTHENTICATED';
+      const u = currentUser ? currentUser.trim().toLowerCase() : 'guest';
+      const hasTunnel = Boolean(daemonUrl || (typeof window !== 'undefined' && localStorage.getItem('pocketafk_daemon_url_' + u)));
+      const idleTime = Date.now() - lastActiveTimestampRef.current;
+      if (isOffline && (idleTime > 15000 || wasEverConnectedRef.current || hasTunnel)) {
+        setIsSignetReconnectOpen(true);
+        setSignetReconnectAttempt((prev) => prev + 1);
+        reconnectDaemon();
+      }
+      lastActiveTimestampRef.current = Date.now();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [socketStatus, daemonUrl, currentUser, reconnectDaemon]);
 
   useEffect(() => {
     void refreshDaemonSessions();
@@ -1063,9 +1123,13 @@ export default function Dashboard() {
 
   const effectiveUser = currentUser || 'default';
   const siteOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://pocketafk.vercel.app';
+  const isDevSite = siteOrigin.includes('dev-pocketafk') || siteOrigin.includes('localhost') || siteOrigin.includes('preview');
+  const installUrl = isDevSite
+    ? 'https://raw.githubusercontent.com/codexvista-debug/PocketAFK/dev/scripts/install-dev.sh'
+    : `${siteOrigin}/install`;
   const termuxCommand = secretCode
-    ? `curl -sL ${siteOrigin}/install | bash -s -- ${effectiveUser} ${secretCode}`
-    : `curl -sL ${siteOrigin}/install | bash -s -- ${effectiveUser}`;
+    ? `curl -sL ${installUrl} | bash -s -- ${effectiveUser} ${secretCode}`
+    : `curl -sL ${installUrl} | bash -s -- ${effectiveUser}`;
 
   // Auto-sync tunnel from API or URL
   useEffect(() => {
@@ -2332,6 +2396,20 @@ export default function Dashboard() {
         onOpenAddAccount={() => handleStartMicrosoftLogin()}
       />
 
+      {/* Signet Reconnection Modal */}
+      <SignetReconnectModal
+        isOpen={isSignetReconnectOpen}
+        onClose={() => setIsSignetReconnectOpen(false)}
+        daemonStatus={socketStatus}
+        daemonUrl={daemonUrl}
+        onReconnectNow={() => {
+          setSignetReconnectAttempt((prev) => prev + 1);
+          reconnectDaemon();
+        }}
+        termuxCommand={termuxCommand}
+        reconnectAttempt={signetReconnectAttempt}
+      />
+
       {/* Settings / Bridge Configuration Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
@@ -2462,17 +2540,28 @@ export default function Dashboard() {
             {/* Daemon Connection Status on Mobile Top-Right */}
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => {
+                  if (socketStatus !== 'AUTHENTICATED') {
+                    setIsSignetReconnectOpen(true);
+                    setSignetReconnectAttempt((prev) => prev + 1);
+                    reconnectDaemon();
+                  } else {
+                    setIsSettingsOpen(true);
+                  }
+                }}
                 title={
                   socketStatus === 'AUTHENTICATED'
-                    ? 'Daemon Active & Online (Click to configure bridge)'
-                    : 'Daemon Standby / Not Connected (Click to configure bridge)'
+                    ? 'Signet Active & Online (Click to configure bridge)'
+                    : 'Signet Standby / Disconnected (Click to reconnect)'
                 }
-                aria-label="Open daemon connection settings"
-                className={`pa-daemon-button ${socketStatus === 'AUTHENTICATED' ? 'pa-daemon-online' : socketStatus === 'CONNECTING' || socketStatus === 'CONNECTED' ? 'pa-daemon-connecting' : 'pa-daemon-offline'}`}
+                aria-label={`Signet daemon ${socketStatus === 'AUTHENTICATED' ? 'online' : 'inactive'}`}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-0 bg-transparent p-0 shadow-none transition hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-400 cursor-pointer"
               >
-                <span className="pa-daemon-allay" aria-hidden="true" />
-                <span className="pa-daemon-light" aria-hidden="true" />
+                <img
+                  src={socketStatus === 'AUTHENTICATED' ? '/nav/daemon-allay-active.png' : '/nav/daemon-allay-inactive.png'}
+                  alt="Signet mascot"
+                  className="h-10 w-10 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,.45)]"
+                />
               </button>
             </div>
           </div>
@@ -2894,19 +2983,30 @@ export default function Dashboard() {
               </div>
 
               <div className="hidden md:flex items-center gap-3">
-                {/* Termux Daemon Status - Animated Icon (Green: Active, Blue: Standby) */}
+                {/* Termux Daemon Status - 3D Signet Mascot */}
                 <button
-                  onClick={() => setIsSettingsOpen(true)}
+                  onClick={() => {
+                    if (socketStatus !== 'AUTHENTICATED') {
+                      setIsSignetReconnectOpen(true);
+                      setSignetReconnectAttempt((prev) => prev + 1);
+                      reconnectDaemon();
+                    } else {
+                      setIsSettingsOpen(true);
+                    }
+                  }}
                   title={
                     socketStatus === 'AUTHENTICATED'
-                      ? 'Daemon Active & Online (Click to configure bridge)'
-                      : 'Daemon Standby / Not Connected (Click to configure bridge)'
+                      ? 'Signet Active & Online (Click to configure bridge)'
+                      : 'Signet Standby / Disconnected (Click to reconnect)'
                   }
-                  aria-label="Open daemon connection settings"
-                  className={`pa-daemon-button ${socketStatus === 'AUTHENTICATED' ? 'pa-daemon-online' : socketStatus === 'CONNECTING' || socketStatus === 'CONNECTED' ? 'pa-daemon-connecting' : 'pa-daemon-offline'}`}
+                  aria-label={`Signet daemon ${socketStatus === 'AUTHENTICATED' ? 'online' : 'inactive'}`}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-0 bg-transparent p-0 shadow-none transition hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-emerald-400 cursor-pointer"
                 >
-                  <span className="pa-daemon-allay" aria-hidden="true" />
-                  <span className="pa-daemon-light" aria-hidden="true" />
+                  <img
+                    src={socketStatus === 'AUTHENTICATED' ? '/nav/daemon-allay-active.png' : '/nav/daemon-allay-inactive.png'}
+                    alt="Signet mascot"
+                    className="h-10 w-10 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,.45)]"
+                  />
                 </button>
               </div>
             </header>

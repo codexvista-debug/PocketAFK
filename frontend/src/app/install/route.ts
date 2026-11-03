@@ -3,11 +3,16 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  const host = request.headers.get('host') || 'pocketafk.vercel.app';
+  const url = new URL(request.url);
+  const explicitSite = url.searchParams.get('site');
+  const explicitBranch = url.searchParams.get('branch');
+  const isDevParam = url.searchParams.get('dev') === '1' || url.searchParams.get('env') === 'dev';
+
+  const host = explicitSite ? new URL(explicitSite).host : (request.headers.get('host') || 'pocketafk.vercel.app');
   const proto = request.headers.get('x-forwarded-proto') || 'https';
-  const siteUrl = `${proto}://${host}`;
-  const isDev = host.includes('dev-pocketafk') || host.includes('localhost') || host.includes('preview');
-  const targetBranch = isDev ? 'dev' : 'main';
+  const siteUrl = explicitSite || `${proto}://${host}`;
+  const isDev = isDevParam || explicitBranch === 'dev' || host.includes('dev-pocketafk') || host.includes('localhost') || host.includes('preview');
+  const targetBranch = explicitBranch || (isDev ? 'dev' : 'main');
 
   const script = `#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
