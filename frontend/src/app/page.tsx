@@ -99,6 +99,7 @@ import { DashboardOverview, DaemonSession } from '../components/DashboardOvervie
 import { AuthLanding } from '../components/AuthLanding';
 import { AccountSettingsView } from '../components/AccountSettingsView';
 import { TermuxStreamView } from '../components/TermuxStreamView';
+import { buildMicrosoftSignInUrl, MICROSOFT_LOGOUT_URL } from '../lib/microsoftAuth';
 
 const DEFAULT_BOT_SETTINGS: BotSettings = {
   physics: true,
@@ -294,6 +295,8 @@ export default function Dashboard() {
   const pendingMicrosoftSignInUrlRef = useRef<string | null>(null);
   const microsoftSignOutReadyRef = useRef(false);
   const microsoftSignOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The sign-in URL the auth tab was already sent to, so re-renders never reload it mid-login
+  const microsoftNavigatedUrlRef = useRef<string | null>(null);
   const [daemonSessionsLoading, setDaemonSessionsLoading] = useState(false);
   const daemonHistoryEventIdsRef = useRef(new Set<string>());
 
@@ -1591,23 +1594,27 @@ export default function Dashboard() {
   useEffect(() => {
     const authData = (isPollingMs && msAuthData) || apiMsAuthData;
     const signInWindow = microsoftSignInWindowRef.current;
-    if (authData?.url && signInWindow && !signInWindow.closed) {
-      if (authData.userCode) {
-        try {
-          navigator.clipboard.writeText(authData.userCode);
-          showToast(`Copied code ${authData.userCode} to clipboard! Redirecting to Microsoft...`, 'success');
-        } catch {}
-      }
-      pendingMicrosoftSignInUrlRef.current = authData.url;
+    if (authData?.userCode && signInWindow && !signInWindow.closed) {
+      const signInUrl = buildMicrosoftSignInUrl(authData.userCode, authData.url);
+      if (microsoftNavigatedUrlRef.current === signInUrl) return;
+
+      try {
+        navigator.clipboard.writeText(authData.userCode);
+        showToast(`Verification code ${authData.userCode} copied! Redirecting directly to Microsoft...`, 'success');
+      } catch {}
+
+      pendingMicrosoftSignInUrlRef.current = signInUrl;
       if (microsoftSignOutReadyRef.current) {
-        signInWindow.location.href = authData.url;
+        signInWindow.location.href = signInUrl;
         signInWindow.focus();
+        microsoftNavigatedUrlRef.current = signInUrl;
         pendingMicrosoftSignInUrlRef.current = null;
       }
-    } else if (!authData && signInWindow && !signInWindow.closed) {
+    } else if (!isPollingMs && signInWindow && !signInWindow.closed) {
       signInWindow.close();
       microsoftSignInWindowRef.current = null;
       pendingMicrosoftSignInUrlRef.current = null;
+      microsoftNavigatedUrlRef.current = null;
       if (microsoftSignOutTimerRef.current) {
         clearTimeout(microsoftSignOutTimerRef.current);
         microsoftSignOutTimerRef.current = null;
@@ -1642,22 +1649,24 @@ export default function Dashboard() {
         microsoftSignInWindowRef.current?.close();
         if (microsoftSignOutTimerRef.current) clearTimeout(microsoftSignOutTimerRef.current);
         pendingMicrosoftSignInUrlRef.current = null;
+        microsoftNavigatedUrlRef.current = null;
         microsoftSignOutReadyRef.current = false;
         const authWindow = window.open('about:blank', '_blank');
         microsoftSignInWindowRef.current = authWindow;
         if (authWindow) {
-          authWindow.document.title = 'Signing out of Microsoft';
-          authWindow.document.body.innerHTML = '<main style="font:16px system-ui;padding:2rem;color:#334155;background:#f8fafc;min-height:100vh"><h2>Signing out of Microsoft…</h2><p>This signs out Microsoft web pages in this browser before the new account sign-in opens.</p></main>';
-          authWindow.location.href = 'https://login.live.com/logout.srf';
+          authWindow.document.title = 'Preparing Microsoft sign-in';
+          authWindow.document.body.innerHTML = '<main style="font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;color:#e9e3d6;background:#1d1c19"><div style="text-align:center"><h2 style="margin:0 0 8px">Preparing Microsoft sign-in…</h2><p style="margin:0;color:#a9a191">Signing out previous sessions and auto-filling verification code...</p></div></main>';
+          authWindow.location.href = MICROSOFT_LOGOUT_URL;
           microsoftSignOutTimerRef.current = setTimeout(() => {
             microsoftSignOutReadyRef.current = true;
             const signInUrl = pendingMicrosoftSignInUrlRef.current;
             if (signInUrl && !authWindow.closed) {
               authWindow.location.href = signInUrl;
               authWindow.focus();
+              microsoftNavigatedUrlRef.current = signInUrl;
               pendingMicrosoftSignInUrlRef.current = null;
             }
-          }, 3000);
+          }, 2500);
         }
       } catch {
         microsoftSignInWindowRef.current = null;

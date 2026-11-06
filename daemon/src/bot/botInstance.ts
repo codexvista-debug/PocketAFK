@@ -129,9 +129,9 @@ export class PocketBotInstance {
         checkTimeoutInterval: 120 * 1000,
         onMsaCode: (data: any) => {
           const userCode = data.user_code || data.userCode;
-          const baseUri = data.verification_uri || 'https://www.microsoft.com/link';
+          const baseUri = data.verification_uri || 'https://login.live.com/oauth20_remoteconnect.srf';
           const directUri = userCode
-            ? `https://www.microsoft.com/link?otc=${encodeURIComponent(userCode)}&prompt=select_account`
+            ? `https://login.live.com/oauth20_remoteconnect.srf?otc=${encodeURIComponent(userCode)}&prompt=login`
             : baseUri;
 
           console.log('\n======================================================');

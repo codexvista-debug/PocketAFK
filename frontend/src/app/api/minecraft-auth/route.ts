@@ -47,10 +47,10 @@ export async function GET(req: NextRequest) {
     const expiresIn: number = data.expires_in || 900;
     const interval: number = data.interval || 4;
 
-    let verificationUri = data.verification_uri || 'https://www.microsoft.com/link';
+    let verificationUri = data.verification_uri || 'https://login.live.com/oauth20_remoteconnect.srf';
     if (userCode) {
       // Pre-fill the userCode so the user doesn't even have to paste it!
-      verificationUri = `https://www.microsoft.com/link?otc=${encodeURIComponent(userCode)}`;
+      verificationUri = `https://login.live.com/oauth20_remoteconnect.srf?otc=${encodeURIComponent(userCode)}&prompt=login`;
       if (email && email.trim()) {
         verificationUri += `&login_hint=${encodeURIComponent(email.trim())}`;
       }

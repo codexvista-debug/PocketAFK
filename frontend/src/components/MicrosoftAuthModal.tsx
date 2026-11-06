@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, ExternalLink, Copy, CheckCircle2, KeyRound, AlertTriangle, Loader2, LogOut, ShieldAlert } from 'lucide-react';
+import { buildMicrosoftSignInUrl } from '@/lib/microsoftAuth';
 
 interface MicrosoftAuthModalProps {
   authData: {
@@ -31,12 +32,7 @@ export const MicrosoftAuthModal: React.FC<MicrosoftAuthModalProps> = ({
   if (!authData) return null;
 
   // Ensure prompt=login is always present so Microsoft never auto-confirms an already-active session
-  let forceAccountUrl = authData.url || 'https://www.microsoft.com/link';
-  if (!forceAccountUrl.includes('prompt=')) {
-    forceAccountUrl += (forceAccountUrl.includes('?') ? '&' : '?') + 'prompt=login';
-  } else if (forceAccountUrl.includes('prompt=select_account')) {
-    forceAccountUrl = forceAccountUrl.replace('prompt=select_account', 'prompt=login');
-  }
+  let forceAccountUrl = buildMicrosoftSignInUrl(authData.userCode, authData.url, accountEmail);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(authData.userCode);
